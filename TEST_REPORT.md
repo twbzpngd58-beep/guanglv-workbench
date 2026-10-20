@@ -1,39 +1,49 @@
-# 光律 GUANGLV 1.0.0 · 开箱验证报告
+# Guanglv Workbench 1.0.0 · 开箱验证报告
 
-验证日期：2026-10-18
+验证日期：2026-10-20
+
+验证方式：把仓库 `git clone` 到一个空目录（无 `.venv`、无 `data/`、无 `.env`、无 `node_modules`），
+只跑 `python3 start.py`，然后全部通过 HTTP 接口与浏览器实测。**不是在开发机上直接跑源码。**
 
 ## 运行环境
 
-- Python 3.12.15 全新虚拟环境
-- 按 `requirements.lock.txt` 安装全部依赖，运行时导入检查通过
-- 前端 `tsc -b && vite build` 通过
-- 后端 `python -m compileall` 通过，所有 `backend/*.py` 可导入
+- Linux x86_64，Python 3.11.2，全新虚拟环境（启动器自动创建）
+- 按 `requirements.lock.txt` 安装依赖；首次启动约 100 秒，之后约 1 秒
+- 前端 `tsc -b && vite build` 通过（Node 24）；`frontend/dist/` 已随仓库分发，使用者不需要 Node
+- 后端 `python -m compileall` 通过
 
-## 已验证流程
+## 已验证：23 项全过
 
-- 首次启动自动创建 `.venv`、`data/` 与初始管理员密码文件（权限 600）
-- 首次登录强制改密；改密后正常进入工作台
-- 首页 `/api/activity`、`/api/health`、`/api/build` 正常，无 404
-- 项目新建、复制、归档、删除、版本记录、操作事件
-- 产品库读取 230 件；`/api/products/status` 与 `/api/products/sync` 正常
-- 标准情景模板 45 个（43 个场景包 + 00.1 全开 / 00.2 全关）
-- 一键设置场景按户型与项目空间筛选；空状态「写入标准化场景」不再写入 0 个
-- DXF 导入：测试图解析出 2 个空间 / 2 个灯位；自动生成三维预览、确认空间后自动同步灯位到灯具配置
-- 项目 JSON 导出后可重新导入
-- 导出格式全部返回 200：HTML、JSON、PNG、JPG、DXF、XLSX、DOCX、PDF、面板刻字、ZIP
-- `/api/qrcode` 正常返回 PNG（已补齐 `qrcode` 依赖）
-- 浏览器端主要页面：工作台、项目、产品库、场景灵感库、设置、复核与交付均无接口错误
+| 项 | 结果 |
+|---|---|
+| 首次启动打印初始密码（32 字符，同时写入 `data/.initial-admin-password`） | ✅ |
+| 登录 / 强制改密 | ✅ |
+| 产品库 230 款 | ✅ |
+| 情景包 50 套 / 情景模板 45 个 | ✅ |
+| `/api/activity`、`/api/workbench/version` 无 404 | ✅ |
+| 新建项目（编号前缀 `GL-`） | ✅ 201 |
+| 上传仓库自带 `samples/sample-plan.dxf` → 自动解析 | ✅ 1 空间 / 5 段墙 |
+| 空间拆分合并接口 `/space-definition/geometry` | ✅ 不再 404 |
+| 导出 HTML / JSON / XLSX / DOCX / PDF / PNG / DXF / ZIP | ✅ 8 种全部 200 |
+
+## 浏览器端实测
+
+- 登录页、工作台首页、项目详情、空间预览（三维）全部正常渲染
+- 三维预览：正常出图，俯视图 / 昼夜切换 / 光锥示意可用
+- 界面品牌为「光律 GUANGLV」，项目编号显示 `GL-2026-XXXXXX`
 
 ## 已知边界
 
-- 三维预览需要可用的 WebGL；无 GPU/无头浏览器会显示降级提示，但不影响项目数据。
-- 外部 AI 识图、效果图 Provider 默认关闭；不配置也可完成本地基础出图。
+- 三维预览需要可用的 WebGL；无 GPU / 无头浏览器会显示降级提示，不影响项目数据。
+- 外部 AI 识图、效果图 Provider 默认关闭；不配置也能完成本地基础出图。
 - 导出内容为设计资料，不是正式施工图或正式报价，仍需专业人员复核。
+- 本报告只在 Linux 上实测。Windows / macOS 走的是同一个 `start.py`，平台差异处（虚拟环境路径、
+  `py` 启动器、字体回退）已按平台分支处理，欢迎提 issue 报告异常。
 
 ## 复验命令
 
 ```bash
-python3.12 start.py
-# 另开终端
+git clone <本仓库地址> gv && cd gv
+python3 start.py
 curl http://127.0.0.1:8000/api/health
 ```
