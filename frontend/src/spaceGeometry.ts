@@ -134,7 +134,7 @@ export function withSpaceShell<T extends Item>(design: T): T {
     openings: [...(design.openings || []).filter((o: Item) => !owned.has(o.id)), ...shell.openings],
   };
 }
-/** 墙装设备（面板 / 温控器）在二维上的落位（2026-10-17：二维放面板，三维不能悬浮）：
+/** 墙装设备（面板 / 温控器）在二维上的落位（现场 2026-10-17：二维放面板，三维不能悬浮）：
  *  吸到落点所在空间（没有就全层）最近的一段边界上，返回吸附点与离墙距离（设计单位）。
  *  离墙超过 maxDistance 返回 null——调用方提示「面板要放在墙边」。 */
 export function snapToWall(rooms: Item[], p: SpacePoint, floor: number, maxDistance: number): BoundarySnap | null {

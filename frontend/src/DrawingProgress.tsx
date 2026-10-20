@@ -22,13 +22,15 @@ export function drawingStep(project: Obj, design: Obj, job?: Obj | null): Drawin
   return (project.files || []).length || design.baseFileId ? "recognition" : "upload";
 }
 
-export function DrawingProgress({ project, design, job, phase, confirmed, onStep }: {
+export function DrawingProgress({ project, design, job, phase, confirmed, onStep, blockedSteps }: {
   project: Obj; design: Obj; job?: Obj | null; phase?: DrawingStep;
   /** 项目已经确认过空间/门窗/家具：进度条按「已进入画布」算。
    *  否则在已确认的项目里打开空间预览（改空间/改家具）时，进度条会跟着编辑相位退回
-   *  「三维预览 29%」「修改家具 71%」，跟项目实际所在的环节对不上（2026-10-16 报）。 */
+   *  「三维预览 29%」「修改家具 71%」，跟项目实际所在的环节对不上（现场 2026-10-16 报）。 */
   confirmed?: boolean;
   onStep?: (step: DrawingStep) => void;
+  /** 有写库副作用、批 1 不接线的步骤：直接灰掉，不给误触（统筹 2026-10-20 签字 §4）。 */
+  blockedSteps?: DrawingStep[];
 }) {
   const recognizing = job?.state === "running" && job.recognizing !== false;
   const settled = !!confirmed || design.spaceDefinition?.status === "confirmed";
@@ -52,7 +54,7 @@ export function DrawingProgress({ project, design, job, phase, confirmed, onStep
     <ol>{DRAWING_STEPS.map((s, i) => {
       const done = i < completed, active = s.id === current;
       return <li key={s.id} data-step={s.id} data-state={done ? "completed" : active ? "current" : "pending"}>
-        <button type="button" disabled={!onStep || i > index} onClick={() => onStep?.(s.id)}
+        <button type="button" disabled={!onStep || i > index || !!blockedSteps?.includes(s.id)} onClick={() => onStep?.(s.id)}
           aria-current={active ? "step" : undefined}>
           {active && recognizing ? <Loader2 className="spin" size={14} /> : done ? <CheckCircle2 size={14} /> : <Circle size={14} />}
           <span>{i + 1} · {s.label}</span>

@@ -80,22 +80,9 @@ def _read_document(src):
             if "中文" in name or "标注" in name:
                 doc = ezdxf.readfile(str(src), encoding="gbk")
                 break
-    # CJK styles cannot use ezdxf's Latin-only SHX fallback. 优先用随仓库分发的字体，
-    # 这样 Windows / macOS 上也能画出中文（不再依赖系统里装没装 Droid）。
-    cjk_font = next(
-        (
-            candidate
-            for candidate in (
-                Path(__file__).resolve().parent / "fonts" / "GuanglvPlanSans.ttf",
-                Path("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf"),
-                Path("C:/Windows/Fonts/msyh.ttc"),
-                Path("/System/Library/Fonts/PingFang.ttc"),
-            )
-            if candidate.is_file()
-        ),
-        None,
-    )
-    if cjk_font is not None:
+    # CJK styles cannot use ezdxf's Latin-only SHX fallback. Installed local font only.
+    cjk_font = Path("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf")
+    if cjk_font.is_file():
         from ezdxf.fonts import fonts
         if not fonts.font_manager.has_font(cjk_font.name):
             fonts.font_manager.scan_folder(cjk_font.parent)

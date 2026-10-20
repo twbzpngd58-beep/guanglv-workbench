@@ -2,7 +2,7 @@
 #
 #   docker build -t guanglv-workbench .
 #   docker run -d -p 8000:8000 -v guanglv-data:/data guanglv-workbench
-#   docker logs <容器名>        # 首次启动会打印初始密码
+#   docker logs <容器名>        # 看启动是否正常
 #
 # 镜像里已经带好前端构建产物，运行时不装 Node、不联网。
 
@@ -28,5 +28,5 @@ RUN mkdir -p /data
 VOLUME ["/data"]
 EXPOSE 8000
 
-# 首次启动前先生成初始密码并打印，免得使用者卡在登录页
+# 单机版没有账号密码：容器起来直接可用
 CMD ["python", "scripts/docker_start.py"]

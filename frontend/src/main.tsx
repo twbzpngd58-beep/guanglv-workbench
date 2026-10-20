@@ -50,52 +50,7 @@ import { Plan } from "./Plan";
 import { Workspace } from "./Workspace";
 import { ProductLibrary } from "./ProductLibrary";
 import "./styles.css";
-import { Button, Modal, Badge, Field } from "./ui";
-
-type Account = { id: string; username: string; role: "admin"; mustChangePassword: boolean };
-
-function AuthGate() {
-  const [user, setUser] = useState<Account | null>(null);
-  const [checking, setChecking] = useState(true);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [oldPassword, setOldPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [error, setError] = useState("");
-  useEffect(() => {
-    api<Account>("/auth/me").then(setUser).catch(() => {}).finally(() => setChecking(false));
-  }, []);
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault(); setError("");
-    try {
-      if (user?.mustChangePassword) {
-        await post("/auth/change-password", { old_password: oldPassword, new_password: newPassword });
-        setUser({ ...user, mustChangePassword: false });
-      } else {
-        const result = await post("/auth/login", { username, password });
-        setUser(result.user); setPassword("");
-        if (result.user.mustChangePassword) setOldPassword(password);
-      }
-    } catch (e: any) { setError(e.message); }
-  };
-  if (checking) return <div className="auth-page">正在检查登录状态…</div>;
-  if (!user || user.mustChangePassword) return (
-    <div className="auth-page"><form onSubmit={submit} className="auth-card">
-      <h1>光律 · 工作台</h1>
-      <p>{user ? "首次登录，请修改初始密码" : "请输入你的工作台账号"}</p>
-      {user ? <>
-        <input aria-label="旧密码" type="password" placeholder="旧密码" value={oldPassword} onChange={e => setOldPassword(e.target.value)} required />
-        <input aria-label="新密码" type="password" placeholder="新密码（至少 8 位）" minLength={8} value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
-      </> : <>
-        <input aria-label="账号" autoComplete="username" placeholder="账号" value={username} onChange={e => setUsername(e.target.value)} required />
-        <input aria-label="密码" type="password" autoComplete="current-password" placeholder="密码" value={password} onChange={e => setPassword(e.target.value)} required />
-      </>}
-      {error && <p role="alert">{error}</p>}
-      <button type="submit">{user ? "修改密码并进入" : "登录"}</button>
-    </form></div>
-  );
-  return <App user={user} onLogout={() => setUser(null)} />;
-}
+import { Button, Modal, Badge, Field, STATUS_MATCH } from "./ui";
 
 // 截止按北京时间；旧数据只有日期的按当天 23:59 算。
 const isOverdue = (dueAt?: string) => {
@@ -111,52 +66,7 @@ function todayLocal() {
 
 /* 2026-10-14（细则 §十.20）：下单是事实，买灯判定是判断，不再用判断挡事实。
    旧版要三连 prompt、且只在「已判买灯」时才出现按钮 ⇒ 入口被自己关死。 */
-function AccountMenu({ user, onLogout, glyph }: { user: Account; onLogout: () => void; glyph?: string }) {
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-  const logout = async () => {
-    setOpen(false);
-    try { await post("/auth/logout"); } catch { /* 服务端已登出也照走 */ }
-    onLogout();
-  };
-  return (
-    <div className="account-menu" ref={box}>
-      <button
-        className="avatar small"
-        aria-label={`账号菜单（${user.username}）`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        {glyph || "账"}
-      </button>
-      {open && (
-        <div className="account-dropdown" role="menu">
-          <div className="account-who">
-            <b>{user.username}</b>
-            <small>本地账号</small>
-          </div>
-          <button role="menuitem" onClick={logout}>退出登录</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
+function App() {
   const [page, setPage] = useState("dashboard"),
     [projects, setProjects] = useState<Project[]>([]),
     [active, setActive] = useState<string | null>(
@@ -174,71 +84,26 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
     [activity, setActivity] = useState<Obj[]>([]),
     [products, setProducts] = useState<Obj[]>([]),
     [sceneTemplates, setSceneTemplates] = useState<Obj[]>([]),
-    [wbHistory, setWbHistory] = useState<Obj[]>([]),
-    [versionDraft, setVersionDraft] = useState(""),
-    [switching, setSwitching] = useState(""),
+    [updateInfo, setUpdateInfo] = useState<Obj | null>(null),
+    [checkingUpdate, setCheckingUpdate] = useState(false),
     [health, setHealth] = useState<Obj>({}),
     [busy, setBusy] = useState(false),
     // 有新版可用时记下新的包名：只提示，不自动刷新页面。
     [updateAsset, setUpdateAsset] = useState("");
   const toastTimer = useRef<any>(null);
   const importRef = useRef<HTMLInputElement>(null);
-  const applyVersion = async (value: string, note = "") => {
-    const next = (value || "").trim();
-    if (!next) {
-      notify("请先填写版本号，例如 1.4.0");
-      return;
-    }
-    setBusy(true);
+  const checkUpdate = async () => {
+    setCheckingUpdate(true);
     try {
-      const r = await post("/workbench/version", { version: next, note });
-      setWbHistory(r.history || []);
-      setVersionDraft(r.version || next);
-      await refresh();
-      notify(
-        r.archived
-          ? `工作台版本已设为 v${r.version}，并为该版本存了代码档案`
-          : `工作台版本已设为 v${r.version}`,
-      );
+      const r = await api<Obj>("/update/check");
+      setUpdateInfo(r);
+      if (r.error) notify(`检查更新失败：${r.error}`);
+      else if (r.hasUpdate) notify(`发现新版本 v${r.latest}，点「打开下载页」查看`);
+      else notify(`已是最新版本 v${r.current}`);
     } catch (e: any) {
-      notify(e.message);
+      notify(`检查更新失败：${e.message}`);
     } finally {
-      setBusy(false);
-    }
-  };
-  const activateVersion = async (v: string) => {
-    if (switching) return;
-    if (
-      !confirm(
-        `把整个工作台切换到 v${v}？` +
-          "\n\n会还原该版本的代码存档、重建前端并重启服务（约 1 分钟）。" +
-          "\n此期间页面会短暂无法保存，项目数据不受影响。",
-      )
-    )
-      return;
-    setSwitching(v);
-    try {
-      const r = await post("/workbench/version/activate", { version: v });
-      notify(r.message || `正在切换到 v${v}…`);
-      const deadline = Date.now() + 240000;
-      while (Date.now() < deadline) {
-        await new Promise((res) => setTimeout(res, 3000));
-        try {
-          const h = await api<Obj>("/health");
-          if (h.version === v) {
-            notify(`已切换到 v${v}，正在重新载入…`);
-            setTimeout(() => location.reload(), 1500);
-            return;
-          }
-        } catch {
-          /* service is restarting */
-        }
-      }
-      notify("切换仍在进行，请稍后刷新页面");
-    } catch (e: any) {
-      notify(e.message);
-    } finally {
-      setSwitching("");
+      setCheckingUpdate(false);
     }
   };
   const notify = useCallback((s: string) => {
@@ -257,13 +122,6 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
       setLoaded(true);
       setActivity(a);
       setHealth(h);
-      try {
-        const v = await api<Obj>("/workbench/version");
-        setWbHistory(v.history || []);
-        setVersionDraft((cur: string) => cur || v.version || "");
-      } catch {
-        /* version list is optional */
-      }
       setError("");
     } catch (e: any) {
       setError(e.message);
@@ -364,7 +222,9 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
   }
   const filtered = projects.filter(
     (p) =>
-      (filter === "全部项目" ? p.status !== "已归档" : p.status === filter) &&
+      (filter === "全部项目"
+        ? true
+        : (STATUS_MATCH[filter] || [filter]).includes(p.status)) &&
       (!query ||
         `${p.name} ${p.code} ${p.client} ${p.city}`
           .toLowerCase()
@@ -378,7 +238,7 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
   const stats = [
     {
       label: "全部项目",
-      value: projects.filter((p) => p.status !== "已归档").length,
+      value: projects.length,
       icon: FolderOpen,
       foot: "每一个空间，都值得好光",
       color: "green",
@@ -400,7 +260,7 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
     },
     {
       label: "已确认 / 冻结",
-      value: projects.filter((p) => p.approved).length,
+      value: projects.filter((p) => p.status === "已冻结").length,
       icon: CheckCircle2,
       foot: "经过人工复核的设计",
       color: "purple",
@@ -515,8 +375,8 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
           <button className="user-profile" onClick={() => setPage("settings")}>
             <span className="avatar">设</span>
             <span>
-              <b>设计师</b>
-              <small>账号登录工作空间</small>
+              <b>本机工作空间</b>
+              <small>单用户 · 无需登录</small>
             </span>
             <Settings2 size={16} />
           </button>
@@ -551,7 +411,9 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
             >
               <HelpCircle size={18} />
             </button>
-            <AccountMenu user={user} onLogout={onLogout} glyph={user.username.slice(0, 1) || "账"} />
+            <span className="avatar small" title="本机单用户工作台">
+              本
+            </span>
           </div>
         </header>
         <main className="main-content">
@@ -639,7 +501,7 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
                         key={s.label}
                         onClick={() => {
                           setFilter(
-                            ["全部项目", "设计中", "待复核", "已确认"][i],
+                            ["全部项目", "进行中", "待确认", "已完成"][i],
                           );
                           setPage("projects");
                         }}
@@ -673,7 +535,7 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
                     {page === "dashboard" ? "最近项目" : "项目总览"}{" "}
                     <span>
                       {loaded
-                        ? (page === "dashboard" ? visibleProjects : projects.filter((p) => p.status !== "已归档")).length
+                        ? (page === "dashboard" ? visibleProjects : filtered).length
                         : "…"}
                     </span>
                   </h2>
@@ -696,18 +558,28 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
                   />
                 </div>
                 <div className="project-toolbar">
-                  <div className="project-tabs">
-                    {["全部项目", "草稿", "设计中", "待复核", "已冻结"].map(
-                      (s) => (
-                        <button
-                          className={filter === s ? "active" : ""}
-                          key={s}
-                          onClick={() => setFilter(s)}
-                        >
-                          {s}
-                        </button>
-                      ),
-                    )}
+                  <div className="tabs-row">
+                    <div className="project-tabs">
+                      {["全部项目", "未开始", "进行中", "待确认", "已完成"].map(
+                        (s) => (
+                          <button
+                            className={filter === s ? "active" : ""}
+                            key={s}
+                            onClick={() => setFilter(s)}
+                          >
+                            {s}
+                          </button>
+                        ),
+                      )}
+                    </div>
+                    {/* 归档单独一个虚线入口：与 pill 同排、在组外，不与状态词并排（作者 2026-10-19 拍板 3A） */}
+                    <button
+                      className={"tab-arch" + (filter === "归档" ? " on" : "")}
+                      aria-pressed={filter === "归档"}
+                      onClick={() => setFilter("归档")}
+                    >
+                      归档 {loaded ? projects.filter((p) => p.status === "已归档").length : "…"} ›
+                    </button>
                   </div>
                   <div className="filter-tools">
                     <div className="search-field">
@@ -726,25 +598,16 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
                         </button>
                       )}
                     </div>
+                    {/* 9 项收成 3 项：三个原状态词一个不删（稿面 1302），已归档也不在这里——它只有上面那一个虚线入口 */}
                     <select
-                      aria-label="项目状态筛选"
-                      value={filter}
-                      onChange={(e) => setFilter(e.target.value)}
+                      aria-label="更多状态筛选"
+                      value={["识别中", "已确认", "已导出"].includes(filter) ? filter : ""}
+                      onChange={(e) => e.target.value && setFilter(e.target.value)}
                     >
-                      <option>全部项目</option>
-                      {[
-                        "草稿",
-                        "识别中",
-                        "待人工确认",
-                        "设计中",
-                        "待复核",
-                        "已确认",
-                        "已冻结",
-                        "已导出",
-                        "已归档",
-                      ].map((s) => (
-                        <option key={s}>{s}</option>
-                      ))}
+                      <option value="">更多状态 ›</option>
+                      <option value="识别中">识别中</option>
+                      <option value="已确认">已确认</option>
+                      <option value="已导出">已导出</option>
                     </select>
                     <div className="view-switch">
                       <button
@@ -980,7 +843,6 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
                   {[
                     ["数据库", health.storage || "未连接"],
                     ["服务状态", health.ok ? "运行中" : "未连接"],
-                    ["登录方式", "账号与角色隔离"],
                     ["自动保存", "编辑停止后 800 ms 保存"],
                     ["识别 Provider", health.recognitionProvider || "local"],
                     ["图像 Provider", health.imageProvider || "local"],
@@ -1004,17 +866,58 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
                   </p>
                   <p className="body-copy">
                     替换模型请在后端 Provider
-                    注册适配器并配置环境变量。请妥善保护管理员账号与图纸资料。
+                    注册适配器并配置环境变量。图纸与设计数据都只存在你自己的机器上。
                   </p>
                   <Button onClick={() => setModal("guide")}>
                     阅读使用指南 <ArrowRight size={15} />
                   </Button>
                 </section>
                 <section className="white-panel">
+                  <h3>版本与更新</h3>
+                  <div className="setting-row">
+                    <span>当前版本</span>
+                    <b>v{health.version || __APP_VERSION__}</b>
+                  </div>
+                  <div className="setting-row">
+                    <span>更新状态</span>
+                    <b>
+                      {!updateInfo
+                        ? "尚未检查"
+                        : updateInfo.error
+                          ? "检查失败"
+                          : updateInfo.hasUpdate
+                            ? `有新版本 v${updateInfo.latest}`
+                            : "已是最新"}
+                    </b>
+                  </div>
+                  <p className="body-copy">
+                    检查 GitHub 上有没有比这版更新的发行版。有新版本时打开下载页，按 README
+                    覆盖安装即可；项目数据放在 data 目录，覆盖代码不会动它。
+                  </p>
+                  <div className="update-actions">
+                    <Button disabled={checkingUpdate} onClick={checkUpdate}>
+                      {checkingUpdate ? "正在检查…" : "检查更新"} <RefreshCw size={15} />
+                    </Button>
+                    {updateInfo?.hasUpdate && (
+                      <a href={String(updateInfo.url || "")} target="_blank" rel="noreferrer">
+                        打开下载页 <ExternalLink size={14} />
+                      </a>
+                    )}
+                    {!!updateInfo?.error && (
+                      <small className="update-note">
+                        {String(updateInfo.error)}；不影响本机使用，可直接去
+                        <a href="https://github.com/twbzpngd58-beep/guanglv-workbench/releases" target="_blank" rel="noreferrer">
+                          Releases
+                        </a>
+                        看。
+                      </small>
+                    )}
+                  </div>
+                </section>
+                <section className="white-panel">
                   <h3>关于与联系</h3>
                   <p className="body-copy">
-                    光律 Guanglv Workbench · MIT 开源。图纸解析、三维渲染与情景规则来自真实照明项目的打磨；
-                    数据全部留在你自己的机器上。
+                    光律 Guanglv Workbench · MIT 开源。图纸解析、三维渲染与情景规则来自真实照明项目的打磨；数据全部留在你自己的机器上。
                   </p>
                   <div className="contact-cards compact">
                     <a className="contact-card" href="/wechat-support.jpg" target="_blank" rel="noreferrer">
@@ -1025,74 +928,10 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
                       <img src="/wechat-business.jpg" alt="商务合作微信二维码" />
                       <b>商务合作</b>
                     </a>
-                  </div>
-                </section>
-                <section className="white-panel">
-                  <h3>工作台版本</h3>
-                  <div className="setting-row">
-                    <span>当前版本</span>
-                    <b>v{health.version || __APP_VERSION__}</b>
-                  </div>
-                  <div className="setting-row">
-                    <span>构建版本</span>
-                    <b>v{__APP_VERSION__}</b>
-                  </div>
-                  <p className="body-copy">
-                    源码发行版不生成代码存档，所以这里只记录版本号与改动说明；要换回旧版本，用 git 切分支或
-                    `git checkout 标签名` 后重新构建。项目数据（`data/`）不受影响。
-                  </p>
-                  <div className="version-set">
-                    <input
-                      value={versionDraft}
-                      onChange={(e) => setVersionDraft(e.target.value)}
-                      placeholder="例如 1.4.0"
-                      aria-label="手动设定工作台版本号"
-                    />
-                    <Button
-                      disabled={busy}
-                      onClick={() => applyVersion(versionDraft, "手动设定")}
-                    >
-                      设定为当前版本
-                    </Button>
-                  </div>
-                  <div className="version-list">
-                    {wbHistory.map((v) => {
-                      const isCurrent =
-                        v.version === (health.version || __APP_VERSION__);
-                      return (
-                        <div className="version-item" key={v.version}>
-                          <b>v{v.version}</b>
-                          <small>
-                            {isCurrent
-                              ? "当前运行"
-                              : v.hasArchive
-                                ? "有代码存档"
-                                : "无存档（仅版本号）"}
-                            {v.note ? " · " + v.note : ""}
-                            {v.at ? " · " + fmtDate(v.at) : ""}
-                          </small>
-                          <Button
-                            disabled={
-                              busy || isCurrent || !v.hasArchive || !!switching
-                            }
-                            onClick={() => activateVersion(v.version)}
-                            title={
-                              v.hasArchive
-                                ? "还原该版本的代码并重建重启"
-                                : "该版本没有代码存档，无法切换"
-                            }
-                          >
-                            {isCurrent
-                              ? "当前"
-                              : v.hasArchive
-                                ? switching === v.version
-                                  ? "切换中…"
-                                  : "切换到此版本"
-                                : "无存档"}
-                          </Button>
-                        </div>
-                      );
-                    })}
+                    <a className="contact-card" href="/wechat-knx.jpg" target="_blank" rel="noreferrer">
+                      <img src="/wechat-knx.jpg" alt="KNX培训课程咨询微信二维码" />
+                      <b>KNX培训课程咨询</b>
+                    </a>
                   </div>
                 </section>
               </div>
@@ -1146,7 +985,7 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
               [
                 "04",
                 "人工复核与交付",
-                "布局、灯具、场景、价格分别签名复核。设计变更只让受影响的那几道复核失效，并记录原因。示例项目始终是草稿；正式施工图、电气校核和真实报价不能自动完成。",
+                "需求、布置、灯光、价格、交付分别签名复核。设计变更只让受影响的那几道复核失效，并记录原因。示例项目始终是草稿；正式施工图、电气校核和真实报价不能自动完成。",
               ],
               [
                 "05",
@@ -1176,6 +1015,11 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
                 <img src="/wechat-business.jpg" alt="商务合作微信二维码" />
                 <b>商务合作</b>
                 <span>设计、智能、产品与落地交付</span>
+              </a>
+              <a className="contact-card" href="/wechat-knx.jpg" target="_blank" rel="noreferrer">
+                <img src="/wechat-knx.jpg" alt="KNX培训课程咨询微信二维码" />
+                <b>KNX培训课程咨询</b>
+                <span>KNX 系统课程与项目陪跑</span>
               </a>
             </div>
           </div>
@@ -1669,7 +1513,7 @@ function CreateProject({
 }
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <AuthGate />
+    <App />
   </React.StrictMode>,
 );
 

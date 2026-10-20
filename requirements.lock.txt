@@ -36,4 +36,3 @@ uvicorn==0.41.0
 opencv-python-headless==4.13.0.92
 shapely==2.1.2
 edge-tts==7.3.1
-qrcode==8.2

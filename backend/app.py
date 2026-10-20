@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os, json, re, sqlite3, uuid, shutil, math, copy, threading, base64, subprocess, hashlib, unicodedata, logging, zlib, secrets, asyncio
-from urllib.request import Request, urlopen
+from urllib.request import Request as UrlRequest, urlopen
 from urllib.error import URLError, HTTPError
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
@@ -90,6 +90,10 @@ DATA = Path(os.getenv("DATA_DIR", str(ROOT / "data"))).resolve()
 UPLOADS = DATA / "uploads" / "projects"
 DB = DATA / "studio.sqlite3"
 KNOWLEDGE_ROOT = Path(os.getenv("KNOWLEDGE_BASE_PATH", str(ROOT / "backend" / "local_data"))).resolve()
+
+# 单机版：没有账号与密码，请求一律按本机用户处理。
+LOCAL_USER = {"id": "local", "username": "localhost", "role": "admin",
+              "disabled": False, "mustChangePassword": False}
 _KNOWLEDGE_CACHE: dict[str, Any] | None = None
 STATES = [
     "草稿",
@@ -129,8 +133,6 @@ def init_db():
         CREATE TABLE IF NOT EXISTS versions(id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id) ON DELETE CASCADE, version INTEGER, revision INTEGER, created_at TEXT, note TEXT, doc TEXT);
         CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id) ON DELETE CASCADE, at TEXT, action TEXT, detail TEXT);
         CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
-        CREATE TABLE IF NOT EXISTS partners(id TEXT PRIMARY KEY, updated_at TEXT NOT NULL, doc TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS kb_index(id INTEGER PRIMARY KEY CHECK(id=1), synced_at TEXT NOT NULL, root TEXT NOT NULL, doc TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS idx_versions_project ON versions(project_id, created_at);
         """
         )
@@ -140,8 +142,10 @@ def init_db():
         # 操作日志记录来源地址（谁在什么地方点的）；旧记录留空。
         if "ip" not in {r["name"] for r in c.execute("PRAGMA table_info(events)")}:
             c.execute("ALTER TABLE events ADD COLUMN ip TEXT")
+        # 操作日志记录操作人；单机版恒为空，但老库升级 / 新库都要有这一列。
+        if "user" not in {r["name"] for r in c.execute("PRAGMA table_info(events)")}:
+            c.execute("ALTER TABLE events ADD COLUMN user TEXT")
         # 认证和权限表
-        auth.init_auth(c)
         if not c.execute("SELECT 1 FROM meta WHERE key='cooperation_v1'").fetchone():
             for row in c.execute("SELECT doc FROM projects").fetchall():
                 p=json.loads(row['doc'])
@@ -151,7 +155,7 @@ def init_db():
                 commit(c,p,'升级五道人工复核','旧审批不自动转成新五道审批；设计、附件、冻结保护不变')
             c.execute("INSERT INTO meta VALUES('cooperation_v1','1')")
         if not c.execute("SELECT 1 FROM meta WHERE key='seeded'").fetchone():
-            if os.getenv("SEED_DEMO", "1") == "1":
+            if os.getenv("SEED_DEMO", "0") == "1":
                 for i, (name, client, city, area, kind, status) in enumerate(
                     [
                         (
@@ -352,7 +356,7 @@ def get(c, pid):
     # 智能方案：旧项目没有这个字段，默认按「无线智能」处理，保持逐灯情景不变。
     if p.get("smart") not in ("无线", "KNX", "无"):
         p["smart"] = "无线"
-    # 已确认空间的老项目（2026-10-17 text）：首次导入时留下的另一套缩放的 CAD 线 / 文字不再显示，
+    # 已确认空间的老项目（现场 2026-10-17 text）：首次导入时留下的另一套缩放的 CAD 线 / 文字不再显示，
     # 只在读取时剔除；下次保存时随之落库（不单独改库）。
     d = p.get("design") or {}
     if (d.get("spaceDefinition") or {}).get("status") == "confirmed":
@@ -487,7 +491,7 @@ def validate_design(d, p):
                 raise HTTPException(422, "家具所属空间不存在")
             if room and f.get("floor", 1) != room.get("floor", 1):
                 raise HTTPException(422, "家具楼层与所属空间不一致")
-            # 家具边界多边形（2026-10-16）：口径与空间边界点一致，坏数据不许落库。
+            # 家具边界多边形（现场 2026-10-16）：口径与空间边界点一致，坏数据不许落库。
             if f.get("points"):
                 pts = f["points"]
                 if not isinstance(pts, list) or len(pts) < 3:
@@ -652,35 +656,9 @@ async def _access_guard(request, call_next):
     ip, lan = access.resolve(peer, request.headers)
     token = access.CLIENT_IP.set(ip)
     try:
-        # 会话认证：所有 API 路由（除登录、登出、健康检查）都需要有效会话
         path = request.url.path
-        if path.startswith("/api/") and path not in ("/api/auth/login", "/api/auth/logout", "/api/health"):
-            session_token = request.cookies.get("session")
-            if not session_token:
-                return JSONResponse({"detail": "未登录", "code": "unauthorized"}, status_code=401)
-            with connect() as c:
-                user = auth.get_session_user(c, session_token)
-            if not user:
-                return JSONResponse({"detail": "会话已过期", "code": "session_expired"}, status_code=401)
-            auth.CURRENT_USER.set(user["username"])
-            # 强制修改密码检查：未改密只放行改密、登出、me
-            if user["mustChangePassword"] and path not in ("/api/auth/change-password", "/api/auth/logout", "/api/auth/me"):
-                return JSONResponse({"detail": "必须修改密码", "code": "must_change_password"}, status_code=403)
-            # L1 白名单：协作账号禁止访问的路由
-            if user["role"] == auth.ROLE_OUTSOURCER:
-                # Fail closed: do not expose legacy project, export, quote, 3D,
-                # knowledge or management endpoints through guessed URLs.
-                allowed = (request.method == "POST" and path == "/api/auth/change-password") or (
-                    re.fullmatch(r"/api/tasks/[^/]+/(workflow|job|refresh-rooms|room|confirm-rooms|generate|lights|step|submit|panels|sensors|structure|furniture|background|geometry)(/[^/]+)?", path)
-                    and request.method in ("GET", "POST", "PATCH", "DELETE")
-                ) or (request.method == "GET" and (
-                    path in ("/api/auth/me", "/api/tasks", "/api/build")
-                    or re.fullmatch(r"/api/tasks/[^/]+/files/[^/]+", path)
-                ))
-                if not allowed:
-                    return JSONResponse({"detail": "无权限", "code": "forbidden"}, status_code=403)
-            # 把用户信息挂到 request.state，后续路由可以直接取
-            request.state.user = user
+        # 单机版没有账号体系，一律按本机用户处理。
+        request.state.user = LOCAL_USER
 
         # 原有高危接口检查
         if access.is_high_risk(request.method, request.url.path) and not lan and not access.token_ok(request.headers):
@@ -762,50 +740,6 @@ async def _log_validation_exception(request: Request, exc: RequestValidationErro
 # ==================== 认证路由 ====================
 
 
-@app.post("/api/auth/login")
-def login(username: str = Body(...), password: str = Body(...)):
-    """登录。返回 {ok, user: {id, username, role, mustChangePassword}}，设置 HttpOnly cookie。"""
-    with connect() as c:
-        row = c.execute("SELECT id, role, pw_hash, salt, disabled, must_change_pw FROM users WHERE username=?", (username,)).fetchone()
-        if not row or row["disabled"] or not auth.verify_password(password, row["pw_hash"], row["salt"]):
-            raise HTTPException(status_code=401, detail="用户名或密码错误")
-        token = auth.create_session(c, row["id"])
-        user = {"id": row["id"], "username": username, "role": row["role"], "mustChangePassword": bool(row["must_change_pw"])}
-        resp = JSONResponse({"ok": True, "user": user})
-        resp.set_cookie("session", token, httponly=True, samesite="lax", max_age=auth.SESSION_LIFETIME_HOURS * 3600)
-        return resp
-
-
-@app.post("/api/auth/logout")
-def logout(request: Request):
-    """登出。删除会话，清除 cookie。"""
-    token = request.cookies.get("session")
-    if token:
-        with connect() as c:
-            auth.delete_session(c, token)
-    resp = JSONResponse({"ok": True})
-    resp.delete_cookie("session")
-    return resp
-
-
-@app.get("/api/auth/me")
-def current_user(request: Request):
-    return request.state.user
-
-
-def _admin(request: Request) -> None:
-    if request.state.user["role"] != auth.ROLE_ADMIN:
-        raise HTTPException(403, "无权限")
-
-
-def _outsourcer(c, uid: str):
-    row = c.execute("SELECT id,username,disabled FROM users WHERE id=? AND role=?",
-                    (uid, auth.ROLE_OUTSOURCER)).fetchone()
-    if not row:
-        raise HTTPException(404, "协作账号不存在")
-    return row
-
-
 # 任务截止时间按北京时间口径：精确到分钟；留空=分配时刻+24小时
 _DUE_TZ = timezone(timedelta(hours=8))
 
@@ -834,29 +768,6 @@ def _normalize_due_at(due_at: str) -> str:
 def _task_row(pid):
     with connect() as c:
         return c.execute("SELECT doc FROM task_flows WHERE project_id=?", (pid,)).fetchone()
-
-
-@app.post("/api/auth/change-password")
-def change_password(request: Request, old_password: str = Body(...), new_password: str = Body(...)):
-    """修改密码。删除该用户所有会话（强制重新登录），返回新 token。"""
-    user = request.state.user
-    if problem := auth.password_problem(new_password):
-        raise HTTPException(status_code=422, detail=problem)
-    with connect() as c:
-        row = c.execute("SELECT pw_hash, salt FROM users WHERE id=?", (user["id"],)).fetchone()
-        if not auth.verify_password(old_password, row["pw_hash"], row["salt"]):
-            raise HTTPException(status_code=401, detail="旧密码错误")
-        # 生成新盐和哈希
-        salt = secrets.token_bytes(32)
-        pw_hash = auth.hash_password(new_password, salt)
-        c.execute("UPDATE users SET pw_hash=?, salt=?, must_change_pw=0 WHERE id=?", (pw_hash, salt, user["id"]))
-        # 删除该用户所有会话
-        auth.delete_user_sessions(c, user["id"])
-        # 创建新会话
-        token = auth.create_session(c, user["id"])
-        resp = JSONResponse({"ok": True})
-        resp.set_cookie("session", token, httponly=True, samesite="lax", max_age=auth.SESSION_LIFETIME_HOURS * 3600)
-        return resp
 
 
 # ==================== L2/L3 权限辅助函数 ====================
@@ -912,9 +823,96 @@ def health():
         effectRenderConfigured=bool(os.getenv("EFFECT_RENDER_URL")),
         planVisionProvider=os.getenv("PLAN_VISION_PROVIDER", "disabled"),
         planVisionConfigured=semantic_plan_configured(),
-        authentication="session",
+        authentication="single-user",
         knowledgeBase={"root": "", "available": False, "syncedAt": None},
     )
+
+
+# ==================== 检查更新 ====================
+
+# 发布仓库；换成你自己的 fork 时改这里或设 UPDATE_REPO 环境变量。
+UPDATE_REPO = os.getenv("UPDATE_REPO", "twbzpngd58-beep/guanglv-workbench").strip()
+UPDATE_WEB = f"https://github.com/{UPDATE_REPO}"
+
+
+def version_key(value: str) -> tuple:
+    """把 1.3.10 折成可比较的元组；非数字段落按 0 处理。"""
+    parts = re.findall(r"\d+", (value or "").strip().lstrip("vV"))
+    return tuple(int(p) for p in parts[:4]) or (0,)
+
+
+def _github_json(path: str):
+    """读 GitHub 公开接口。仓库是公开的，不需要 token。"""
+    request = UrlRequest(
+        f"https://api.github.com/repos/{UPDATE_REPO}{path}",
+        headers={"User-Agent": f"guanglv-workbench/{APP_VERSION}", "Accept": "application/vnd.github+json"},
+    )
+    with urlopen(request, timeout=8) as resp:
+        return json.loads(resp.read().decode("utf-8", "replace"))
+
+
+def _latest_tag() -> str:
+    """取仓库里最大的版本号 tag；没打过 tag 时读 main 分支的 VERSION 文件。"""
+    try:
+        tags = _github_json("/tags")
+        names = [str(t.get("name") or "") for t in tags if isinstance(t, dict)]
+        names = [n for n in names if version_key(n) > (0,)]
+        if names:
+            return max(names, key=version_key).lstrip("vV")
+    except (HTTPError, URLError, OSError, ValueError):
+        pass
+    payload = _github_json("/contents/VERSION")
+    raw = base64.b64decode(payload.get("content") or "").decode("utf-8", "replace")
+    return raw.strip().lstrip("vV")
+
+
+@app.get("/api/update/check")
+def update_check():
+    """问 GitHub 上有没有比本机更新的发行版。
+
+    顺序：latest release → 版本 tag → main 分支的 VERSION 文件。
+    网络不通不是错误状态：把原因放进 error 字段，界面照常能用。
+    """
+    current = APP_VERSION
+    out = {
+        "current": current,
+        "latest": "",
+        "hasUpdate": False,
+        "url": f"{UPDATE_WEB}/releases",
+        "notes": "",
+        "publishedAt": "",
+        "source": "",
+        "checkedAt": now(),
+        "repo": UPDATE_REPO,
+        "error": "",
+    }
+    if not UPDATE_REPO:
+        out["error"] = "未配置更新源（UPDATE_REPO）"
+        return out
+    try:
+        release = _github_json("/releases/latest")
+        out.update(
+            latest=str(release.get("tag_name") or "").strip().lstrip("vV"),
+            notes=(release.get("body") or "")[:2000],
+            publishedAt=release.get("published_at") or "",
+            url=release.get("html_url") or out["url"],
+            source="release",
+        )
+    except HTTPError as exc:
+        if exc.code != 404:
+            out["error"] = f"GitHub 返回 {exc.code}"
+            return out
+        try:
+            out.update(latest=_latest_tag(), source="tags")
+        except (HTTPError, URLError, OSError, ValueError) as err:
+            out["error"] = f"读不到线上版本：{err}"
+            return out
+    except (URLError, OSError, ValueError, KeyError) as exc:
+        out["error"] = f"连不上 GitHub：{exc}"
+        return out
+    if out["latest"]:
+        out["hasUpdate"] = version_key(out["latest"]) > version_key(current)
+    return out
 
 
 DIST_INDEX = ROOT / "frontend" / "dist" / "index.html"
@@ -942,9 +940,14 @@ def build_info():
     return {**current_build(), "version": APP_VERSION}
 
 
-class WorkbenchVersionInput(BaseModel):
-    version: str
-    note: str = Field(default="", max_length=200)
+@app.get("/api/activity")
+def activity_stub(limit: int = 20):
+    """兼容旧前端：工作台动态属于已删除的经营线，这里只回空列表。
+
+    1.0 的 dist 里还留着这次请求，没有它就整页弹「接口不存在」。
+    制图器版没有动态流，恒返回 []。
+    """
+    return []
 
 
 @app.get("/api/projects")
@@ -2306,7 +2309,7 @@ def validate_reviewed_spaces(d) -> int:
 
 
 # 首次导入 DXF 时 ezdxf 基础解析写进来的线段 / 文字（source="cad"）是**铺满画布的另一套缩放**，
-# 和确认后的空间（米 × 26）不在一个坐标系。2026-10-17 的 text 项目：底图上叠了两套大小不一的
+# 和确认后的空间（米 × 26）不在一个坐标系。现场 2026-10-17 的 text 项目：底图上叠了两套大小不一的
 # 户型，没法布灯。空间确认后墙以空间边界生成的为准，这层旧线一律清掉（文字一并清：乱码也在里面）。
 STALE_DRAWING_SOURCES = {"cad"}
 
@@ -2611,7 +2614,7 @@ def generate_effect_render(pid: str, payload: dict = Body(default={})):
     if os.getenv("EFFECT_RENDER_TOKEN"):
         headers["Authorization"] = "Bearer " + os.getenv("EFFECT_RENDER_TOKEN", "")
     try:
-        req = Request(url, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), headers=headers, method="POST")
+        req = UrlRequest(url, data=json.dumps(body, ensure_ascii=False).encode("utf-8"), headers=headers, method="POST")
         with urlopen(req, timeout=90) as remote:
             content_type = remote.headers.get_content_type()
             raw = remote.read()
@@ -2745,50 +2748,7 @@ def qr_image(text: str = ""):
 
 @app.get("/api/scene-templates")
 def scene_templates():
-    """标准情景模板。
-
-    发行包不再带外部知识库，但前端「写入标准化场景」仍走这个接口；
-    场景包是随源码分发的唯一真相源，因此这里从 scene_package.json 生成模板，
-    避免按钮显示成功却写入 0 个情景。
-    """
-    templates = knowledge_index().get("sceneTemplates", [])
-    if templates:
-        return templates
-    package = knowledge_index().get("scenePackage", {}) or {}
-    # 「一键设置场景」固定写入的基础情景；前端也按 00.1 / 00.2 识别。
-    out = [
-        {"id": "scene-00-1", "code": "00.1", "name": "全开",
-         "description": "所有灯具 100% 开启", "trigger": "手动", "fade": 1,
-         "mode": "all-on", "priority": "", "level": "", "exit": "",
-         "exclude": "", "space": "全屋", "automationActions": []},
-        {"id": "scene-00-2", "code": "00.2", "name": "全关",
-         "description": "所有灯具关闭", "trigger": "手动", "fade": 1,
-         "mode": "all-off", "priority": "", "level": "", "exit": "",
-         "exclude": "", "space": "全屋", "automationActions": []},
-    ]
-    for scene in package.get("scenes") or []:
-        if scene.get("legacyOnly"):
-            continue
-        code = str(scene.get("code") or "").strip()
-        if not code:
-            continue
-        name = str(scene.get("name") or "").strip()
-        out.append({
-            "id": "scene-pkg-" + code.replace(".", "-"),
-            "code": code,
-            "name": name,
-            "description": scene.get("description") or "",
-            "trigger": "手动",
-            "fade": scene.get("fade", 1),
-            "mode": "standard",
-            "priority": scene.get("priority") or "",
-            "level": scene.get("level") or "",
-            "exit": scene.get("exit") or "",
-            "exclude": scene.get("exclude") or "",
-            "space": scene.get("space") or "全屋",
-            "automationActions": [],
-        })
-    return out
+    return knowledge_index().get("sceneTemplates", [])
 
 
 @app.get("/api/scene-package")
@@ -2826,151 +2786,6 @@ class BaselineInput(BaseModel):
     reviewNote: str = Field(default="", max_length=5000)
 
 
-# ==================== 发布包兼容接口 ====================
-# 1.0.0 发行包的前端构建产物包含以下调用，但后端路由未随包提供。
-# 这里按现有数据模型补上最小实现，避免首屏 Promise.all 因单个 404 整体失败。
-
-@app.get("/api/activity")
-def activity(request: Request, limit: int = 20):
-    """最近的项目动态，供首页「工作动态」使用。"""
-    user = request.state.user
-    limit = max(1, min(int(limit or 20), 100))
-    with connect() as c:
-        allowed = None
-        if user["role"] == auth.ROLE_OUTSOURCER:
-            allowed = {
-                r["project_id"]
-                for r in c.execute(
-                    "SELECT project_id FROM assignments WHERE user_id=?", (user["id"],)
-                )
-            }
-        rows = c.execute(
-            """SELECT e.id, e.project_id, e.at, e.action, e.detail, p.doc
-               FROM events e JOIN projects p ON p.id=e.project_id
-               ORDER BY e.at DESC LIMIT ?""",
-            (limit * 4,),
-        ).fetchall()
-        out = []
-        for row in rows:
-            if allowed is not None and row["project_id"] not in allowed:
-                continue
-            try:
-                doc = json.loads(row["doc"])
-            except (TypeError, ValueError):
-                doc = {}
-            out.append({
-                "id": row["id"],
-                "project_id": row["project_id"],
-                "projectName": doc.get("name") or doc.get("code") or "未命名项目",
-                "action": row["action"],
-                "detail": row["detail"] or "",
-                "at": row["at"],
-            })
-            if len(out) >= limit:
-                break
-    return out
-
-
-@app.get("/api/workbench/version")
-def get_workbench_version():
-    return {"version": APP_VERSION, "history": workbench_history(), "build": current_build()}
-
-
-@app.post("/api/workbench/version")
-def set_workbench_version(payload: WorkbenchVersionInput):
-    """记录工作台版本号；源码发行包不生成代码档案，因此 archived 恒为 false。"""
-    global APP_VERSION
-    version = payload.version.strip()
-    if not re.fullmatch(r"v?\d+(?:\.\d+){0,3}(?:[-+][0-9A-Za-z.-]+)?", version):
-        raise HTTPException(422, "版本号格式不正确，例如 1.0.0")
-    try:
-        VERSION_FILE.write_text(version + "\n", encoding="utf-8")
-    except OSError as exc:
-        raise HTTPException(500, f"版本文件写入失败：{exc}")
-    APP_VERSION = version
-    history = remember_workbench_version(version, payload.note)
-    return {"version": version, "history": history, "archived": False}
-
-
-@app.post("/api/workbench/version/activate")
-def activate_workbench_version(payload: WorkbenchVersionInput):
-    archive = DATA / "releases" / f"{payload.version}.tar.gz"
-    if not archive.is_file():
-        raise HTTPException(404, f"没有 v{payload.version} 的代码档案，无法切换")
-    raise HTTPException(501, "当前部署未启用版本切换执行器")
-
-
-@app.get("/api/products/status")
-def product_status():
-    st = PL.status(DB)
-    if not st.get("loaded"):
-        try:
-            PL.load_seed(DB)
-        except Exception as exc:
-            raise HTTPException(500, f"产品库初始化失败：{exc}")
-        st = PL.status(DB)
-    return st
-
-
-@app.post("/api/products/sync")
-def product_sync():
-    try:
-        seed = PL.load_seed(DB)
-    except Exception as exc:
-        raise HTTPException(500, f"产品库同步失败：{exc}")
-    st = PL.status(DB)
-    return {**st, "seeded": bool(seed.get("seeded")),
-            "message": f"已同步 {st.get('total', 0)} 件产品"}
-
-
-@app.post("/api/projects/{pid}/space-definition/geometry")
-def space_definition_geometry(pid: str, request: Request, payload: dict = Body(default={})):
-    """空间拆分/合并：只返回新的设计草稿，持久化仍由前端正常保存负责。"""
-    design = payload.get("design")
-    if not isinstance(design, dict):
-        raise HTTPException(422, "缺少设计数据")
-    with connect() as c:
-        _require_project_access(request, pid, c)
-    from .task_geometry import transform_design
-    try:
-        return transform_design(
-            design, payload.get("action"), payload.get("id"), payload.get("otherId", "")
-        )
-    except ValueError as exc:
-        raise HTTPException(422, str(exc))
-
-
-@app.post("/api/projects/{pid}/requirements-baselines")
-def requirements_baseline(pid: str, payload: BaselineInput):
-    """冻结一份需求复核基线。"""
-    with connect() as c:
-        c.execute("BEGIN IMMEDIATE")
-        p = get(c, pid)
-        editable(p)
-        if payload.revision != p["revision"]:
-            raise HTTPException(409, "项目已更新，请刷新后再提交基线")
-        baseline = p.setdefault("requirementsBaseline", {"versions": [], "currentId": None})
-        versions = baseline.setdefault("versions", [])
-        entry = {
-            "id": ident(),
-            "version": len(versions) + 1,
-            "createdAt": now(),
-            "submitter": payload.submitter,
-            "evidence": payload.evidence,
-            "decision": payload.decision,
-            "reviewNote": payload.reviewNote,
-            "projectVersion": p.get("version", 1),
-            "projectRevision": p.get("revision", 1),
-            "designHash": coop.design_hash(p),
-        }
-        versions.append(entry)
-        baseline["currentId"] = entry["id"]
-        commit(c, p, "提交需求复核基线",
-               f"{payload.submitter or '设计师'} 冻结需求基线 v{entry['version']}")
-    return p
-
-
-
 # 三维灯光模块（工作台内嵌的三维空间 + /api/lighting3d/*）——必须排在下面的 SPA 兜底路由之前
 from . import lighting3d as lighting3d_mod  # noqa: E402
 lighting3d_mod.register(app)
@@ -2984,13 +2799,13 @@ if DIST.exists():
     def spa(full_path: str):
         if full_path.startswith("api/"):
             raise HTTPException(404, "接口不存在")
-        # dist 里的真实文件直接给（favicon、联系二维码、robots 这类），
+        # dist 里的真实文件直接给（favicon、三张联系二维码、robots 这类），
         # 其余路径才落到 SPA 外壳。必须限定在 DIST 之内，防目录穿越。
         if full_path:
             target = (DIST / full_path).resolve()
             if target.is_file() and (target == DIST or DIST in target.parents):
                 return FileResponse(target)
-        # SPA 外壳一旦被浏览器缓存住，
+        # SPA 外壳曾被浏览器缓存住（看起来像「改了没生效」）：
         # 于是新构建（hash 变了的 assets）根本不会被取——这里明确不许缓存 index.html。
         return FileResponse(DIST / "index.html", headers={
             "Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"})

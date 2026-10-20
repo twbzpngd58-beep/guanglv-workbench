@@ -63,7 +63,12 @@
     renderer = new THREE.WebGLRenderer({ canvas: el, antialias: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.outputEncoding = THREE.sRGBEncoding;
-    renderer.toneMapping = THREE.NoToneMapping;
+    // 对齐优邑珺和的观感（2026-10-19 作者：三维光线表达要和优邑一致）：
+    // ACES 压高光、开阴影，光才有「照进去」的感觉，而不是一片平涂。
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     controls = new THREE.OrbitControls(cam, renderer.domElement);
     controls.enableDamping = true; controls.dampingFactor = 0.08;
     controls.maxPolarAngle = Math.PI * 0.49;
@@ -76,26 +81,32 @@
               labels: new THREE.Group() };
   Object.values(G).forEach(g => scene.add(g));
 
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x20242e, 0.09);
-  const key = new THREE.DirectionalLight(0xffffff, 0.13); key.position.set(6, 12, 10);
-  const fill = new THREE.DirectionalLight(0xffffff, 0.06); fill.position.set(-8, 8, -6);
-  scene.add(hemi, key, fill);
+  // 三盏灯的配比照优邑珺和：半球光打底、主光斜射投影、补光提暗部
+  const hemi = new THREE.HemisphereLight(0xdfe8ff, 0x1a1c22, 0.12);
+  const key = new THREE.DirectionalLight(0xfff2e2, 0.30); key.position.set(6, 12, 10);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.bias = -0.0006;
+  key.shadow.normalBias = 0.02;
+  const fill = new THREE.DirectionalLight(0xdfe8ff, 0.10); fill.position.set(-8, 8, -6);
+  scene.add(hemi, key, fill, key.target);
 
   const MAT = {
-    floor: new THREE.MeshLambertMaterial({ color: 0x1b1d22, side: THREE.DoubleSide }),
-    wall: new THREE.MeshLambertMaterial({ color: 0x2b2d33 }),
-    furn: new THREE.MeshLambertMaterial({ color: 0x2a2d35 }),
+    // PBR：Lambert 没有高光和粗糙度，打光上去是平的（优邑珺和用的是 Standard）
+    floor: new THREE.MeshStandardMaterial({ color: 0x1b1d22, roughness: .88, metalness: .02, side: THREE.DoubleSide }),
+    wall: new THREE.MeshStandardMaterial({ color: 0x2b2d33, roughness: .70, metalness: .02 }),
+    furn: new THREE.MeshStandardMaterial({ color: 0x2a2d35, roughness: .82, metalness: .02 }),
     // 家具固定的三种面：主体 / 软包（床垫·坐垫）/ 硬面（台面·柜门）
-    furn2: new THREE.MeshLambertMaterial({ color: 0x363b45 }),
-    furn3: new THREE.MeshLambertMaterial({ color: 0x23262d }),
+    furn2: new THREE.MeshStandardMaterial({ color: 0x363b45, roughness: .95, metalness: 0 }),
+    furn3: new THREE.MeshStandardMaterial({ color: 0x23262d, roughness: .55, metalness: .05 }),
     // 四档语义材质（与 frontend/src/furnitureModels.ts 的 m 对齐）：1 木 / 2 布 / 3 白 / 4 金属
-    furn4: new THREE.MeshLambertMaterial({ color: 0x4a5257 })
+    furn4: new THREE.MeshStandardMaterial({ color: 0x4a5257, roughness: .35, metalness: .55 })
   };
 
   let walls = [], washes = [], luminaires = [], stripObjs = [], sensorObjs = [], rooms = [];
   const manual = {};
   let sceneId = null, mode = "night", beamsOn = true, cutOn = true;
-  // 情景切换渐变（2026-10-17「情景模式切换时的渐变时间也失效了」）：
+  // 情景切换渐变（现场 2026-10-17「情景模式切换时的渐变时间也失效了」）：
   // 切情景时按**目标情景自己的渐变时间**把亮度/色温缓变过去，不再瞬间跳变。
   let fade = null;                 // { from, to, t0, dur, guard }
   let shownStates = {};            // 逐帧的灯状态（id → {on, brightness, cct}）
@@ -108,6 +119,33 @@
   let fly = null;                // 相机过渡动画 {from,to,tFrom,tTo,t,dur,start}
 
   /* ---------------- 建场景 ---------------- */
+  /** 外壳观感对齐优邑珺和：墙开阴影、墙边补亮线、地板收影。 */
+  function polishShell() {
+    const bb = P.bbox || [0, 0, 10, 10];
+    const d = Math.max(bb[2] - bb[0], bb[3] - bb[1], 3);
+    const cx = (bb[0] + bb[2]) / 2, cz = (bb[1] + bb[3]) / 2;
+    key.shadow.camera.left = -d; key.shadow.camera.right = d;
+    key.shadow.camera.top = d; key.shadow.camera.bottom = -d;
+    key.shadow.camera.near = 0.5; key.shadow.camera.far = d * 8;
+    key.shadow.camera.updateProjectionMatrix();
+    key.position.set(cx + d * 0.5, d * 1.6, cz + d * 0.7);
+    key.target.position.set(cx, 0, cz);
+    key.target.updateMatrixWorld();
+
+    walls.forEach(w => {
+      w.castShadow = true; w.receiveShadow = true;
+      if (!w.userData.edge) {
+        // 优邑珺和的墙有亮边：光是「剖切后的墙体轮廓」，暗场里靠它读结构
+        const eg = new THREE.EdgesGeometry(w.geometry, 30);
+        const ln = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({
+          color: 0x86a7c4, transparent: true, opacity: 0.26, depthWrite: false
+        }));
+        w.add(ln); w.userData.edge = ln;
+      }
+    });
+    G.shell.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  }
+
   function buildShell() {
     const bb = P.bbox || [0, 0, 10, 10];
     // 楼板
@@ -335,7 +373,7 @@
 
   /* 「轮廓本身就是它的形状」的大类（柜/沙发/岛台/地毯……）：只有这些、
    *  且轮廓明显不是矩形时，才按轮廓挤出。马桶/浴缸/床这类器物是「设计过的器物」，
-   *  图纸里那圈轮廓只是识别出来的占地，照它挤出就是一块怪疙瘩（2026-10-16 报的马桶）。
+   *  图纸里那圈轮廓只是识别出来的占地，照它挤出就是一块怪疙瘩（现场 2026-10-16 报的马桶）。
    *  与 frontend/src/furniturePolygon.ts 的 outlineDrivesShape 同一口径。 */
   const FOOTPRINT_KIND = /柜|沙发|岛台|吧台|地毯|案台|工作台|岛柜/;
   function outlineNearBox(pts) {
@@ -371,7 +409,7 @@
       const fit = !f.designFurniture && api && typeof api.yaw === "function"
         ? api.yaw(f.x, f.z, w, d, walls, f.kind) : { yaw: 0, w: w, d: d };
       g.rotation.y = f.rot != null ? (Number(f.rot) || 0) * Math.PI / 180 : fit.yaw;
-      // 画过轮廓的家具（2026-10-16「主卧衣帽间的柜子轮廓我改过、没生效」）：
+      // 画过轮廓的家具（现场 2026-10-16「主卧衣帽间的柜子轮廓我改过、没生效」）：
       // f.pts 是轮廓点（三维米坐标），按它挤出真形状——只按外接框画，L 形柜子会变成一个方盒子。
       if (outlineDrivesShape(f.kind, f.pts)) {
         const sh = new THREE.Shape();
@@ -395,7 +433,7 @@
     });
   }
 
-  /* 光斑遮挡（2026-10-17「光斑不能穿过墙体、门、家具表面」）：从灯位水平打 96 条射线，
+  /* 光斑遮挡（现场 2026-10-17「光斑不能穿过墙体、门、家具表面」）：从灯位水平打 96 条射线，
    * 碰到墙段、或 ≥1.8 m 的高家具外框就停，得到看得见的那一圈；地面光斑只铺在圈里。
    * 门洞上方的过梁（bottomM>0）不挡地面光，所以只取落地的墙段；与二维 lightOcclusion.ts 同口径。
    * 2026-10-17 补：灯所在**空间的边界**也算挡光段（闭口多边形，门洞那一段同样挡）——
@@ -614,7 +652,7 @@
           depthWrite: false, toneMapped: false
         }));
         wash.rotation.set(-Math.PI / 2, 0, ang);
-        // 灯带是吊顶 / 灯槽里的线光源（2026-10-17「平面布置了灯带，3D 视角下在地面上，这是不对的」）：
+        // 灯带是吊顶 / 灯槽里的线光源（现场 2026-10-17「平面布置了灯带，3D 视角下在地面上，这是不对的」）：
         // 原来这里在地上铺一条亮带，看上去就像灯带贴在地面。改成贴着顶面的一层漫射，光从上面来。
         const mountY = s.mount != null ? +s.mount : NET - 0.06;
         wash.rotation.set(Math.PI / 2, 0, -ang);
@@ -639,7 +677,7 @@
   }
 
   /* ---------------- 唯一入口 ---------------- */
-  // 情景兜底（2026-10-16「三维里看不到亮灯效果，两盏灯一盏都不亮」）：
+  // 情景兜底（现场 2026-10-16「三维里看不到亮灯效果，两盏灯一盏都不亮」）：
   // 选中的情景名若不在数据里，原来一律 return 0——于是连「全开」也是全灭。
   // 现在按情景名兜底：全关＝0，其余（含全开、以及认不出的名字）＝全亮，别让整屋子黑着。
   const SCENE_OFF = { "全关": 0 };
@@ -730,13 +768,13 @@
         o.cone.material.color.copy(tint); o.pool.material.color.copy(tint);
       }
       o.lv = lv;
-      o.cone.material.opacity = lv * 0.26;
-      // 作者 2026-10-16「白天晚上可以手动切换」：光锥是**独立开关**，白天勾了也要看得见
+      o.cone.material.opacity = lv * 0.34;
+      // 现场 2026-10-16「白天晚上可以手动切换」：光锥是**独立开关**，白天勾了也要看得见
       // （原来限定 mode === "night"，白天勾「光锥示意」等于没反应）。
       o.cone.visible = beamsOn && lv > 0.01;
-      o.pool.material.opacity = lv * 0.55;
+      o.pool.material.opacity = lv * 0.78;
       o.pool.visible = lv > 0.01;
-      o.disc.material.opacity = 0.12 + lv * 0.88;
+      o.disc.material.opacity = 0.18 + lv * 0.82;
     });
     stripObjs.forEach(o => {
       const sc = (P.scenes || []).find(s => s.id === sceneId);
@@ -1218,14 +1256,14 @@
   /* ---------------- 点选 / 拖灯 ---------------- */
   const ray = new THREE.Raycaster(), pointer = new THREE.Vector2();
   let down = null;
-  let dragging = null;                   // 正在拖着某盏灯（2026-10-16：三维里灯具要能挪）
+  let dragging = null;                   // 正在拖着某盏灯（现场 2026-10-16：三维里灯具要能挪）
   /** 灯位动了：圆盘 / 抓取球 / 光锥 / 光斑一起挪。 */
   function moveLuminaire(o) {
     o.disc.position.set(o.l.x, o.mount - 0.02, o.l.z);
     o.grab.position.copy(o.disc.position);
     o.cone.position.set(o.l.x, o.mount / 2, o.l.z);
     o.pool.position.set(o.l.x, 0.012, o.l.z);
-    // 拖到哪、光斑与光锥就按哪重裁：不然拖动过程中会越出墙（2026-10-17）
+    // 拖到哪、光斑与光锥就按哪重裁：不然拖动过程中会越出墙（现场 2026-10-17）
     reclipLuminaire(o);
   }
   function pickLuminaire(e) {
@@ -1257,7 +1295,7 @@
   renderer.domElement.addEventListener("pointerdown", e => {
     down = [e.clientX, e.clientY];
     if (placing) return;
-    // 三维只用来看（2026-10-17）：外层没挂 onLightMove 就不拖灯，灯位在 2D 平面上改。
+    // 三维只用来看（现场 2026-10-17）：外层没挂 onLightMove 就不拖灯，灯位在 2D 平面上改。
     if (!(window.__api && typeof window.__api.onLightMove === "function")) return;
     const o = pickLuminaire(e);
     if (!o) return;
@@ -1357,7 +1395,8 @@
     CEIL = +P.ceiling || 2.8;
     NET = +P.ceiling_net || CEIL;
     CUT = +P.wall_cut || 1.5;
-    if (P.geometry_source === "design-spaces") cutOn = false;
+    // 默认剖切到 1.5m：实心墙会把光锥和地面光斑全遮住（技能里实测：不剖切锥中亮度 16，剖切后 70~160）
+    cutOn = true;
     rooms = (P.rooms || []).map(r => {
       let b = r.bbox;
       if (!b) {
@@ -1378,9 +1417,10 @@
     cam.far = Math.max(400, d * 8); cam.updateProjectionMatrix();
     cam.position.set(CX + d * 0.22, d * 1.05, CZ + d * 1.0);
     controls.target.set(CX, 0, CZ); controls.update();
-    buildShell(); buildLuminaires(); buildStrips(); buildSensors(); buildUI(); applyCut(); resize();
+    buildShell(); polishShell(); buildLuminaires(); buildStrips(); buildSensors(); buildUI(); applyCut(); resize();
     const cutToggle = $("#cut"); if (cutToggle) cutToggle.checked = cutOn;
-    setMode(P.geometry_source === "design-spaces" ? "day" : "night");
+    // 默认暗场：光才是主体（优邑珺和的默认档）；白天看图是主动切过去的
+    setMode("night");
     window.__api = {
       project: P, setScene, toggleCircuit, pokeSensor, setMode, applyLevels, resetManual,
       /** 外层挂进来：拖完一盏灯就把新位置写回（三维只做视图，见 pointerup）。 */

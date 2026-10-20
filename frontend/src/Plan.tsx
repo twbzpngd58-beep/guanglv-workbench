@@ -124,19 +124,19 @@ interface Props {
   onEditError?: (message: string) => void;
   selectedFurnitureId?: string;
   onFurnitureSelect?: (id: string) => void;
-  /** 家具边界编辑（2026-10-16「家具要像空间一样的编辑方式」）：显示顶点、可拖点/加点/删点。 */
+  /** 家具边界编辑（现场 2026-10-16「家具要像空间一样的编辑方式」）：显示顶点、可拖点/加点/删点。 */
   editableFurniture?: boolean;
   /** 多边形绘制完成（画家具轮廓，世界坐标点）：与空间的 onPolygon 同一套交互。 */
   onFurnPolygon?: (points: { x: number; y: number }[]) => void;
   tool?: string;
   zoom?: number;
-  /** 滚轮缩放底图（2026-10-17：导入图纸后绘制空间/门窗/家具时要能滚轮放大缩小）：
+  /** 滚轮缩放底图（现场 2026-10-17：导入图纸后绘制空间/门窗/家具时要能滚轮放大缩小）：
    *  以光标为中心缩放；中键拖动、或选择工具下在空白处拖动＝平移。 */
   wheelZoom?: boolean;
   /** 值变化＝把滚轮缩放与平移还原到适应画布。 */
   viewReset?: number;
   onViewZoom?: (zoom: number) => void;
-  /** 绘制分级（2026-10-17：完成一级进入下一级，上一级固化）：
+  /** 绘制分级（现场 2026-10-17：完成一级进入下一级，上一级固化）：
    *  spaces＝只动空间；openings＝空间/墙固化，只画门窗；furniture＝空间/墙/门窗固化，只动家具。
    *  固化的层不接收指针（点在它的边界上也不会选中或拖动它），保存时也会被还原。 */
   stage?: "spaces" | "openings" | "furniture";
@@ -232,7 +232,7 @@ export function Plan({
 }: Props) {
   const svg = useRef<SVGSVGElement>(null);
   const drag = useRef<any>(null);
-  // 画多边形的两种用途：draw-poly＝空间边界；draw-furn-poly＝家具轮廓（2026-10-16）。
+  // 画多边形的两种用途：draw-poly＝空间边界；draw-furn-poly＝家具轮廓（现场 2026-10-16）。
   const polyDrawing = tool === "draw-poly" || tool === "draw-furn-poly";
   // 正在画的多边形（在底图上描边界）：点一下落一个点，点回起点或双击收口。
   const [poly, setPoly] = useState<{ x: number; y: number }[]>([]);
@@ -416,7 +416,7 @@ export function Plan({
       } catch (err: any) { onEditError?.(err.message); }
       return;
     }
-    // 家具边界加/删点（2026-10-16：家具也像空间一样加点、删点）。
+    // 家具边界加/删点（现场 2026-10-16：家具也像空间一样加点、删点）。
     if (tool === "add-furn-point" || tool === "delete-furn-point") {
       if (readonly || !editableFurniture || !onChange || e.button !== 0) return;
       if (kind !== "furniture" || !id || selectedFurnitureId !== id) {
@@ -661,13 +661,13 @@ export function Plan({
         obj.spotRotation = ((Math.round(deg) % 360) + 360) % 360;
       }
     } else if (dr.handle === "furn-point") {
-      // 拖家具的多边形顶点（2026-10-16）：只挪这一个点，外接框（x/y/宽深）跟着重算。
+      // 拖家具的多边形顶点（现场 2026-10-16）：只挪这一个点，外接框（x/y/宽深）跟着重算。
       const base = ((dr.base as Obj).furniture || []).find((v: Obj) => v.id === dr.id) as Obj;
       if (!base) return;
       Object.assign(obj, moveFurniturePoint(base, dr.index, dx, dy));
       obj.roomId = d.rooms.find(r => +(r.floor || 1) === +(obj.floor || 1) && containsPoint(r, obj.x, obj.y))?.id || "";
     } else if (typeof dr.handle === "string" && dr.handle.startsWith("furn-")) {
-      // 家具边界（2026-10-16）：8 个把手 → 只改宽/深，对面那条边钉住；换算在 furnitureResize.ts。
+      // 家具边界（现场 2026-10-16）：8 个把手 → 只改宽/深，对面那条边钉住；换算在 furnitureResize.ts。
       const base = ((dr.base as Obj).furniture || []).find((v: Obj) => v.id === dr.id) as Obj;
       if (!base) return;
       const moved = resizeFurniture(base as never, dr.handle.slice(5) as FurnHandle, dx, dy);
@@ -714,7 +714,7 @@ export function Plan({
         : "default";
   // 有底图矩形时把视野收到它上面（留 5% 边），否则沿用固定的 820×690 画布口径。
   const bgPad = backgroundRect ? Math.max(backgroundRect.w, backgroundRect.h) * 0.05 : 0;
-  // 没有底图时，视野收到本层空间的外接框（2026-10-17 text：户型只占 820×690 画布左上一角，
+  // 没有底图时，视野收到本层空间的外接框（现场 2026-10-17 text：户型只占 820×690 画布左上一角，
   // 灯和编号挤成一团，没法布灯）。没有空间时仍是固定画布。
   const fitBox = (() => {
     if (mini || backgroundRect || background) return null;
@@ -1003,7 +1003,7 @@ export function Plan({
           return <g key={f.id} data-object-type="furniture" data-object-id={f.id}
             transform={poly ? undefined : `translate(${f.x} ${f.y}) rotate(${f.rotation || 0})`}
             pointerEvents={frozen("furniture") ? "none" : undefined}
-            // 2026-10-16：画布上家具一律锁定——只有灯具与设备可挪动。俯视图里灯具
+            // 现场 2026-10-16：画布上家具一律锁定——只有灯具与设备可挪动。俯视图里灯具
             // 压在家具上，随手一拖就把家具拖走了。editableFurniture 只在「调整家具」与
             // 「导入图纸 → 家具」这两处为真，别处点得中、拖不动。
             style={{ cursor: readonly || !editableFurniture ? "default" : "move" }} onPointerDown={e => {
@@ -1183,7 +1183,7 @@ export function Plan({
             // 两种都可放大 / 缩小，也可在图上直接拖光斑边缘的橙色圆点。
             const spotScale = Number(f.spotScale) > 0 ? Number(f.spotScale) : 1;
             const spotRadius = baseSpotRadius * spotScale;
-            // 放置灯具时只留灯具图标、不铺光斑（2026-10-16：「放置灯具的时候不需要有光斑体现，
+            // 放置灯具时只留灯具图标、不铺光斑（现场 2026-10-16：「放置灯具的时候不需要有光斑体现，
              // 但需要有灯具图标，方便移动」）——图标本来就画在光斑之上，去掉光斑就不挡它了。
             const showSpot = !mini && tool !== "place-lamp"
               && f.type !== "灯带" && f.type !== "窗帘" && (lit || selection?.id === f.id);
@@ -1193,7 +1193,7 @@ export function Plan({
             // 编辑时（底图选中、未开情景）光斑要明显；夜间情景走 screen 加法发光。
             // 调整光斑大小时（底图选中）亮度按 100% 显示。
             const spotStrength = lit ? 0.5 + 0.34 * (st!.brightness / 100) : 0.84;
-            // 光斑不穿墙、门、高柜（2026-10-17）：从灯位打射线裁出看得见的范围，只在里面画。
+            // 光斑不穿墙、门、高柜（现场 2026-10-17）：从灯位打射线裁出看得见的范围，只在里面画。
             const spotClip = showSpot ? lightPoolClipPath(design, f, spotRadius * Math.max(1, spotRatio) * 1.02) : null;
             return (
               <g

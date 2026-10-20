@@ -918,6 +918,26 @@ hr {
   background: #ffffff;
   box-shadow: 0 1px 4px #5e554911;
 }
+.tabs-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* 归档单独一个虚线入口：不并进 5 个状态 pill（作者 2026-10-19 拍板 3A） */
+.tab-arch {
+  font-size: 10px;
+  padding: 7px 11px;
+  color: #94918b;
+  border: 1px dashed #cfcac2;
+  border-radius: 4px;
+  background: transparent;
+  white-space: nowrap;
+}
+.tab-arch.on {
+  color: #706658;
+  border-style: solid;
+  background: #ffffff;
+}
 .filter-tools {
   display: flex;
   align-items: center;
@@ -1766,6 +1786,10 @@ hr {
   border-top: 1px solid var(--line);
   padding-top: 19px;
   margin-top: 23px;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: #ffffff;
 }
 .modal-foot > .subtle {
   margin-right: auto;
@@ -2048,6 +2072,19 @@ hr {
   padding: 7px 9px;
   background: #ffffff;
 }
+/* 批 2 修：`.editor-toolbar .btn` 的白底会盖掉 `.btn.primary`（同权重、后者在前），
+   主色键在工具行里变成白字白底。这里显式还原主色。 */
+.editor-toolbar .btn.primary {
+  background: var(--green);
+  color: #ffffff;
+  border-color: var(--green);
+}
+.editor-toolbar .btn.primary:hover:not(:disabled) {
+  background: #745932;
+  border-color: #745932;
+}
+/* 批 2 修（P0-3）：「✓ 空间已确认」被挤成竖排——不换行、不收缩。 */
+.editor-toolbar .subtle { white-space: nowrap; flex: 0 0 auto; }
 .editor-toolbar select {
   font-size: 10px;
   padding: 7px 9px;
@@ -2065,10 +2102,119 @@ hr {
   background: #dedad4;
   margin: 0 5px;
 }
+/* 批 2（B2）：工具行收拢菜单——左对齐、比默认下拉宽；菜单项可带勾（B3 会话内记忆）。 */
+.toolbar-menu {
+  left: 0;
+  right: auto;
+  top: 34px;
+  min-width: 195px;
+}
+.dropdown-menu button.on {
+  background: #f0ede8;
+  color: var(--ink);
+}
+.dropdown-menu .menu-tick {
+  margin-left: auto;
+  color: var(--green);
+}
+.dropdown-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+/* 批 2（B5）：底图提示条——固定画布顶部居中，不随缩放/平移；关掉只本次会话。 */
+.canvas-prompt {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 12px;
+  background: #fffdf9;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 18px #332b1e14;
+  font-size: 11px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.canvas-prompt .btn {
+  min-height: 26px;
+  padding: 3px 10px;
+  font-size: 11px;
+}
+.canvas-prompt-x {
+  width: 22px;
+  height: 22px;
+  color: var(--muted);
+}
+/* 批 3（C3/C4/F7）：新增空间两步浮层——先分区（按项目户型过滤），再房间（定高、滚动条常显）。 */
+.add-space-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+.add-space-head .subtle { margin-left: auto; }
+.add-space-rows {
+  max-height: 300px;
+  overflow-y: scroll;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.add-space-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  font-size: 12px;
+  color: var(--ink);
+  text-align: left;
+  border-bottom: 1px solid #f1ede7;
+}
+.add-space-row:last-child { border-bottom: 0; }
+.add-space-row:hover:not(:disabled) { background: #f8f5f0; }
+.add-space-row .nm { min-width: 8em; }
+.add-space-row .ct { margin-left: auto; font-size: 10px; color: var(--muted); }
+/* 批 3（D4）：画布右下角本层读数；避让顶部角标与底部缩放条。 */
+.canvas-status {
+  position: absolute;
+  right: 22px;
+  bottom: 14px;
+  z-index: 2;
+  font-size: 9px;
+  color: #a39c92;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* 批 3（E3/E4）：「这个项目还差什么」——只列名字 + 去处理，不摆数字位。 */
+.gap-card {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.gap-t { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+.gap-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 7px 0;
+  font-size: 12px;
+  color: var(--ink);
+  text-align: left;
+}
+.gap-row + .gap-row { border-top: 1px solid #f1ede7; }
+.gap-row span { flex: 1; }
+.gap-row svg { color: var(--muted); }
 .editor-layout {
   display: grid;
   grid-template-columns: 195px minmax(400px, 1fr) 240px;
-  min-height: calc(100vh - 223px);
+  min-height: calc(100vh - 307px);
   flex: 1;
 }
 .object-panel {
@@ -4979,6 +5125,8 @@ hr {
 .scene-floor .floor-plan { max-height: 330px; min-height: 0; width: 100%; }
 .scene-model-3d { position: relative; width: 100%; min-height: 500px; flex: 1; background: #1c2927; }
 .scene-model-viewport { position: absolute; inset: 0; }
+/* 三维 = 优邑珺和渲染内核（iframe）。编辑只在二维，这里只负责看。 */
+.scene-model-iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: #0d0f12; }
 .scene-model-viewport canvas { display: block; width: 100%; height: 100%; cursor: grab; }
 .scene-model-viewport canvas:active { cursor: grabbing; }
 .scene-model-caption { position: absolute; z-index: 1; left: 14px; bottom: 14px; max-width: calc(100% - 28px); padding: 7px 11px; border-radius: 7px; color: #edf4e9; background: #152720e6; font-size: 12px; pointer-events: none; }
@@ -5941,7 +6089,7 @@ hr {
 .space-preview-view { flex: 1; min-height: 0; position: relative; overflow: hidden; }
 /* 关键：.gv3d 默认是全屏 position:fixed（inset:0 / z-index:60）。放进这个弹层里必须改回
    「留在面板里」，否则三维视图会整屏盖住本层的标题、页签与「确认空间」按钮——
-   看上去就跟三维工作台一模一样（2026-10-14 修）。 */
+   看上去就跟三维工作台一模一样（作者 2026-10-14 报的就这个）。 */
 .space-preview-view > .gv3d { position: absolute; inset: 0; z-index: 0; height: 100%; }
 /* 「修改空间」页签：左边按底图改边界，右边直接改名字（1.71.8 只写了结构没写样式，画布塌成 0） */
 .space-preview-edit { flex: 1; min-height: 0; display: flex; gap: 12px; padding: 12px 14px; }
@@ -5997,7 +6145,7 @@ hr {
 .space-furniture-fields input { width: 100%; padding: 5px; border: 1px solid #c7d0c4; border-radius: 5px; }
 .space-furniture-actions { display: flex; flex-wrap: wrap; gap: 5px; }
 
-/* ── 2026-10-14：交付侧配套样式 ── */
+/* ── 2026-10-14（细则 §十.20）：作者端三页 + 客户列表/详情 + 集中度看板 + 渠道台账 ── */
 .owner-tabs { display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:10px 0 14px; }
 .owner-tabs > button { border:1px solid #afc4b7; border-radius:7px; background:#fff; padding:7px 14px; cursor:pointer; }
 .owner-tabs > button.on { background:#2f4f3f; color:#fff; border-color:#2f4f3f; }
@@ -6072,7 +6220,7 @@ table.owner-clients td small { white-space:normal; }
 .drawing-progress-heading span { color:#607163; font-size:12px; }
 .drawing-progress-track { height:5px; border-radius:5px; background:#dfe7dc; overflow:hidden; margin:8px 0; }
 .drawing-progress-track i { display:block; height:100%; background:#51816a; transition:width .2s ease; }
-.drawing-progress ol { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:7px; list-style:none; margin:0; padding:0; }
+.drawing-progress ol { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:7px; list-style:none; margin:0; padding:0; }
 .drawing-progress li button { display:flex; align-items:center; gap:5px; padding:5px 0; border:0; background:transparent; color:#8a938b; font:inherit; font-size:12px; width:100%; }
 .drawing-progress li[data-state="completed"] button { color:#47735b; }
 .drawing-progress li[data-state="current"] button { color:#234f39; font-weight:700; }
@@ -6084,7 +6232,7 @@ table.owner-clients td small { white-space:normal; }
 .space-preview-panel footer [role="alert"] { flex:1 0 100%; margin:0; }
 @media(max-width:850px) { .task-furniture-layout { grid-template-columns:1fr; } }
 
-/* 选中对象后，边栏里对应的那块拉进视野并闪一下（2026-10-16：「要能被明显的看到」） */
+/* 选中对象后，边栏里对应的那块拉进视野并闪一下（现场 2026-10-16：「要能被明显的看到」） */
 .flash-target { animation: ekko-flash 1.5s ease-out; scroll-margin: 24px; border-radius: 6px; }
 @keyframes ekko-flash {
   0%   { box-shadow: 0 0 0 3px rgba(173, 108, 37, .85); background-color: rgba(231, 200, 159, .38); }
@@ -6094,26 +6242,431 @@ table.owner-clients td small { white-space:normal; }
 /* 家具列表里当前那件：左侧一道实心色条，扫一眼就知道选中的是哪个 */
 .space-furniture-list button.on { box-shadow: inset 3px 0 0 #ad6c25; font-weight: 600; }
 
-/* ── 联系与帮助：使用指南底部 / 设置页「关于与联系」 ── */
-.guide-contact {
-  margin-top: 28px;
-  padding-top: 24px;
-  border-top: 1px solid var(--line);
+/* ==========================================================================
+   智能情景页 · 三栏（2026-10-19 改版）
+   左＝情景竖排（一屏排完） 中＝画布 右＝检查器（情景 / 回路 / 灯具 / 面板）
+   整页不滚：三栏各自滚动，画布永远在，改完立刻看见效果。
+   ========================================================================== */
+.studio-content.scene-page {
+  /* 129 = 顶栏 78 + 页签条 51；再减底部 31px 状态条，不然整页还会多出 31px */
+  height: calc(100vh - 160px);
+  min-height: 460px;
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 14px 20px 16px;
 }
-.guide-contact h3 {
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: 6px;
+.studio-content.scene-page .page-heading {
+  flex: 0 0 auto;
+  margin-bottom: 10px;
 }
-.guide-contact > p {
+.studio-content.scene-page .page-heading h1 {
+  font-size: 19px;
+  letter-spacing: -.2px;
+}
+.studio-content.scene-page .page-heading p {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: 3px 0 0;
+}
+.studio-content.scene-page .page-heading .eyebrow {
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  margin-bottom: 4px;
+}
+.studio-content.scene-page .page-heading .flex {
+  gap: 6px;
+}
+.studio-content.scene-page .page-heading .flex .button,
+.studio-content.scene-page .page-heading .flex button {
+  padding: 5px 10px;
   font-size: 12px;
-  color: #9b968e;
-  line-height: 1.9;
-  margin-bottom: 18px;
 }
+
+.scene-stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr) 372px;
+  gap: 10px;
+}
+
+/* ---------------- 左栏：情景 ---------------- */
+.scene-rail,
+.scene-insp {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.scene-rail-head {
+  flex: 0 0 auto;
+  padding: 10px 11px 8px;
+  border-bottom: 1px solid #f0eeeb;
+}
+.scene-rail-head h2 {
+  margin: 0 0 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .3px;
+  color: #6b665f;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.scene-rail-head h2 span {
+  font-size: 10.5px;
+  color: #b0aba4;
+  font-weight: 400;
+}
+.scene-rail-search {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 5px 8px;
+  font-size: 12px;
+  background: #faf9f8;
+  outline: none;
+}
+.scene-rail-search:focus {
+  border-color: #cfc9c1;
+  background: #fff;
+}
+.scene-rail-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 6px 8px;
+}
+.scene-rail-list::-webkit-scrollbar { width: 8px; }
+.scene-rail-list::-webkit-scrollbar-thumb {
+  background: #e0dcd6;
+  border-radius: 8px;
+  border: 2px solid #fff;
+}
+.scene-rail-group {
+  font-size: 9px;
+  letter-spacing: .8px;
+  color: #b6b1aa;
+  padding: 7px 8px 2px;
+  text-transform: uppercase;
+}
+.scene-rail-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 8px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 5px 9px 7px;
+  border-radius: 7px;
+  transition: background .12s;
+  overflow: hidden;
+}
+.scene-rail-item:hover { background: #f6f4f1; }
+.scene-rail-item.active { background: #f4eee2; }
+.scene-rail-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 4px; bottom: 6px;
+  width: 2.5px;
+  border-radius: 3px;
+  background: var(--green);
+}
+.scene-rail-item .nm {
+  font-size: 12.5px;
+  letter-spacing: -.1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #3a3630;
+}
+.scene-rail-item.active .nm { font-weight: 600; }
+.scene-rail-item .n {
+  grid-row: 1;
+  grid-column: 2;
+  font-size: 11px;
+  color: #b0aba4;
+  font-variant-numeric: tabular-nums;
+}
+.scene-rail-item.active .n { color: var(--green); font-weight: 600; }
+.scene-rail-item .sub {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: #b0aba4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scene-rail-item .bar {
+  position: absolute;
+  left: 9px; bottom: 2px;
+  height: 1.5px;
+  border-radius: 2px;
+  background: var(--green);
+  opacity: .55;
+  max-width: calc(100% - 18px);
+}
+.scene-rail-empty {
+  padding: 22px 10px;
+  text-align: center;
+  font-size: 12px;
+  color: #b0aba4;
+}
+.scene-rail-foot {
+  flex: 0 0 auto;
+  padding: 8px;
+  border-top: 1px solid #f0eeeb;
+}
+.scene-rail-foot .button,
+.scene-rail-foot button { width: 100%; justify-content: center; }
+
+/* ---------------- 中栏：画布 ---------------- */
+.scene-center {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+.scene-center > .scene-canvas {
+  flex: 1;
+  min-height: 0;
+}
+/* 三维容器填满画布（iframe 是 absolute inset:0，容器必须有高度） */
+.scene-center .scene-canvas > .scene-model-3d {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: block;
+}
+.scene-center > .scene-canvas > div[data-testid],
+.scene-center > .scene-canvas > .scene-model-3d,
+.scene-center > .scene-canvas > iframe {
+  flex: 1;
+  min-height: 0;
+}
+.scene-center .scene-canvas > .scene-floors {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* ---------------- 右栏：检查器 ---------------- */
+.scene-insp-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  padding: 0 5px;
+  border-bottom: 1px solid #f0eeeb;
+}
+.scene-insp-tabs button {
+  border: 0;
+  background: none;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #7d786f;
+  position: relative;
+}
+.scene-insp-tabs button.active {
+  color: var(--ink);
+  font-weight: 600;
+}
+.scene-insp-tabs button.active::after {
+  content: "";
+  position: absolute;
+  left: 12px; right: 12px; bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--green);
+}
+.scene-insp-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+}
+.scene-insp-body::-webkit-scrollbar { width: 8px; }
+.scene-insp-body::-webkit-scrollbar-thumb {
+  background: #e0dcd6;
+  border-radius: 8px;
+  border: 2px solid #fff;
+}
+.scene-insp-pane > h3,
+.scene-insp-pane > .scene-settings h3 { display: none; }
+.scene-insp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 10.5px;
+  letter-spacing: .3px;
+  color: #b0aba4;
+  margin: 2px 0 8px;
+}
+.scene-insp-empty {
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: #b0aba4;
+  padding: 14px 4px;
+}
+.scene-insp-select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-size: 12px;
+  background: #faf9f8;
+  margin-bottom: 8px;
+}
+
+/* 回路行 */
+.circ-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px 9px;
+  border-radius: 9px;
+  transition: background .12s;
+}
+.circ-row:hover { background: #f8f6f3; }
+.circ-row.is-on { background: #f4eee2; }
+.circ-row-name {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.circ-row-name small {
+  display: block;
+  font-size: 10px;
+  color: #b0aba4;
+}
+.circ-row-pct {
+  font-size: 11px;
+  color: #b0aba4;
+  font-variant-numeric: tabular-nums;
+  min-width: 32px;
+  text-align: right;
+}
+.circ-row.is-on .circ-row-pct { color: var(--green); font-weight: 600; }
+.circ-row-slider {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 3px;
+  margin-top: 3px;
+}
+
+/* 灯具卡 / 行 */
+.lamp-card {
+  background: #f8f6f3;
+  border-radius: 9px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.lamp-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.lamp-card-top .badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: #f4eee2;
+  color: #8a6d33;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+.lamp-card-top .tt {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -.1px;
+}
+.lamp-card-top .tt small {
+  display: block;
+  font-weight: 400;
+  font-size: 10px;
+  color: #b0aba4;
+  margin-top: 1px;
+}
+.lamp-line {
+  display: block;
+  margin-top: 7px;
+}
+.lamp-line > span {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: #b0aba4;
+  margin-bottom: 3px;
+}
+.lamp-line > span b { color: #3a3630; font-weight: 600; }
+.lamp-line input[type="range"] { width: 100%; height: 3px; }
+.lamp-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+.lamp-row:hover { background: #f8f6f3; }
+.lamp-row .nm {
+  font-size: 11.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.lamp-row .sub {
+  font-size: 10px;
+  color: #b0aba4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lamp-row .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #ddd9d3;
+}
+.lamp-row .dot.on { background: #c9a35e; }
+.lamp-row .pct {
+  font-size: 10.5px;
+  color: #b0aba4;
+  font-variant-numeric: tabular-nums;
+  min-width: 30px;
+  text-align: right;
+}
+.lamp-row.is-on .pct { color: var(--green); font-weight: 600; }
+
+/* ── 批 4（N1）：三维空态要看得见 ───────────────────────────────
+ * 病根：.scene-canvas 是 .scene-page 里可收缩的 flex 子项，窗口矮时塌到 104px，
+ * 而 iframe 里的空态卡按 50% 居中在 500px 画布上 —— 整卡落到可视区外。
+ * 做法：画布给最小高（页面改为可纵向滚动，空态块保持原尺寸不被挤），
+ * 三维填满画布可视区（不再 500px 溢出被裁）；卡片本身在 shell.html 里改顶部对齐。
+ * 只作用于「智能情景」页无情景空页分支，不动 .scene-center 与三维面板高度。 */
+.studio-content.scene-page { overflow-y: auto; }
+.studio-content.scene-page > .scene-canvas { flex: 0 1 auto; min-height: 260px; }
+.studio-content.scene-page > .scene-canvas > .scene-model-3d { flex: 1; min-height: 0; }
+.studio-content.scene-page > .empty-state { flex: 0 0 auto; }
+
+/* 联系方式二维码（技术咨询 / 商务合作 / KNX 培训课程咨询） */
 .contact-cards {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 .contact-card {
@@ -6157,9 +6710,53 @@ table.owner-clients td small { white-space:normal; }
   padding: 12px 10px;
 }
 .contact-cards.compact .contact-card img {
-  width: 108px;
+  width: 104px;
 }
-@media (max-width: 560px) {
+.guide-contact {
+  margin-top: 26px;
+  border-top: 1px solid var(--line);
+  padding-top: 22px;
+}
+.guide-contact h3 {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+.guide-contact p {
+  font-size: 12px;
+  color: #9b968e;
+  line-height: 1.9;
+  margin-bottom: 16px;
+}
+.update-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.update-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #786d5e;
+  text-decoration: none;
+  border-bottom: 1px solid #d8d2c6;
+  padding-bottom: 2px;
+}
+.update-note {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: #9b968e;
+  line-height: 1.7;
+}
+.update-note a {
+  border: 0;
+  padding: 0;
+  margin: 0 3px;
+}
+@media (max-width: 640px) {
   .contact-cards {
     grid-template-columns: 1fr;
   }

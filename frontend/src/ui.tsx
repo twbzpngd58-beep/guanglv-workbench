@@ -78,6 +78,30 @@ export function Modal({
     </div>
   );
 }
+/* 状态词（作者 2026-10-19 拍板）：库里存的值一个字不动，只改界面上给人看的字。
+   草稿/识别中→未开始；设计中→进行中；待复核/待人工确认→待确认；已确认/已冻结/已导出→已完成；已归档→归档。 */
+export const STATUS_WORDS: Record<string, string> = {
+  草稿: "未开始",
+  识别中: "未开始",
+  设计中: "进行中",
+  待复核: "待确认",
+  待人工确认: "待确认",
+  已确认: "已完成",
+  已冻结: "已完成",
+  已导出: "已完成",
+  已归档: "归档",
+};
+/** 界面状态词 → 库里的原值集合（筛选谓词按这个匹配，不碰数据）。 */
+export const STATUS_MATCH: Record<string, string[]> = {
+  未开始: ["草稿", "识别中"],
+  进行中: ["设计中"],
+  待确认: ["待复核", "待人工确认"],
+  已完成: ["已确认", "已冻结", "已导出"],
+  归档: ["已归档"],
+};
+export function statusWord(status: string) {
+  return STATUS_WORDS[status] || status;
+}
 export function Badge({ status }: { status: string }) {
   return (
     <span
@@ -91,7 +115,7 @@ export function Badge({ status }: { status: string }) {
       }
     >
       <i />
-      {status}
+      {statusWord(status)}
     </span>
   );
 }

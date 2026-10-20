@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>户型三维 · 可旋转</title>
+<style>
+  :root { --line: rgba(0,0,0,.10); --gold:#c9a96e; }
+  * { -webkit-tap-highlight-color: transparent; }
+  html,body { margin:0; height:100%; overflow:hidden; background:#eef0f3;
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif; color:#1c1c1e; }
+  #app { position:fixed; inset:0; }
+  #labels { position:fixed; inset:0; pointer-events:none; }
+  .room { position:absolute; transform:translate(-50%,-50%); text-align:center; white-space:nowrap;
+    background:rgba(255,255,255,.82); border:1px solid var(--line); border-radius:10px;
+    padding:5px 9px; box-shadow:0 2px 10px rgba(0,0,0,.08); backdrop-filter:blur(8px); }
+  .room b { display:block; font-size:13px; font-weight:600; letter-spacing:.3px; }
+  .room span { font-size:11px; color:#6b6b70; }
+  .room em { display:block; font-size:10px; color:var(--gold); font-style:normal; }
+  #hud { position:fixed; left:16px; top:16px; padding:10px 13px; border-radius:12px;
+    background:rgba(255,255,255,.86); border:1px solid var(--line); box-shadow:0 4px 18px rgba(0,0,0,.06);
+    font-size:12px; line-height:1.6; backdrop-filter:blur(10px); }
+  #hud b { font-size:13px; }
+  #panel { position:fixed; right:16px; top:16px; width:196px; padding:12px 13px; border-radius:14px;
+    background:rgba(255,255,255,.9); border:1px solid var(--line); box-shadow:0 6px 24px rgba(0,0,0,.08);
+    backdrop-filter:blur(12px); }
+  #panel h4 { margin:0 0 8px; font-size:12px; font-weight:600; color:#6b6b70; letter-spacing:.4px; }
+  #panel .note { font-size:11px; color:#8a8a8f; margin:-4px 0 6px; }
+  #circuits { max-height:26vh; overflow:auto; margin-bottom:8px; }
+  #circuits .cir { display:flex; align-items:center; gap:6px; font-size:12px; padding:5px 7px; border-radius:8px;
+    border:1px solid var(--line); margin-bottom:4px; cursor:pointer; background:#fff; }
+  #circuits .cir.on { border-color:var(--gold); background:#fdf7ec; }
+  #circuits .cir i { width:8px; height:8px; border-radius:50%; background:var(--gold); display:inline-block; opacity:.2 }
+  #circuits .cir b { margin-left:auto; font-weight:600; color:#6b6b70 }
+  .tipbox { position:fixed; right:16px; top:calc(50% + 40px); max-width:240px; font-size:12px;
+    background:rgba(255,255,255,.94); border:1px solid var(--line); border-radius:10px; padding:8px 11px;
+    box-shadow:0 6px 24px rgba(0,0,0,.08); display:none }
+  .tipbox:not(:empty) { display:block }
+  #panel .row { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  #panel button, #panel .btns button { font:inherit; font-size:12px; padding:6px 10px; border-radius:9px;
+    border:1px solid var(--line); background:#fff; color:#1c1c1e; cursor:pointer; transition:.15s; }
+  #panel button:hover { border-color:var(--gold); }
+  #panel button.on { background:var(--gold); border-color:var(--gold); color:#fff; }
+  #cut { width:100%; accent-color:var(--gold); }
+  .cutline { display:flex; justify-content:space-between; font-size:11px; color:#6b6b70; margin-bottom:4px; }
+  #fixtures { position:fixed; right:16px; bottom:16px; width:230px; max-height:34vh; overflow:auto;
+    font-size:11px; line-height:1.75; color:#3c3c40; background:rgba(255,255,255,.9);
+    border:1px solid var(--line); border-radius:12px; padding:9px 11px; box-shadow:0 4px 18px rgba(0,0,0,.06); }
+  #fixtures .fx { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #fixtures .fx i { display:inline-block; width:7px; height:7px; background:var(--gold); border-radius:50%; margin-right:5px; }
+  #legend { position:fixed; left:16px; bottom:16px; font-size:11px; color:#6b6b70;
+    background:rgba(255,255,255,.82); border:1px solid var(--line); border-radius:10px; padding:8px 11px; }
+  #legend i { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+  .hint { position:fixed; left:50%; bottom:16px; transform:translateX(-50%); font-size:11px; color:#8a8a8f; }
+  @media (max-width:760px) { #panel { width:auto; left:12px; right:12px; top:auto; bottom:44px; max-height:52vh; overflow:auto }
+    #circuits { max-height:18vh } #fixtures { display:none } .tipbox { display:none !important }
+    #legend { display:none; } #hud { font-size:11px; padding:8px 10px; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="labels"></div>
+<div id="hud">加载中…</div>
+
+<div id="panel">
+  <h4 id="scenesH">灯光场景（点一下真的亮灭）</h4>
+  <div class="row" id="scenes"></div>
+  <div id="sceneNote" class="note"></div>
+  <h4 id="circuitsH" style="margin-top:10px">回路（点可单独开关）</h4>
+  <div id="circuits"></div>
+  <h4>视角</h4>
+  <div class="row">
+    <button data-view="top">户型图</button>
+    <button data-view="bird">鸟瞰 45°</button>
+    <button data-view="inside">室内视角</button>
+  </div>
+  <button id="btnSpin" style="width:100%;margin-bottom:10px">自动环绕</button>
+  <h4>剖切高度</h4>
+  <div class="cutline"><span>切到墙顶以下看布局</span><span id="cutVal"></span></div>
+  <input id="cut" type="range" min="250" max="2900" step="50" value="2900">
+  <h4 style="margin-top:12px">图层</h4>
+  <div class="row">
+    <button data-toggle="ceil">天花</button>
+    <button data-toggle="light">灯位</button>
+    <button data-toggle="switch">开关点位</button>
+    <button data-toggle="furniture">家具</button>
+    <button data-toggle="beams">光锥示意</button>
+    <button data-toggle="ceilLine">吊顶线</button>
+  </div>
+  <div class="row" style="margin-bottom:0">
+    <button id="btnLabel" class="on">房间面积</button>
+    <button id="btnLight" class="on">灯光演示</button>
+    <button id="btnShot">截图</button>
+  </div>
+</div>
+
+<div id="fixtures"></div>
+<div id="tip" class="tipbox"></div>
+<div id="legend">
+  <i style="background:#c9a96e"></i>门　<i style="background:#9ec4d8"></i>窗　
+  <i style="background:#ffd479"></i>灯位　<i style="background:#6ea8ff"></i>开关点位
+</div>
+<div class="hint">拖动旋转 · 滚轮/双指缩放 · 点灯具或回路开关灯 · 切场景看联动</div>
+
+
+<script>
+/* 光律 · 三维灯光场景外壳
+ * 渲染内核（app.js）来自「优邑珺和-可执行灯光场景.html」，原样搬运、未改一行。
+ * 它只认 window.__SCENE__ 一个全局：场景数据由光律自己给，不动它的渲染逻辑。
+ * 参数：?project=<pid>&floor=<n>  或  ?scene=<json 地址>
+ */
+(function () {
+  var q = new URLSearchParams(location.search);
+  // N1：空态卡——标题 + 后端原句 +（back=1 时）「回二维平面图」键。
+  var canBack = q.get('back') === '1';
+  function fail(msg) {
+    var card = document.createElement('div');
+    card.className = 'fail';
+    var title = document.createElement('b');
+    title.textContent = '这个项目还没有三维场景';
+    var note = document.createElement('p');
+    note.textContent = msg;
+    card.appendChild(title);
+    card.appendChild(note);
+    if (canBack) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = '回二维平面图';
+      btn.addEventListener('click', function () {
+        parent.postMessage({ type: 'guanglv:back2d' }, location.origin);
+      });
+      card.appendChild(btn);
+    }
+    document.body.innerHTML = '';
+    document.body.appendChild(card);
+  }
+  // 内核自带的情景按钮和回路列表，跟工作台右栏的「情景 / 回路」重复；
+  // 两边都能改，谁最后改谁赢，会互相打架。这里只把重复的两块藏掉，
+  // 视角 / 昼夜 / 剖切 / 图层这些内核独有的照留。
+  var css = document.createElement('style');
+  css.textContent =
+    '#scenesH,#circuitsH,#scenes,#sceneNote,#circuits,#fixtures,.hint{display:none!important}' +
+    // 原文件带 @media(max-width:760px)：窄窗口下 #panel 会变成铺满底部的抽屉，
+    // 嵌在工作台右栏旁边一定会盖住画面。这里强制回桌面布局（只留视角/剖切/图层）。
+    '#panel{width:186px!important;left:auto!important;right:10px!important;top:10px!important;' +
+    'bottom:auto!important;max-height:calc(100% - 20px)!important;padding:9px 10px!important}' +
+    '#panel h4{font-size:10.5px!important;margin:0 0 6px!important}' +
+    '#panel .row{gap:4px!important;margin-bottom:7px!important}' +
+    '#panel button{font-size:10.5px!important;padding:4px 7px!important}' +
+    '#hud{font-size:11px!important;padding:7px 10px!important}' +
+    '#legend{font-size:10px!important}' +
+    // N1：三维空态卡。只作用于 .fail，不碰 123 行的隐藏清单与 #panel / #hud / #legend。
+    // 批 4：顶部对齐（原先 50% 垂直居中，容器只有两百来像素时整张卡落在可视区外被裁）。
+    '.fail{position:absolute;left:50%;top:10px;transform:translateX(-50%);max-width:460px;' +
+    'padding:14px 20px;background:#fffdf9;border:1px solid #e4e1db;border-radius:12px;' +
+    'box-shadow:0 8px 24px #332b1e14;font:13px/1.55 -apple-system,sans-serif;color:#574f44;text-align:center}' +
+    '.fail b{display:block;margin-bottom:6px;font-size:14px;color:#332b1e}' +
+    '.fail p{margin:0 0 10px;font-size:12px;color:#8a8a8f}' +
+    '.fail button{min-height:30px;padding:6px 14px;font-size:12px;border:1px solid #e4e1db;' +
+    'border-radius:8px;background:#f7f4ef;color:#88693a;cursor:pointer}';
+  document.head.appendChild(css);
+
+  function boot(scene) {
+    window.__SCENE__ = scene;
+    var s = document.createElement('script');
+    s.src = 'app.js';
+    s.onerror = function () { fail('渲染内核 app.js 没加载上'); };
+    s.onload = function () {
+      // 情景默认「全开」：进来看的是这套灯装完是什么样，不是演示某个生活场景。
+      // 房间还没命名时，会客/观影这类按房间名匹配的预置会把整屋压到 15%，一进去像没开灯。
+      var want = q.get('preset') || '全开';
+      var tries = 0;
+      (function pick() {
+        var btn = document.querySelector('[data-scene="' + want + '"]');
+        if (btn) { btn.click(); return; }
+        if (++tries < 80) setTimeout(pick, 50);
+      })();
+    };
+    document.body.appendChild(s);
+    // 工作台切情景 / 拖回路亮度时，会把每个回路的 0..1 亮度发过来。
+    // 内核只认它自己的预置，这里替它把回路状态改成设计给的值再重画。
+    window.addEventListener('message', function (e) {
+      var d = e.data || {};
+      if (d.type !== 'guanglv:levels' || !window.__viewer || !window.__SCENE__) return;
+      var levels = d.levels || {};
+      var names = (window.__SCENE__.circuits || []).map(function (c) { return c.name; });
+      names.forEach(function (n) {
+        var v = levels[n];
+        window.__viewer.setCircuit(n, v === undefined ? 0 : Math.max(0, Math.min(1, Number(v) || 0)));
+      });
+    });
+  }
+  if (q.get('scene')) {
+    fetch(q.get('scene')).then(function (r) { return r.json(); }).then(boot).catch(function (e) { fail(e.message); });
+    return;
+  }
+  var pid = q.get('project');
+  if (!pid) { fail('缺 project 参数'); return; }
+  var url = '/api/lighting3d/' + encodeURIComponent(pid) + '/ueyi-scene.json?floor=' + (q.get('floor') || '1')
+          + (q.get('height') ? '&height=' + q.get('height') : '');
+  fetch(url).then(function (r) { return r.json(); }).then(function (j) {
+    if (j && j.error) return fail(j.error);
+    boot(j);
+  }).catch(function (e) { fail(e.message); });
+})();
+</script>
+</body>
+</html>

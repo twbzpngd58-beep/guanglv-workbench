@@ -10,7 +10,7 @@ import { mountHeight } from "./wallMount";
 import { isTabletopDevice } from "./deviceMount";
 import { Spatial3D } from "./Spatial3D";
 import { planArchitecture, isLegacyAuto } from "./systemArchitecture";
-import { SceneModel3D } from "./SceneModel3D";
+import { Ueyi3D } from "./Ueyi3D";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   ArrowLeft,
@@ -68,7 +68,7 @@ import {
   Smartphone,
   QrCode,
 } from "lucide-react";
-import { type DrawingStep, type EditingPhase } from "./DrawingProgress";
+import { type DrawingStep, type EditingPhase, DrawingProgress } from "./DrawingProgress";
 import { CircuitIssueList, CircuitBoard } from "./CircuitCheck";
 import { circuitIssues, BLOCKED_EXPORTS } from "./circuitRules";
 import {
@@ -998,6 +998,12 @@ export function Workspace({
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [showCadWorkbench, setShowCadWorkbench] = useState(false);
   const [furnitureEditing, setFurnitureEditing] = useState(false);
+  // 批 2（B2/B3/B5）：工具行分三层「主操作 / 收拢菜单 / 图标」。
+  // 菜单一次只开一个；「添加」记本次会话上次用的类型（跨会话记忆＝新功能，不做）。
+  const [toolMenu, setToolMenu] = useState<"" | "add" | "file">("");
+  const [lastAddType, setLastAddType] = useState("");
+  // 底图「确定」搬出工具行后，画布顶部那条提示关掉即本次会话不再出，重新导入图纸再出。
+  const [planMaskBarClosed, setPlanMaskBarClosed] = useState(false);
   const [selectedFurnitureId, setSelectedFurnitureId] = useState("");
   const [placingFurniture, setPlacingFurniture] = useState("");
   const [movingFurniture, setMovingFurniture] = useState(false);
@@ -1026,7 +1032,7 @@ export function Workspace({
     resumedPreview.current = true;
     const savedStep = d?.spaceDefinition?.workflowStep;
     // 家具这一步也要能续接：在「修改家具」中途关掉界面再回来，必须还回到家具核对，
-    // 不能把人丢在画布里（2026-10-16 报「进度条与所在环节不匹配」）。
+    // 不能把人丢在画布里（老板 2026-10-16 报「进度条与所在环节不匹配」）。
     const resume = ["spaces", "openings", "furniture"].includes(savedStep);
     if (!previewFlag.current && !resume) return;
     previewFlag.current = false;
@@ -1058,10 +1064,17 @@ export function Workspace({
     [fadeTick, setFadeTick] = useState(0),
     // 智能情景草稿：场景里的改动先落在这里，点「保存场景」/「保存」才写回设计。
     [sceneDraft, setSceneDraft] = useState<Obj | null>(null),
+    // 智能情景页改版（2026-10-19）：左栏搜索、右栏检查器页签、面板页当前选中的那块面板。
+    [sceneQuery, setSceneQuery] = useState(""),
+    [sceneInsp, setSceneInsp] = useState<"scene" | "circuit" | "lamp" | "panel">("scene"),
+    [inspPanelId, setInspPanelId] = useState(""),
     [setupSel, setSetupSel] = useState<string[]>([]),
     [setupClear, setSetupClear] = useState(true),
     [spaceQuery, setSpaceQuery] = useState(""),
     [spaceTypical, setSpaceTypical] = useState(true),
+    // 批 3（C3/C4/F7）：新增空间三步改两步——记住上次的分区，第二次打开直接落房间屏。
+    [addSpaceOpen, setAddSpaceOpen] = useState(false),
+    [addSpaceGroup, setAddSpaceGroup] = useState(""),
     [reviewer, setReviewer] = useState(""),
     [ack, setAck] = useState(false),
     [baselineNote, setBaselineNote] = useState(""),
@@ -1074,11 +1087,12 @@ export function Workspace({
     [focus, setFocus] = useState<{ x: number; y: number; token: number } | null>(null),
     [recognitionFile, setRecognitionFile] = useState("");
 
-  // 2026-10-16：画布上选中家具/空间后，检视面板必须「明显可见」——滚到眼前并闪一下。
+  // 老板 2026-10-16：画布上选中家具/空间后，检视面板必须「明显可见」——滚到眼前并闪一下。
   const inspectorBody = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     revealFlash(inspectorBody.current);
-  }, [selection?.kind, selection?.id, selectedFurnitureId, furnitureEditing]);
+  // W-4：不再依赖 selection?.id——每切一盏灯就重跑会把右栏滚回顶；保留 kind/家具位/编辑态。
+  }, [selection?.kind, selectedFurnitureId, furnitureEditing]);
   const [lampSpace, setLampSpace] = useState("k");
   // 布灯目标房间：同类空间（两个次卧 / 多个门厅）时必须按房间选，不能只按空间码。
   const [lampRoomId, setLampRoomId] = useState("");
@@ -1144,7 +1158,7 @@ export function Workspace({
     try { localStorage.setItem("gv.layer.devices", deviceLayer ? "1" : "0"); } catch { /* 隐私模式下忽略 */ }
   }, [deviceLayer]);
 
-  // 小人漫游只在 2D 平面图上有意义（2026-10-18）：一旦回到 3D 视图就自动退出漫游，
+  // 小人漫游只在 2D 平面图上有意义（老板 2026-10-18）：一旦回到 3D 视图就自动退出漫游，
   // 免得「3D 里没有小人，灯却还按漫游亮着」（右上角「返回主画布 3D 模型」等入口都走这条兜底）。
   useEffect(() => {
     if (roamOn && p?.mode === "3D" && view3d) {
@@ -1317,9 +1331,12 @@ export function Workspace({
         (floorFile
           ? `/api/projects/${id}/files/${floorFile.id}?preview=true`
           : "");
+  // B5 同源化（批 5）：与 <Plan> 的 background 取同一表达式，再叠预览闸门（4202 预览态没画图，不许出假条）。
+  const canvasBackgroundUrl = spaceConfirmed && !background ? "" : backgroundUrl;
+  const planMaskShown = !spacePreview && !!canvasBackgroundUrl && d?.planMasked !== false;
   // 逐层底图：智能情景页会把每一层同时画出来，每张画布必须用「自己那一层」的图纸。
   // 以前这里统一传当前楼层的底图，多层项目就会所有楼层显示同一张图
-  // （作者反馈的「楼层数量对、六层楼都是同一层的图纸」）。
+  // （老板反馈的「楼层数量对、六层楼都是同一层的图纸」）。
   const backgroundUrlFor = (floorNo: number) => {
     if (background === "__none__") return "";
     // 手动指定底图只作用于当前楼层，其他楼层仍按各自的图纸走。
@@ -1509,6 +1526,8 @@ export function Workspace({
     </div>
   );
   const openFiles = () => {
+    setToolMenu("");
+    setPlanMaskBarClosed(false); // 重新导入图纸 → 底图提示重新出现（B5：关掉只管本次会话）
     setUploadFloor(floor);
     setLevelAbove(aboveFloors(p?.floors, p?.basements));
     setLevelBasements(safeBasements(p?.basements, p?.floors));
@@ -1636,15 +1655,14 @@ export function Workspace({
     setPlacePoint({ x, y });
   }
 
-  /** 布灯 / 放设备一律在二维平面上做（2026-10-17）：三维只用来看。
+  /** 布灯 / 放设备一律在二维平面上做（老板 2026-10-17）：三维只用来看。
    *  在三维视图里点了放置，先切到平面图。返回 true＝刚切过去。 */
   const toPlanForPlacing = () => {
     // 「灯具配置」等页签上没有画布：先回到「底图与空间」的平面图，否则进了布灯模式也没处点。
+    // 平面图现在恒为二维，不用再切 view3d（view3d 只决定「智能情景」页看三维还是看平面）。
     const elsewhere = tab !== "plan";
     if (elsewhere) setTab("plan");
-    if (p?.mode !== "3D" || !view3d) return elsewhere;
-    setView3d(false);
-    return true;
+    return elsewhere;
   };
   // 布灯＝「点哪放哪」：先进布灯模式，在画布上点一下确定落点，再弹窗选空间/位置/编号。
   const openPlace = () => {
@@ -1703,6 +1721,14 @@ export function Workspace({
     setTool("place-device");
     notify((toPlanForPlacing() ? "放置在平面图上进行，已切到 2D 平面；" : "") + "添加窗帘：在图纸上点击窗帘要放的位置，再在对话框里确认电机与空间");
   };
+  // 「添加」菜单（B3）：3 项；记住本次会话上次用的类型，再次打开时该项打勾。
+  // 首用没有「上次」→ 不打勾（「灯具」是主操作「放置灯具」，不在这 3 项里）。
+  const pickAddType = (type: string) => {
+    setToolMenu("");
+    setLastAddType(type);
+    if (type === "窗帘") openAddCurtain();
+    else openAddDevice(type);
+  };
   // 退出「添加设备 / 窗帘」放置模式（不动已经放好的对象）。
   function exitAddMode() {
     setAddObject("");
@@ -1724,6 +1750,28 @@ export function Workspace({
           (s.aliases || []).some((a) => a.includes(spaceQueryText))),
     ),
   })).filter((g) => g.spaces.length > 0);
+  // 批 3（C3/C4）：新增空间浮层的分区表——按项目户型过滤；户型为空列全部 14 个并在屏顶注明。
+  const addSpaceHouse = (p?.type || "").trim();
+  const addSpaceGroups = GROUPED_SPACES.map((g) => ({
+    group: g.group,
+    spaces: g.spaces.filter((s) => !addSpaceHouse || s.houses.includes(addSpaceHouse as HouseType)),
+  })).filter((g) => g.spaces.length > 0);
+  const addSpaceActive = addSpaceGroups.find((g) => g.group === addSpaceGroup);
+  // 批 3（E3/E4）：「这个项目还差什么」只认两项——无回路、未绑定面板。数字只用来决定显隐，不上界面。
+  const gapNoCircuit = lightFixtures.filter((f) => !String(f.circuit || "").trim());
+  const gapUnboundPanels = (d?.devices || []).filter((v) => {
+    if (v.type !== "面板") return false;
+    const short = (Array.isArray(v.keyScenes) ? v.keyScenes : []).filter(Boolean);
+    const long = (Array.isArray(v.keyLongScenes) ? v.keyLongScenes : []).filter(Boolean);
+    return short.length + long.length === 0;
+  });
+  // 批 3（D4）：画布右下角本层读数——灯具按 isSceneLight，设备楼层口径与「面板」页签一致。
+  const floorLights = (d?.fixtures || []).filter(
+    (f) => isSceneLight(f) && (Number.isFinite(f.floor) ? f.floor : d?.rooms.find((r) => r.id === f.roomId)?.floor || 1) === floor,
+  ).length;
+  const floorDevices = (d?.devices || []).filter(
+    (v) => (Number.isFinite(v.floor) ? v.floor : d?.rooms.find((r) => r.id === v.roomId)?.floor || 1) === floor,
+  ).length;
   const usableScenes = availableScenes(p?.type || "平层", projectSpaces.map((s) => s.code));
   const unusableScenes = excludedScenes(p?.type || "平层", projectSpaces.map((s) => s.code));
   const toggleSetupScene = (code: string) => {
@@ -1941,6 +1989,28 @@ export function Workspace({
             ...st,
             on,
             brightness: on ? Number(f.brightnessMax) || 100 : 0,
+            cct: clampCctForFixture(f, Number(st.cct) || f.cct || f.cctMin),
+          };
+        });
+    });
+    setFadeTick((t) => t + 1);
+  }
+  /** 整组回路调亮度（2026-10-19 改版）：滑块拖到哪儿，这组每盏灯就调到哪儿。 */
+  function circuitBrightness(g: { fixtures: Obj[] }, v: number) {
+    if (!scene) return;
+    editSceneDraft((sc) => {
+      sc.customized = true;
+      sc.fade = 1;
+      const ids = new Set(g.fixtures.map((f) => f.id));
+      (d?.fixtures || [])
+        .filter((f) => ids.has(f.id))
+        .forEach((f) => {
+          const st = sc.states[f.id] || {};
+          const max = Number(f.brightnessMax) || 100;
+          sc.states[f.id] = {
+            ...st,
+            on: v > 0,
+            brightness: Math.min(max, Math.max(0, Math.round(v))),
             cct: clampCctForFixture(f, Number(st.cct) || f.cct || f.cctMin),
           };
         });
@@ -2292,7 +2362,7 @@ export function Workspace({
     // 画布点选落点时不再自动居中：落点本来就在视野里，重定心会让画面跳动。
     if (placedAt.pos && !placePoint) focusPlaced(placedAt.pos.x, placedAt.pos.y);
     notify(
-      `已布灯 ${count} 盏：${spaceName} · ${positionName} · ${lampRole} ${roleName(lampRole)}；标准情景已按编号（空间×职能×位置）同步`,
+      `已布灯 ${count} 盏：${spaceName} · ${positionName} · ${lampRole} ${roleName(lampRole)}；标准情景已按编号（空间×职能×位置）同步。继续点图纸布下一盏，再点「放置灯具」退出`,
     );
   }
   // 不做智能时按空间分回路：同一空间的灯共用一条回路，新空间自动开新回路。
@@ -2361,7 +2431,7 @@ export function Workspace({
       // 挑空空间默认按贯通高度安装（层高 − 0.6），否则沿用 2.8m
       installHeight: voidInstallHeight(r) ?? 2.8,
       beamAngle: defaultBeamAngle(lampType),
-      // 筒射灯默认 12W（作者规定），其他灯具类型保持 7W 默认。
+      // 筒射灯默认 12W（老板规定），其他灯具类型保持 7W 默认。
       // 拍板 2026-10-12：线条灯默认 10W；吊灯**不给默认**——功率与光通量必须手填。
       power:
         lampType === "吊灯" ? 0
@@ -2439,7 +2509,7 @@ export function Workspace({
         const snap = walls.length ? snapToWall(walls, { x: +dev.x, y: +dev.y }, +dev.floor, Infinity) : null;
         if (snap) { dev.x = Math.round(snap.x * 100) / 100; dev.y = Math.round(snap.y * 100) / 100; }
       }
-      // 面板 / 温控器贴墙安装：先给一个可改的默认高度（2026-10-16「添加面板时可以设置其高度」）。
+      // 面板 / 温控器贴墙安装：先给一个可改的默认高度（老板 2026-10-16「添加面板时可以设置其高度」）。
       // 「时光之轮」一类遥控器不走墙装，按家具顶面/地面落位，不用这个高度。
       if (!isTabletopDevice(dev) && (dev.type === "面板" || dev.type === "温控器")) {
         dev.installHeight = Math.round(mountHeight(+(room?.heightM || 3)) * 100) / 100;
@@ -2775,9 +2845,7 @@ export function Workspace({
     setActiveScene(id);
   }
   function presets() {
-    // 后端 /api/scene-templates 若暂时不可用，退回随前端分发的场景包，按钮不能静默写 0 个。
-    const templateSource = sceneTemplates.length ? sceneTemplates : (PACKAGE_TEMPLATES as Obj[]);
-    const standard = templateSource.map((item) => [item.code + " " + item.name, item.description, item]);
+    const standard = sceneTemplates.map((item) => [item.code + " " + item.name, item.description, item]);
     let created = 0;
     let synced = 0;
     update((n) => {
@@ -2809,7 +2877,7 @@ export function Workspace({
           continue;
         }
         const fade = Number(template.fade);
-        n.scenes.push({ id: uid(), templateId: template.id, templateCode: template.code, name, description: "标准化套餐 · " + description, trigger: template.trigger, mode: template.mode, priority: template.priority, level: template.level, exit: template.exit, exclude: template.exclude, automationActions: template.automationActions || [], fade: Number.isFinite(fade) && fade >= 0 ? fade : 1, states, standard: true });
+        n.scenes.push({ id: uid(), templateId: template.id, templateCode: template.code, name, description: "标准化套餐 · " + description, trigger: template.trigger, mode: template.mode, automationActions: template.automationActions || [], fade: Number.isFinite(fade) && fade >= 0 ? fade : 1, states, standard: true });
         created += 1;
       }
     });
@@ -3165,7 +3233,7 @@ export function Workspace({
   /** 生成完先把「预览里那套空间」落成**可编辑**的设计空间，再开预览层（就地改名 / 拖边界）。 */
   async function openSpacePreview(initialPhase?: EditingPhase) {
     const editorKey = uid();
-    // 已确认的项目点进来就是「回来改东西」：落在修改空间，进度条才不会退回三维预览（2026-10-16）。
+    // 已确认的项目点进来就是「回来改东西」：落在修改空间，进度条才不会退回三维预览（老板 2026-10-16）。
     const phase = initialPhase
       || (d?.spaceDefinition?.status === "confirmed" ? "spaces" : "review");
     setSpacePreview({ state: "running", recognizing: false, pct: 0, stage: "正在准备空间与底图…", initialPhase: phase, editorKey });
@@ -3201,7 +3269,7 @@ export function Workspace({
     setBackground(""); setCanvasReset(v => v + 1);
   }
 
-  /** 画布上画完一圈家具轮廓（2026-10-16：家具也要能像空间那样多边形绘制）。 */
+  /** 画布上画完一圈家具轮廓（老板 2026-10-16：家具也要能像空间那样多边形绘制）。 */
   function onFurnPolygonCanvas(pts: { x: number; y: number }[]) {
     if (!d || pts.length < 3) return;
     const rows = (d.furniture || []) as Obj[];
@@ -3226,7 +3294,7 @@ export function Workspace({
     setPlacingFurniture(""); setMovingFurniture(false); setTool("select");
   }
 
-  // 2026-10-16：画布上家具一律锁定——只有灯具与设备可挪动。原来点一下家具就
+  // 老板 2026-10-16：画布上家具一律锁定——只有灯具与设备可挪动。原来点一下家具就
   // 自动进「调整家具」并允许拖动，而俯视图里灯具正压在家具上，随手一点一拖就把家具拖跑了。
   // 现在点一下只高亮 + 提示；要改家具就点「调整家具」，或去「导入图纸 → 家具」。
   function selectCanvasFurniture(fid: string) {
@@ -3524,8 +3592,10 @@ export function Workspace({
           </small>
         </div>
         <div className="studio-header-actions">
-          {p.mode === "3D" && <>
-            <Button onClick={() => setView3d((v) => !v)}>{view3d ? "切换 2D 平面编辑" : "返回主画布 3D 模型"}</Button>
+          {/* 三维只在「智能情景」页：绘图页（底图与空间）不放三维，切换按钮也只在这里出现 */}
+          {p.mode === "3D" && tab === "scenes" && <>
+            <Button onClick={() => setView3d((v) => !v)}>{view3d ? "看平面图" : "看三维演示"}</Button>
+            {hasDxfDrawing && <Button onClick={() => setShowCadWorkbench(true)}>三维模型 / 同步灯位</Button>}
           </>}
           <span className={"save-state " + (w.saveError ? "error-text" : "")}>
             {w.saving ? (
@@ -3587,6 +3657,17 @@ export function Workspace({
               : "设计草稿 · 人工复核后交付"}
         </span>
       </div>
+      {/* 三维模型工作台（换图纸 / 语义调整 / 同步灯位）从绘图页搬出来，做成顶层浮层：
+          它本身是三维，不该出现在「底图与空间」的画布位置。入口在「智能情景」页头。 */}
+      {showCadWorkbench && p.mode === "3D" && hasDxfDrawing && !spacePreview && (
+        // .gv3d 自己是 position:fixed inset:0，不用再包一层；embedded 是给"塞进画布框"用的
+        <Lighting3DView id={id} project={p} notify={notify}
+          onClose={() => setShowCadWorkbench(false)}
+          onSynced={async () => { w.accept(await api<Project>(`/projects/${id}`)); }}
+          // 实测 2026-10-14：工作台里「换一张 DXF / 用项目里的图纸生成」跑完，
+          // 也要进「空间预览 → 确认 / 修改」，不能生成完还停在三维工作台。
+          onGenerated={() => { setShowCadWorkbench(false); void openSpacePreview(); }} />
+      )}
       {spacePreview && (
         <SpacePreviewLayer
           key={`${spacePreview.editorKey || "generation"}-${spacePreview.initialPhase || "review"}`}
@@ -3601,18 +3682,11 @@ export function Workspace({
           confirmRooms={() => operation("/space-definition/confirm", { stage: "rooms", floor, reviewer: p.designer || "设计师" })}
           confirmSpaces={async () => {
             if (!spaceConfirmed) await operation("/space-definition/confirm", { reviewer: p.designer || "设计师" });
-            // DXF 项目的灯位在空间确认前会被硬闸拦下；确认完成后立即补一次同步，
-            // 让用户进入画布就能看到图纸里的灯，不用再找「同步灯位」按钮。
-            try {
-              await api(`/lighting3d/${id}/sync-design`, { method: "POST" });
-            } catch {
-              /* 没有三维图纸 / 无可同步灯位时不阻断确认，画布仍保留手动同步入口 */
-            }
           }}
           onConfirmed={enterConfirmedCanvas}
           notify={notify}
           // 关掉这一层之前，先把没落盘的改动写完（await）：不然「改到一半点关闭」再刷新，
-          // 服务端还停在上一步（2026-10-16 报「进度条与所在环节不匹配」的另一半原因）。
+          // 服务端还停在上一步（老板 2026-10-16 报「进度条与所在环节不匹配」的另一半原因）。
           onClose={async () => { await flush().catch(() => {}); setSpacePreview(null); }}
           job={spacePreview}
         />
@@ -3721,49 +3795,16 @@ export function Workspace({
               </span>
             </div>
           </div>
+          {/* 七步条挂页头：功能句行 → 七步条 → 工具行。review 步会写库（preview-to-design），批 1 不接，灰掉。 */}
+          <DrawingProgress project={p} design={d} job={spacePreview}
+            confirmed={spaceConfirmed} onStep={jumpDrawingStep} blockedSteps={["review"]} />
           <div className="editor-toolbar">
             <div>
-              <Button onClick={openFiles}>
-                <Upload size={15} />
-                导入图纸 <span className="count-bubble">{p.files.length}</span>
-              </Button>
-              <Button disabled={locked} onClick={() => void openSpacePreview()}>
-                <PencilRuler size={15} /> 空间预览 / 修改空间与门窗
-              </Button>
-              <Button disabled={locked || furnitureLoading} variant={furnitureEditing ? "primary" : ""}
-                onClick={() => { setFurnitureEditing(v => !v); setFurniture(true); setTool("select"); setPlacingFurniture(""); setMovingFurniture(false); }}>
-                <Box size={15} /> 调整家具
-              </Button>
-              {furnitureEditing && <>
-                <Button disabled={locked || !selectedFurnitureId} variant={tool === "add-furn-point" ? "primary" : ""}
-                  onClick={() => setTool(tool === "add-furn-point" ? "select" : "add-furn-point")}>
-                  <Plus size={15} /> 增加边界点
-                </Button>
-                <Button disabled={locked || !selectedFurnitureId} variant={tool === "delete-furn-point" ? "primary" : ""}
-                  onClick={() => setTool(tool === "delete-furn-point" ? "select" : "delete-furn-point")}>
-                  <Minus size={15} /> 删除边界点
-                </Button>
-                <Button disabled={locked} variant={tool === "draw-furn-poly" ? "primary" : ""}
-                  onClick={() => { setTool(tool === "draw-furn-poly" ? "select" : "draw-furn-poly"); setPlacingFurniture(""); setMovingFurniture(false); setSelectedFurnitureId(""); }}>
-                  <MousePointer2 size={15} /> {tool === "draw-furn-poly" ? "取消绘制轮廓" : "画家具轮廓（多边形）"}
-                </Button>
-              </>}
-              {!spaceConfirmed ? (
-                <Button
-                  disabled={busy || locked || !d.rooms.length}
-                  title={d.rooms.length ? "核对所有楼层的空间名称、边界和面积后确认" : "请先添加或导入空间"}
-                  onClick={() => void run(confirmRoomsAndOpenings, "")}
-                >
-                  <CheckCircle2 size={15} /> 确认空间
-                </Button>
-              ) : (
-                <span className="subtle" role="status">空间已确认</span>
-              )}
-              <span className="toolbar-divider" />
+              {/* 主操作 3（B7）：放置灯具 / 画灯带 / 调整家具。确认空间单列，不计这一段。 */}
               <Button
                 onClick={openPlace}
                 disabled={locked}
-                variant={tool === "place-lamp" ? "primary" : ""}
+                variant={spaceConfirmed && tool !== "draw-strip" ? "primary" : ""}
                 title="点一下进入布灯模式，再在图纸上点要放灯的位置（再点一次退出）"
               >
                 <Lightbulb size={15} />
@@ -3772,50 +3813,115 @@ export function Workspace({
               <Button
                 onClick={openStripDraw}
                 disabled={locked}
-                variant={tool === "draw-strip" ? "primary" : ""}
+                variant={spaceConfirmed && tool === "draw-strip" ? "primary" : ""}
                 title="灯带画法（§十.10）：点一下进入折线模式，在图纸上依次点拐点，点一下接一段；长度按折线自动量（也可在灯具属性里直接填米数）"
               >
                 <PencilRuler size={15} />
                 {tool === "draw-strip" ? "完成灯带" : "画灯带折线"}
               </Button>
+              {!furnitureEditing && (
+                <Button disabled={locked || furnitureLoading}
+                  onClick={() => { setFurnitureEditing(v => !v); setFurniture(true); setTool("select"); setPlacingFurniture(""); setMovingFurniture(false); }}>
+                  <Box size={15} /> 调整家具
+                </Button>
+              )}
+              {furnitureEditing && <>
+                {/* B7：两个边界点键只在选中家具后出现（常驻 disabled 仍计可见键，5>3 判不过）。 */}
+                {selectedFurnitureId && (<>
+                <Button disabled={locked} variant={tool === "add-furn-point" ? "primary" : ""}
+                  onClick={() => setTool(tool === "add-furn-point" ? "select" : "add-furn-point")}>
+                  <Plus size={15} /> 增加边界点
+                </Button>
+                <Button disabled={locked} variant={tool === "delete-furn-point" ? "primary" : ""}
+                  onClick={() => setTool(tool === "delete-furn-point" ? "select" : "delete-furn-point")}>
+                  <Minus size={15} /> 删除边界点
+                </Button>
+                </>)}
+                <Button disabled={locked} variant={tool === "draw-furn-poly" ? "primary" : ""}
+                  onClick={() => { setTool(tool === "draw-furn-poly" ? "select" : "draw-furn-poly"); setPlacingFurniture(""); setMovingFurniture(false); setSelectedFurnitureId(""); }}>
+                  <MousePointer2 size={15} /> {tool === "draw-furn-poly" ? "取消绘制轮廓" : "画家具轮廓（多边形）"}
+                </Button>
+              </>}
+              {furnitureEditing && (
+                <Button variant="primary" onClick={() => setFurnitureEditing(false)}>
+                  <CheckCircle2 size={15} /> ✓ 完成家具编辑
+                </Button>
+              )}
+              {/* 确认空间单列（B2）：未确认态＝本页唯一写入口；已确认态只留文字、不出可点按钮。 */}
+              {!spaceConfirmed ? (
+                <Button
+                  variant="primary"
+                  disabled={busy || locked || !d.rooms.length}
+                  title={d.rooms.length ? "核对所有楼层的空间名称、边界和面积后确认" : "请先添加或导入空间"}
+                  onClick={() => void run(confirmRoomsAndOpenings, "")}
+                >
+                  <CheckCircle2 size={15} /> 确认空间
+                </Button>
+              ) : (
+                <span className="subtle" role="status">✓ 空间已确认</span>
+              )}
               <span className="toolbar-divider" />
-              <Button
-                disabled={locked}
-                onClick={() => openAddDevice("传感器")}
-                variant={tool === "place-device" && addObject === "device" && addType === "传感器" ? "primary" : ""}
-                title="点一下进入添加模式，再在图纸上点要放传感器的位置（再点一次退出）"
-              >
-                <Plus size={15} /> 添加传感器
-              </Button>
-              <Button
-                disabled={locked}
-                onClick={() => openAddDevice("面板")}
-                variant={tool === "place-device" && addObject === "device" && addType === "面板" ? "primary" : ""}
-                title="点一下进入添加模式，再在图纸上点要放设备的位置（再点一次退出）"
-              >
-                <Plus size={15} /> 添加设备
-              </Button>
-              <Button
-                disabled={locked}
-                onClick={openAddCurtain}
-                variant={tool === "place-device" && addObject === "curtain" ? "primary" : ""}
-                title="点一下进入添加模式，再在图纸上点窗帘要放的位置（再点一次退出）"
-              >
-                <Plus size={15} /> 添加窗帘
-              </Button>
+              {/* 收拢菜单 2：添加（B3 会话内记忆）/ 图纸 */}
+              <div className="menu-holder">
+                <button
+                  className="btn"
+                  disabled={locked}
+                  aria-haspopup="menu"
+                  aria-expanded={toolMenu === "add"}
+                  title="添加传感器 / 智能设备 / 窗帘；记住上次用的类型"
+                  onClick={() => setToolMenu(toolMenu === "add" ? "" : "add")}
+                >
+                  <Plus size={15} /> 添加 <ChevronDown size={11} />
+                </button>
+                {toolMenu === "add" && (
+                  <>
+                    <div className="menu-away" onClick={() => setToolMenu("")} />
+                    <div className="dropdown-menu toolbar-menu" role="menu">
+                      {[
+                        ["传感器", "传感器"],
+                        ["面板", "智能设备"],
+                        ["窗帘", "窗帘"],
+                      ].map(([value, label]) => (
+                        <button
+                          key={value}
+                          role="menuitem"
+                          className={lastAddType === value ? "on" : ""}
+                          onClick={() => pickAddType(value)}
+                        >
+                          <Plus size={14} /> {label}
+                          {lastAddType === value && <CheckCircle2 size={13} className="menu-tick" />}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="menu-holder">
+                <button
+                  className="btn"
+                  aria-haspopup="menu"
+                  aria-expanded={toolMenu === "file"}
+                  title="图纸：导入图纸 / 空间预览"
+                  onClick={() => setToolMenu(toolMenu === "file" ? "" : "file")}
+                >
+                  <Upload size={15} /> 图纸 <ChevronDown size={11} />
+                </button>
+                {toolMenu === "file" && (
+                  <>
+                    <div className="menu-away" onClick={() => setToolMenu("")} />
+                    <div className="dropdown-menu toolbar-menu" role="menu">
+                      <button role="menuitem" onClick={() => { setToolMenu(""); openFiles(); }}>
+                        <Upload size={14} /> 导入图纸 <span className="count-bubble">{p.files.length}</span>
+                      </button>
+                      <button role="menuitem" disabled={locked} onClick={() => { setToolMenu(""); void openSpacePreview(); }}>
+                        <PencilRuler size={14} /> 空间预览 / 修改空间与门窗
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
               <span className="toolbar-divider" />
               {layerSwitch}
-              {background && d.planMasked !== false && (
-                <>
-                  <span className="toolbar-divider" />
-                  <Button
-                    variant="primary"
-                    onClick={() => update((n) => { n.planMasked = false; if (!noSmart) ensurePanels(n, smart); })}
-                  >
-                    确定
-                  </Button>
-                </>
-              )}
             </div>
             <div>
               <button
@@ -3879,33 +3985,15 @@ export function Workspace({
                   : ""}
               </p>
               <div className="space-add-bar">
-                <select
-                  value=""
+                <button
+                  className="btn"
                   disabled={locked}
                   aria-label="新增空间"
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v) addSpaceByCode(v);
-                    e.target.value = "";
-                  }}
+                  title="先选分区，再选房间；记住上次的分区"
+                  onClick={() => setAddSpaceOpen(true)}
                 >
-                  <option value="">＋ 新增空间…</option>
-                  {GROUPED_SPACES.map((g) => (
-                    <optgroup key={g.group} label={g.group}>
-                      {g.spaces.map((sc) => {
-                        const count = (d?.rooms || []).filter(
-                          (r) => roomSpaceCodeOf(r)?.code === sc.code,
-                        ).length;
-                        return (
-                          <option key={sc.code} value={sc.code}>
-                            {sc.code} · {sc.name}
-                            {count ? `（已有 ${count}，再增一个）` : ""}
-                          </option>
-                        );
-                      })}
-                    </optgroup>
-                  ))}
-                </select>
+                  <Plus size={15} /> 新增空间
+                </button>
               </div>
               <p className="subtle" style={{ margin: "0 0 8px" }}>
                 空间不需要画边界：名称 + 灯具编号（kc001 ＝ 客厅·茶几的 1 号灯）已经定位，智能情景按编号生成。
@@ -4052,12 +4140,34 @@ export function Workspace({
                     ? <small> · 空间彩平底稿</small>
                     : d.rooms.some((r) => r.source === "image-analysis") && <small> · 自动生成彩平</small>}
               </div>
+              {/* 批 2 · B5：底图「确定」搬出工具行 → 画布上一条可关提示。
+                  固定画布顶部居中、不随缩放；关掉只本次会话，重新导入图纸再出。 */}
+              {planMaskShown && !planMaskBarClosed && (
+                <div className="canvas-prompt" role="status">
+                  <span>底图就绪：确定后去掉灰蒙版，开始布灯</span>
+                  <Button
+                    onClick={() => {
+                      update((n) => { n.planMasked = false; if (!noSmart) ensurePanels(n, smart); });
+                      setPlanMaskBarClosed(true);
+                    }}
+                  >
+                    确定
+                  </Button>
+                  <button
+                    className="icon-btn canvas-prompt-x"
+                    title="这次不用（本次会话不再提示，重新导入图纸再出）"
+                    onClick={() => setPlanMaskBarClosed(true)}
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              )}
               {spotFixture && (
                 <div className="canvas-lamp-badge" aria-live="polite">
                   <span className="canvas-lamp-code">{spotFixture.code}</span>
                   <span className="canvas-lamp-type">{spotFixture.type}</span>
                   <b className="canvas-lamp-power">{spotFixture.power} W</b>
-                  {/* 2026-10-16：编号与灯具基本信息放在这里（点灯即见），画布上不再挂成一堆标签。 */}
+                  {/* 老板 2026-10-16：编号与灯具基本信息放在这里（点灯即见），画布上不再挂成一堆标签。 */}
                   <small>
                     {d.rooms.find((r) => r.id === spotFixture.roomId)?.name || "未归属"} · 安装{" "}
                     {spotFixture.installHeight ?? 2.8} m · 色温 {spotFixture.cct ?? 3000} K
@@ -4089,27 +4199,12 @@ export function Workspace({
                   )}
                 </div>
               )}
-              {spacePreview ? <div className="subtle">正在预览空间，确认后进入画布</div> : p.mode === "3D" && view3d && showCadWorkbench && hasDxfDrawing ? <Lighting3DView embedded id={id} project={p} notify={notify}
-                onClose={() => setShowCadWorkbench(false)}
-                onSynced={async () => { w.accept(await api<Project>(`/projects/${id}`)); }}
-                // 实测 2026-10-14：工作台里「换一张 DXF / 用项目里的图纸生成」跑完，
-                // 也要进「空间预览 → 确认 / 修改」，不能生成完还停在三维工作台。
-                onGenerated={() => void openSpacePreview()} /> : p.mode === "3D" && view3d ? <>
-                  {hasDxfDrawing && <button type="button" className="scene-model-cad-tools"
-                    onClick={() => setShowCadWorkbench(true)}>DXF 生成 / 语义调整 / 同步灯位</button>}
-                  {/* 口径①（§十.10）：3D 项目的布灯画布＝三维画布本身，空间确认后同样以「空间轮廓＋墙线」为背景 */}
-                  <SceneModel3D projectId={id} hasDxf={hasDxfDrawing} design={d} floor={floor}
-                    background={spaceConfirmed && !background ? "" : backgroundUrl} selection={selection} onSelect={setSelection}
-                    // 三维只用来看（2026-10-17）：放置与拖动都在 2D 平面上做，这里不接落点、不拖灯。
-                    editFixtures={false}
-                    selectedFurnitureId={selectedFurnitureId} onFurnitureSelect={locked ? undefined : selectCanvasFurniture}
-                    showFurniture={furniture}
-                    placingLamps={tool === "place-lamp"}
-                    showFixtures={fixtureLayer} showDevices={deviceLayer} />
-                </> : <Plan
+              {/* 底图与空间＝纯绘图面（老板 2026-10-19）：这一页只有平面图，不放任何三维。
+                  三维是「演示」，只出现在「智能情景」页；交付文件同理。 */}
+              {spacePreview ? <div className="subtle">正在预览空间，确认后进入画布</div> : <Plan
                 key={"plan" + floor + "-" + canvasReset}
                 // 家具调整模式下，画布要用与右侧面板同一批家具行——图纸刚导入、还没写进设计时
-                // 设计里没有 furniture，否则画布上只有装饰性占位、抓不到边界把手（2026-10-16）。
+                // 设计里没有 furniture，否则画布上只有装饰性占位、抓不到边界把手（老板 2026-10-16）。
                 design={furnitureEditing && !Array.isArray(d.furniture) ? { ...d, furniture: legacyFurniture } : d}
                 floor={floor}
                 selection={selection}
@@ -4121,7 +4216,7 @@ export function Workspace({
                     const r = v.rooms.find((r) => r.id === selection.id);
                     if (r) r.source = "manual";
                   }
-                  // 拖面板 / 温控器：沿最近的墙线滑动，不离开墙（2026-10-17：三维里不能悬浮）。
+                  // 拖面板 / 温控器：沿最近的墙线滑动，不离开墙（老板 2026-10-17：三维里不能悬浮）。
                   if (selection?.kind === "devices") {
                     const dev = v.devices.find((x) => x.id === selection.id);
                     if (dev && (dev.type === "面板" || dev.type === "温控器") && !isTabletopDevice(dev)) {
@@ -4135,7 +4230,7 @@ export function Workspace({
                 tool={tool}
                 onPlacePoint={beginPlaceAt}
                 zoom={zoom}
-                // 布灯主画布同样滚轮缩放、空白处按住拖动平移（2026-10-17）；「适应画布」一并还原。
+                // 布灯主画布同样滚轮缩放、空白处按住拖动平移（老板 2026-10-17）；「适应画布」一并还原。
                 wheelZoom
                 viewReset={canvasReset}
                 showFurniture={furniture}
@@ -4158,7 +4253,7 @@ export function Workspace({
                 // 口径①（§十.10，实测 2026-10-12 认可）：空间确认后，布灯画布背景＝**已确认的
                 // 空间轮廓 ＋ 墙线**，不再铺 CAD 底图光栅（图纸阶段仍需底图来手绘空间，所以只在
                 // 已确认后生效）；要看某张图纸时在「底图」里显式选一张，仍会显示。
-                background={spaceConfirmed && !background ? "" : backgroundUrl}
+                background={canvasBackgroundUrl}
                 backgroundRect={spaceConfirmed && !background ? null : bgRectFor(backgroundUrl)}
                 readonly={locked || busy}
                 planMasked={d.planMasked !== false}
@@ -4216,6 +4311,10 @@ export function Workspace({
                     : tool === "draw-strip"
                         ? "灯带折线：在图纸上依次点拐点，点一下接一段；点「完成灯带」结束（长度按折线自动量）"
                         : "拖动灯具调整位置 · 空间与情景按编号生成 · 改动自动保存"}
+              </div>
+              {/* 批 3（D4）：画布右下角本层读数——右上角标、底部缩放条都不动。 */}
+              <div className="canvas-status" role="status">
+                本层 {floorLights} 盏灯 · {floorDevices} 个设备
               </div>
             </div>
             <aside className="inspector">
@@ -5182,6 +5281,30 @@ export function Workspace({
                         选择画布中的房间、墙体、门窗或灯具，在这里编辑属性。
                       </p>
                     </div>
+                    {(gapNoCircuit.length > 0 ||
+                      (d.scenes.length > 0 && gapUnboundPanels.length > 0)) && (
+                      <div className="gap-card">
+                        <div className="gap-t">这个项目还差什么</div>
+                        {gapNoCircuit.length > 0 && (
+                          <button className="gap-row" onClick={() => setTab("fixtures")}>
+                            <span>无回路</span>
+                            <ChevronRight size={13} />
+                          </button>
+                        )}
+                        {d.scenes.length > 0 && gapUnboundPanels.length > 0 && (
+                          <button
+                            className="gap-row"
+                            onClick={() => {
+                              setTab("scenes");
+                              setSceneInsp("panel");
+                            }}
+                          >
+                            <span>未绑定面板</span>
+                            <ChevronRight size={13} />
+                          </button>
+                        )}
+                      </div>
+                    )}
                     <div className="design-metrics">
                       <div>
                         <span>空间数量</span>
@@ -5758,7 +5881,7 @@ export function Workspace({
         </main>
       )}
       {tab === "scenes" && (
-        <main className="studio-content">
+        <main className={"studio-content" + (noSmart ? "" : " scene-page")}>
           {panelEditorOpen && selection?.kind === "devices" && selected?.type === "面板" && (
             <Modal title={`面板选型与刻字 · ${selected.code}`} subtitle="按世聪官网选型；每键只刻一次（短按），长按仅做功能不刻字（TK3 / ST3 上下双刻除外）；刻字实时显示在面板预览上"
               onClose={() => setPanelEditorOpen(false)} wide>
@@ -5789,7 +5912,7 @@ export function Workspace({
               <div>
                 <h1>让光，跟随生活的节奏。</h1>
                 <p>
-                  逐灯调节，构建属于这个空间的日常。所有控制仅作用于设计数据，不连接真实设备。
+                  按空间编情景、调亮度与色温；所有控制只作用于设计数据，不连接真实设备。
                 </p>
               </div>
               <div className="flex">
@@ -5856,7 +5979,7 @@ export function Workspace({
                     disabled={locked || !d.rooms.length}
                     title="小人漫游（只在 2D 平面图上演示）：点一下切到 2D 平面图并放下小人，按住小人走进传感器范围，关联灯具亮、离开则按延时关闭；再点一下退出并回到 3D"
                     onClick={() => {
-                      // 2026-10-18：小人漫游只在 2D 平面图上有效——
+                      // 老板 2026-10-18：小人漫游只在 2D 平面图上有效——
                       // 点一下：切到 2D 平面图并放下小人；再点一下：退出漫游、回到 3D 界面。
                       if (roamOn) {
                         setRoamOn(false);
@@ -5883,7 +6006,7 @@ export function Workspace({
                           });
                       }
                       setRoamOn(true);
-                      // 漫游在 2D 平面图上演示：三维项目先切到 2D（2026-10-18）。
+                      // 漫游在 2D 平面图上演示：三维项目先切到 2D（老板 2026-10-18）。
                       const toPlan = p?.mode === "3D";
                       if (toPlan) setView3d(false);
                       notify(
@@ -5902,21 +6025,6 @@ export function Workspace({
               </div>
             </div>
           </div>
-          {!noSmart && <div className="scene-panel-editor-launcher">
-            <label htmlFor="scene-panel-edit-select">面板选型与刻字</label>
-            <select id="scene-panel-edit-select" aria-label="选择面板进行选型刻字" value=""
-              onChange={(e) => {
-                if (!e.target.value) return;
-                setSelection({ kind: "devices", id: e.target.value });
-                setPanelEditorOpen(true);
-              }}>
-              <option value="">选择本层面板，或在 3D 画布点击面板直接编辑</option>
-              {d.devices.filter((dev) => dev.type === "面板" && (dev.floor || 1) === floor)
-                .map((dev) => <option key={dev.id} value={dev.id}>
-                  {dev.code || "未编号"} · {dev.name || "面板"} · {dev.brand || "待选型"}
-                </option>)}
-            </select>
-          </div>}
           {roamOn && (
             <div className="notice">
               <Play size={17} />
@@ -5935,39 +6043,6 @@ export function Workspace({
                 </span>
               </div>
             </div>
-          )}
-          {!noSmart && (
-          <div className="scene-tabs">
-            {d.scenes.map((s, i) => (
-              <button
-                key={s.id}
-                className={scene?.id === s.id ? "active" : ""}
-                onClick={() => setActiveScene(s.id)}
-              >
-                <span>
-                  {
-                    [
-                      <Sun size={21} />,
-                      <Lightbulb size={21} />,
-                      <Play size={21} />,
-                      <Power size={21} />,
-                    ][i % 4]
-                  }
-                </span>
-                <b>{s.name}</b>
-                <small>
-                  {s.trigger ? `${s.trigger} · ` : ""}
-                  {s.priority
-                    ? `${s.priority} ${priorityName(s.priority)} · `
-                    : ""}
-                  {noSmart
-                    ? `${circuitGroups.filter((g) => g.fixtures.some((f) => (s.states[f.id] || {}).on)).length} 个回路开启`
-                    : `${Object.values(s.states).filter((st: any) => st.on).length} 盏灯开启`}
-                </small>
-                <ChevronRight size={14} />
-              </button>
-            ))}
-          </div>
           )}
           {noSmart ? (
             <>
@@ -6040,12 +6115,7 @@ export function Workspace({
                       ))}
                     </div>
                   ) : (
-                    p.mode === "3D" && view3d ? <SceneModel3D projectId={id} hasDxf={hasDxfDrawing} design={d} floor={floor} background={backgroundUrlFor(floor)} scene={scene} selection={selection}
-                      // 小人漫游只在 2D 平面图上有效（2026-10-18）：三维不接漫游，小人不出现在模型里。
-                      onSelect={(s) => {
-                      setSelection(s);
-                      if (s?.kind === "devices" && d.devices.find((dev) => dev.id === s.id)?.type === "面板") setPanelEditorOpen(true);
-                    }} showFixtures={fixtureLayer} showDevices={deviceLayer} /> : <Plan
+                    p.mode === "3D" && view3d ? <Ueyi3D projectId={id} floor={floor} states={scene?.states} back onBack2D={() => setView3d(false)} /> : <Plan
                       design={d}
                       projectArea={p.area}
                       showFixtureLayer={fixtureLayer}
@@ -6066,538 +6136,571 @@ export function Workspace({
             </>
           ) : scene ? (
             <>
-              <div className="scene-workspace">
-                <div className="scene-canvas">
-                  <div className="scene-canvas-title">
-                    <span>
-                      <i />
-                      {scene.name} <small>{p.mode === "3D" && view3d ? "3D 模型 / 非实景渲染" : "灯光分布示意 / 非实景"}</small>
-                    </span>
-                    {layerSwitch}
-                    {p.floors > 1 ? (
-                      <span className="floor-link-badge">
-                        <Link size={12} /> {levelSummary(p.floors, p.basements)}同步 · 全屋联动
-                      </span>
-                    ) : null}
-                    {(p.floors <= 1 || (p.mode === "3D" && view3d)) && (
-                      <select aria-label="场景预览楼层" value={floor} onChange={(e) => setFloor(+e.target.value)}>
-                        {floorLevels(p.floors, p.basements).map((lv) => (
-                          <option key={lv.value} value={lv.value}>{lv.label}</option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                  {p.floors > 1 && !(p.mode === "3D" && view3d) ? (
-                    <div
-                      className="scene-floors"
-                      style={{
-                        gridTemplateColumns:
-                          p.floors === 2 ? "1fr 1fr" : "1fr",
-                      }}
-                    >
-                      {floorLevels(p.floors, p.basements).map((lv) => (
-                        <figure className="scene-floor" key={lv.value}>
-                          <figcaption>
-                            {lv.label}
-                            <small>
-                              {
-                                d.fixtures.filter(
-                                  (f) => (f.floor || 1) === lv.value,
-                                ).length
-                              }{" "}
-                              盏
-                            </small>
-                          </figcaption>
-                          {p.mode === "3D" && view3d ? <Spatial3D design={d} floor={lv.value} background={backgroundUrlFor(lv.value)} scene={scene} selection={selection} onSelect={setSelection} /> : <Plan
-                            design={d}
-                            scene={roamSceneOf(scene)}
-                            projectArea={p.area}
-                            showFixtureLayer={fixtureLayer}
-                            showDeviceLayer={deviceLayer}
-                            floor={lv.value}
-                            mini={false}
-                            showGrid={false}
-                            fadeTick={fadeTick}
-                            background={backgroundUrlFor(lv.value)}
-                            backgroundRect={bgRectFor(backgroundUrlFor(lv.value))}
-                            voidNote={voidNoteFor(lv.value)}
-                            readonly
-                            selection={selection}
-                            onSelect={setSelection}
-                            roam={roamOn && lv.value === roamFloor ? roamPos : null}
-                            roamArmed={roamOn}
-                            onRoamMove={(x, y) => {
-                              setRoamFloor(lv.value);
-                              setRoamPos({ x, y });
-                            }}
-                          />}
-                        </figure>
-                      ))}
-                    </div>
-                  ) : (
-                    p.mode === "3D" && view3d ? <SceneModel3D projectId={id} hasDxf={hasDxfDrawing} design={d} floor={floor} background={backgroundUrlFor(floor)} scene={scene} selection={selection}
-                      // 小人漫游只在 2D 平面图上有效（2026-10-18）：三维不接漫游，小人不出现在模型里。
-                      onSelect={(s) => {
-                      setSelection(s);
-                      if (s?.kind === "devices" && d.devices.find((dev) => dev.id === s.id)?.type === "面板") setPanelEditorOpen(true);
-                    }} showFixtures={fixtureLayer} showDevices={deviceLayer} /> : <Plan
-                      design={d}
-                      scene={roamSceneOf(scene)}
-                      projectArea={p.area}
-                      showFixtureLayer={fixtureLayer}
-                      showDeviceLayer={deviceLayer}
-                      floor={floor}
-                      mini={false}
-                      showGrid={false}
-                      fadeTick={fadeTick}
-                      background={backgroundUrlFor(floor)}
-                      backgroundRect={bgRectFor(backgroundUrlFor(floor))}
-                      voidNote={voidNoteFor(floor)}
-                      readonly
-                      selection={selection}
-                      onSelect={(s) => {
-                        setSelection(s);
-                        if (s?.kind === "devices" && d.devices.find((dev) => dev.id === s.id)?.type === "面板") setPanelEditorOpen(true);
-                      }}
-                      roam={roamOn && roamFloor === floor ? roamPos : null}
-                      roamArmed={roamOn}
-                      onRoamMove={(x, y) => {
-                        setRoamFloor(floor);
-                        setRoamPos({ x, y });
-                      }}
+              {/* 2026-10-19 改版（老板拍板）：整页不滚。
+                  左栏＝情景竖排（14 个一屏排完，可搜、可 ↑↓ 切）；中间＝画布；右栏＝检查器
+                  （情景 / 回路 / 灯具 / 面板 四页，点谁就是谁）。
+                  改之前情景是 175px 横向滚动窗，回路和单灯在画布下方铺 5 行，整页 2000px，
+                  调一盏灯的亮度画布已经滚出屏幕了。 */}
+              <div className="scene-stage">
+                <aside className="scene-rail">
+                  <div className="scene-rail-head">
+                    <h2>情景<span>{d.scenes.length}</span></h2>
+                    <input
+                      className="scene-rail-search"
+                      placeholder="搜索情景…"
+                      value={sceneQuery}
+                      onChange={(e) => setSceneQuery(e.target.value)}
                     />
-                  )}
-                </div>
-                <aside className="scene-settings">
-                  <h3>
-                    情景设置 <SlidersHorizontal size={17} />
-                  </h3>
-                  {sceneDirty && (
-                    <p className="scene-draft-hint">
-                      <Clock3 size={14} /> 有未保存的情景改动 · 点「保存场景」后才生效
-                    </p>
-                  )}
-                  <fieldset disabled={locked || busy}>
-                    <Field label="情景名称">
-                      <input
-                        value={scene.name}
-                        onChange={(e) => scenePatch("name", e.target.value)}
-                      />
-                    </Field>
-                    <Field label="情景描述">
-                      <textarea
-                        value={scene.description}
-                        onChange={(e) =>
-                          scenePatch("description", e.target.value)
-                        }
-                      />
-                    </Field>
-                    <Field label="触发方式（设计配置）">
-                      <select
-                        value={scene.trigger}
-                        onChange={(e) => scenePatch("trigger", e.target.value)}
-                      >
-                        {["手动", "面板按键", "定时", "传感器"].map((t) => (
-                          <option key={t}>{t}</option>
-                        ))}
-                      </select>
-                    </Field>
-                    {noSmart ? (
-                      <Field label="缓亮缓灭（回路开关）">
-                        <input readOnly value="固定 1 秒" title="不做智能：回路开闭默认缓亮缓灭 1 秒" />
-                      </Field>
-                    ) : (
-                      <Num
-                        label="渐变时间 / 秒"
-                        value={scene.fade}
-                        min={0}
-                        onChange={(v) => scenePatch("fade", v)}
-                      />
-                    )}
-                    {(scene.automationActions || []).length > 0 && (
-                      <Field label="设备联动动作（传感器 / 窗帘等）">
-                        <div className="automation-actions">
-                          {(scene.automationActions || []).map((a: any, i: number) => (
-                            <span key={i} className="automation-chip">
-                              {a.deviceType || "设备"} · {a.action || ""}
-                              {a.delayMinutes ? ` · +${a.delayMinutes}min` : ""}
-                            </span>
+                  </div>
+                  <div className="scene-rail-list">
+                    {(() => {
+                      const q = sceneQuery.trim().toLowerCase();
+                      const rows = d.scenes.filter(
+                        (s) => !q || String(s.name || "").toLowerCase().includes(q),
+                      );
+                      if (!rows.length) return <p className="scene-rail-empty">没有匹配的情景</p>;
+                      const groups = new Map<string, Obj[]>();
+                      rows.forEach((s) => {
+                        const code = String(s.templateCode || s.name || "").trim();
+                        const g = code.split(".")[0] || "·";
+                        if (!groups.has(g)) groups.set(g, []);
+                        groups.get(g)!.push(s);
+                      });
+                      const gname: Obj = { "00": "基础", "9": "睡眠 / 起居", "13": "场景" };
+                      return Array.from(groups.entries()).map(([g, list]) => (
+                        <div key={g}>
+                          <div className="scene-rail-group">
+                            {gname[g] ? g + " · " + gname[g] : g}
+                          </div>
+                          {list.map((s) => {
+                            const onCount = Object.values(s.states || {}).filter((st: any) => st.on).length;
+                            const total = Math.max(1, d.fixtures.filter(isSceneLight).length);
+                            return (
+                              <button
+                                key={s.id}
+                                className={"scene-rail-item" + (scene?.id === s.id ? " active" : "")}
+                                onClick={() => setActiveScene(s.id)}
+                                title={`${s.name} · ${onCount} 盏点亮`}
+                              >
+                                <span className="nm">{s.name}</span>
+                                <span className="n">{onCount}</span>
+                                <span className="sub">{s.trigger || "手动"} · {Number(s.fade) || 0}s</span>
+                                <i className="bar" style={{ width: Math.round((onCount / total) * 100) + "%" }} />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                  <div className="scene-rail-foot">
+                    <Button disabled={locked} onClick={() => addScene()}>
+                      <Plus size={14} /> 新增情景
+                    </Button>
+                  </div>
+                </aside>
+
+                <div className="scene-center">
+                  <div className="scene-canvas">
+                      <div className="scene-canvas-title">
+                        <span>
+                          <i />
+                          {scene.name} <small>{p.mode === "3D" && view3d ? "3D 模型 / 非实景渲染" : "灯光分布示意 / 非实景"}</small>
+                        </span>
+                        {layerSwitch}
+                        {p.floors > 1 ? (
+                          <span className="floor-link-badge">
+                            <Link size={12} /> {levelSummary(p.floors, p.basements)}同步 · 全屋联动
+                          </span>
+                        ) : null}
+                        {(p.floors <= 1 || (p.mode === "3D" && view3d)) && (
+                          <select aria-label="场景预览楼层" value={floor} onChange={(e) => setFloor(+e.target.value)}>
+                            {floorLevels(p.floors, p.basements).map((lv) => (
+                              <option key={lv.value} value={lv.value}>{lv.label}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                      {p.floors > 1 && !(p.mode === "3D" && view3d) ? (
+                        <div
+                          className="scene-floors"
+                          style={{
+                            gridTemplateColumns:
+                              p.floors === 2 ? "1fr 1fr" : "1fr",
+                          }}
+                        >
+                          {floorLevels(p.floors, p.basements).map((lv) => (
+                            <figure className="scene-floor" key={lv.value}>
+                              <figcaption>
+                                {lv.label}
+                                <small>
+                                  {
+                                    d.fixtures.filter(
+                                      (f) => (f.floor || 1) === lv.value,
+                                    ).length
+                                  }{" "}
+                                  盏
+                                </small>
+                              </figcaption>
+                              {p.mode === "3D" && view3d ? <Spatial3D design={d} floor={lv.value} background={backgroundUrlFor(lv.value)} scene={scene} selection={selection} onSelect={setSelection} /> : <Plan
+                                design={d}
+                                scene={roamSceneOf(scene)}
+                                projectArea={p.area}
+                                showFixtureLayer={fixtureLayer}
+                                showDeviceLayer={deviceLayer}
+                                floor={lv.value}
+                                mini={false}
+                                showGrid={false}
+                                fadeTick={fadeTick}
+                                background={backgroundUrlFor(lv.value)}
+                                backgroundRect={bgRectFor(backgroundUrlFor(lv.value))}
+                                voidNote={voidNoteFor(lv.value)}
+                                readonly
+                                selection={selection}
+                                onSelect={setSelection}
+                                roam={roamOn && lv.value === roamFloor ? roamPos : null}
+                                roamArmed={roamOn}
+                                onRoamMove={(x, y) => {
+                                  setRoamFloor(lv.value);
+                                  setRoamPos({ x, y });
+                                }}
+                              />}
+                            </figure>
                           ))}
                         </div>
-                      </Field>
+                      ) : (
+                        p.mode === "3D" && view3d ? <Ueyi3D projectId={id} floor={floor} states={scene?.states} back onBack2D={() => setView3d(false)} /> : <Plan
+                          design={d}
+                          scene={roamSceneOf(scene)}
+                          projectArea={p.area}
+                          showFixtureLayer={fixtureLayer}
+                          showDeviceLayer={deviceLayer}
+                          floor={floor}
+                          mini={false}
+                          showGrid={false}
+                          fadeTick={fadeTick}
+                          background={backgroundUrlFor(floor)}
+                          backgroundRect={bgRectFor(backgroundUrlFor(floor))}
+                          voidNote={voidNoteFor(floor)}
+                          readonly
+                          selection={selection}
+                          onSelect={(s) => {
+                            setSelection(s);
+                            if (s?.kind === "devices" && d.devices.find((dev) => dev.id === s.id)?.type === "面板") setPanelEditorOpen(true);
+                          }}
+                          roam={roamOn && roamFloor === floor ? roamPos : null}
+                          roamArmed={roamOn}
+                          onRoamMove={(x, y) => {
+                            setRoamFloor(floor);
+                            setRoamPos({ x, y });
+                          }}
+                        />
+                      )}
+                    </div>
+                </div>
+
+                <aside className="scene-insp">
+                  <div className="scene-insp-tabs">
+                    {([
+                      ["scene", "情景"],
+                      ["circuit", "回路"],
+                      ["lamp", "灯具"],
+                      ["panel", "面板"],
+                    ] as const).map(([k, label]) => (
+                      <button
+                        key={k}
+                        className={sceneInsp === k ? "active" : ""}
+                        onClick={() => setSceneInsp(k)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="scene-insp-body" key={sceneInsp}>
+                    {sceneInsp === "scene" && (
+                      <div className="scene-insp-pane">
+                          <fieldset disabled={locked || busy}>
+                            <Field label="情景名称">
+                              <input
+                                value={scene.name}
+                                onChange={(e) => scenePatch("name", e.target.value)}
+                              />
+                            </Field>
+                            <Field label="情景描述">
+                              <textarea
+                                value={scene.description}
+                                onChange={(e) =>
+                                  scenePatch("description", e.target.value)
+                                }
+                              />
+                            </Field>
+                            <Field label="触发方式（设计配置）">
+                              <select
+                                value={scene.trigger}
+                                onChange={(e) => scenePatch("trigger", e.target.value)}
+                              >
+                                {["手动", "面板按键", "定时", "传感器"].map((t) => (
+                                  <option key={t}>{t}</option>
+                                ))}
+                              </select>
+                            </Field>
+                            {noSmart ? (
+                              <Field label="缓亮缓灭（回路开关）">
+                                <input readOnly value="固定 1 秒" title="不做智能：回路开闭默认缓亮缓灭 1 秒" />
+                              </Field>
+                            ) : (
+                              <Num
+                                label="渐变时间 / 秒"
+                                value={scene.fade}
+                                min={0}
+                                onChange={(v) => scenePatch("fade", v)}
+                              />
+                            )}
+                            {(scene.automationActions || []).length > 0 && (
+                              <Field label="设备联动动作（传感器 / 窗帘等）">
+                                <div className="automation-actions">
+                                  {(scene.automationActions || []).map((a: any, i: number) => (
+                                    <span key={i} className="automation-chip">
+                                      {a.deviceType || "设备"} · {a.action || ""}
+                                      {a.delayMinutes ? ` · +${a.delayMinutes}min` : ""}
+                                    </span>
+                                  ))}
+                                </div>
+                              </Field>
+                            )}
+                            {(() => {
+                              const def = sceneDefFor(scene.name);
+                              if (!def) return null;
+                              return (
+                                <>
+                                  <Field label={`场景优先级 · ${priorityName(def.priority || "")}`}>
+                                    <input readOnly value={def.priority || ""} />
+                                  </Field>
+                                  <Field label="触发条件（场景包）">
+                                    <textarea readOnly value={def.trigger || ""} />
+                                  </Field>
+                                  <Field label="退出机制（场景包）">
+                                    <textarea readOnly value={def.exit || ""} />
+                                  </Field>
+                                </>
+                              );
+                            })()}
+                            <div className="two-fields">
+                              <Button
+                                onClick={() => {
+                                  editSceneDraft((s) => {
+                                    s.customized = true;
+                                    (d?.fixtures || []).forEach((f) => {
+                                      s.states[f.id] = noSmart
+                                        ? {
+                                            on: true,
+                                            brightness: Number(f.brightnessMax) || 100,
+                                            cct: clampCctForFixture(f, f.cct ?? f.cctMin),
+                                          }
+                                        : {
+                                            on: true,
+                                            brightness: Math.min(80, f.brightnessMax),
+                                            cct: f.cctMin,
+                                            ...s.states[f.id],
+                                          };
+                                      s.states[f.id].on = true;
+                                    });
+                                  });
+                                  setFadeTick((t) => t + 1);
+                                }}
+                              >
+                                <Power size={14} />
+                                全部开启
+                              </Button>
+                              <Button
+                                onClick={() => {
+                                  editSceneDraft((s) => {
+                                    s.customized = true;
+                                    Object.values(s.states).forEach((v: any) => {
+                                      v.on = false;
+                                      if (noSmart) v.brightness = 0;
+                                    });
+                                  });
+                                  setFadeTick((t) => t + 1);
+                                }}
+                              >
+                                全部关闭
+                              </Button>
+                            </div>
+                            <div className="two-fields">
+                              <Button
+                                onClick={() => {
+                                  setSceneDraft(null);
+                                  w.undo();
+                                }}
+                                disabled={!w.canUndo || locked}
+                                title="撤回上一步"
+                              >
+                                <Undo2 size={14} />
+                                撤回
+                              </Button>
+                              <Button
+                                onClick={() => {
+                                  setSceneDraft(null);
+                                  w.redo();
+                                }}
+                                disabled={!w.canRedo || locked}
+                                title="恢复"
+                              >
+                                <Redo2 size={14} />
+                                恢复
+                              </Button>
+                            </div>
+                            <Button
+                              variant="primary"
+                              disabled={busy}
+                              onClick={() =>
+                                run(() => {
+                                  commitSceneDraft();
+                                  return flush();
+                                }, "场景已保存")
+                              }
+                            >
+                              <Save size={14} />
+                              保存场景
+                            </Button>
+                            <Button
+                              variant="danger"
+                              onClick={() => {
+                                if (confirm("删除此情景？"))
+                                  update((n) => {
+                                    n.scenes = n.scenes.filter(
+                                      (s) => s.id !== scene.id,
+                                    );
+                                  });
+                              }}
+                            >
+                              <Trash2 size={14} />
+                              删除情景
+                            </Button>
+                          </fieldset>
+                          <hr />
+                          <Button
+                            variant="primary"
+                            disabled={busy}
+                            onClick={() =>
+                              run(
+                                () =>
+                                  operation("/renders", { sceneId: scene.id, floor }),
+                                "情景示意图已生成，可在「效果与示意」查看",
+                              )
+                            }
+                          >
+                            <Image size={16} />
+                            生成此情景示意图
+                          </Button>
+                          <p className="inspector-disclaimer">
+                            切换情景时按该情景的「渐变时间」缓变过渡（亮度与色温逐步变化，不是瞬间跳变）。预览仅展示亮度与色温的视觉差异，不进行物理光照或照度计算。
+                          </p>
+
+                      </div>
                     )}
-                    {(() => {
-                      const def = sceneDefFor(scene.name);
-                      if (!def) return null;
+
+                    {sceneInsp === "circuit" && (
+                      <div className="scene-insp-pane">
+                        <div className="scene-insp-head">
+                          <span>回路</span>
+                          <span>{circuitGroups.length} 组</span>
+                        </div>
+                        {circuitGroups.map((g) => {
+                          const lit = g.fixtures.filter((f) => (scene.states[f.id] || {}).on);
+                          const lv = lit.length
+                            ? Math.round(lit.reduce((a, f) => a + (Number(scene.states[f.id]?.brightness) || 0), 0) / lit.length)
+                            : 0;
+                          return (
+                            <div key={g.key} className={"circ-row" + (lit.length ? " is-on" : "")}>
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={!!lit.length}
+                                aria-label={`回路 ${g.name} 开关`}
+                                disabled={locked}
+                                className={"switch " + (lit.length ? "on" : "")}
+                                onClick={() => circuitState(g, !lit.length)}
+                              >
+                                <i />
+                              </button>
+                              <span className="circ-row-name">
+                                {g.name}
+                                <small>{g.fixtures.length} 盏 · {g.rooms.filter(Boolean).join("、") || "未分区"}</small>
+                              </span>
+                              <span className="circ-row-pct">{lit.length ? lv + "%" : "—"}</span>
+                              <input
+                                className="circ-row-slider"
+                                type="range"
+                                min={0}
+                                max={100}
+                                value={lv}
+                                disabled={locked}
+                                aria-label={`回路 ${g.name} 亮度`}
+                                onChange={(e) => circuitBrightness(g, Number(e.target.value))}
+                              />
+                            </div>
+                          );
+                        })}
+                        {!circuitGroups.length && (
+                          <p className="scene-insp-empty">还没有灯具：先在「底图与空间」布灯。</p>
+                        )}
+                      </div>
+                    )}
+
+                    {sceneInsp === "lamp" && (() => {
+                      const lamps = d.fixtures.filter(isSceneLight);
+                      const focus = selection?.kind === "fixtures"
+                        ? lamps.find((f) => f.id === selection.id)
+                        : null;
+                      const card = (f: Obj) => {
+                        const st = scene.states[f.id] || { on: false, brightness: 0, cct: f.cctMin };
+                        return (
+                          <div className="lamp-card" key={f.id}>
+                            <div className="lamp-card-top">
+                              <span className="badge">{String(f.code || "").slice(-3)}</span>
+                              <span className="tt">
+                                {f.code} · {f.name}
+                                <small>
+                                  {d.rooms.find((r) => r.id === f.roomId)?.name || "未分配空间"}
+                                  {" · "}{circuitOf(f)}
+                                </small>
+                              </span>
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={!!st.on}
+                                aria-label={`${f.code} 开关`}
+                                disabled={locked}
+                                className={"switch " + (st.on ? "on" : "")}
+                                onClick={() => lampState(f.id, "on", !st.on)}
+                              >
+                                <i />
+                              </button>
+                            </div>
+                            <label className="lamp-line">
+                              <span>亮度 <b>{st.brightness}%</b></span>
+                              <input
+                                type="range"
+                                min={0}
+                                max={f.brightnessMax}
+                                disabled={locked || !f.dimmable}
+                                value={st.brightness}
+                                aria-label={`${f.code} 亮度`}
+                                onChange={(e) => lampState(f.id, "brightness", +e.target.value)}
+                              />
+                            </label>
+                            <label className="lamp-line">
+                              <span>色温 <b>{st.cct} K</b></span>
+                              <input
+                                className="cct-slider"
+                                type="range"
+                                min={f.cctMin}
+                                max={f.cctMax}
+                                step={100}
+                                disabled={locked || !f.tunable}
+                                value={st.cct}
+                                aria-label={`${f.code} 色温`}
+                                onChange={(e) => lampState(f.id, "cct", +e.target.value)}
+                              />
+                            </label>
+                          </div>
+                        );
+                      };
                       return (
-                        <>
-                          <Field label={`场景优先级 · ${priorityName(def.priority || "")}`}>
-                            <input readOnly value={def.priority || ""} />
-                          </Field>
-                          <Field label="触发条件（场景包）">
-                            <textarea readOnly value={def.trigger || ""} />
-                          </Field>
-                          <Field label="退出机制（场景包）">
-                            <textarea readOnly value={def.exit || ""} />
-                          </Field>
-                        </>
+                        <div className="scene-insp-pane">
+                          {focus ? card(focus) : (
+                            <p className="scene-insp-empty">
+                              点画布上的一盏灯，这里显示它的亮度与色温；下面也能直接调每一盏。
+                            </p>
+                          )}
+                          <div className="scene-insp-head">
+                            <span>{focus ? "其他灯具" : "全部灯具"}</span>
+                            <span>{lamps.length} 盏</span>
+                          </div>
+                          {lamps.filter((f) => !focus || f.id !== focus.id).map((f) => {
+                            const st = scene.states[f.id] || { on: false, brightness: 0 };
+                            return (
+                              <button
+                                key={f.id}
+                                type="button"
+                                className={"lamp-row" + (st.on ? " is-on" : "")}
+                                onClick={() => setSelection({ kind: "fixtures", id: f.id })}
+                              >
+                                <span className="nm">{f.code}</span>
+                                <span className="sub">
+                                  {d.rooms.find((r) => r.id === f.roomId)?.name || "未分配"} · {f.name}
+                                </span>
+                                <span className={"dot" + (st.on ? " on" : "")} />
+                                <span className="pct">{st.on ? st.brightness + "%" : "关"}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       );
                     })()}
-                    <div className="two-fields">
-                      <Button
-                        onClick={() => {
-                          editSceneDraft((s) => {
-                            s.customized = true;
-                            (d?.fixtures || []).forEach((f) => {
-                              s.states[f.id] = noSmart
-                                ? {
-                                    on: true,
-                                    brightness: Number(f.brightnessMax) || 100,
-                                    cct: clampCctForFixture(f, f.cct ?? f.cctMin),
-                                  }
-                                : {
-                                    on: true,
-                                    brightness: Math.min(80, f.brightnessMax),
-                                    cct: f.cctMin,
-                                    ...s.states[f.id],
-                                  };
-                              s.states[f.id].on = true;
-                            });
-                          });
-                          setFadeTick((t) => t + 1);
-                        }}
-                      >
-                        <Power size={14} />
-                        全部开启
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          editSceneDraft((s) => {
-                            s.customized = true;
-                            Object.values(s.states).forEach((v: any) => {
-                              v.on = false;
-                              if (noSmart) v.brightness = 0;
-                            });
-                          });
-                          setFadeTick((t) => t + 1);
-                        }}
-                      >
-                        全部关闭
-                      </Button>
-                    </div>
-                    <div className="two-fields">
-                      <Button
-                        onClick={() => {
-                          setSceneDraft(null);
-                          w.undo();
-                        }}
-                        disabled={!w.canUndo || locked}
-                        title="撤回上一步"
-                      >
-                        <Undo2 size={14} />
-                        撤回
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          setSceneDraft(null);
-                          w.redo();
-                        }}
-                        disabled={!w.canRedo || locked}
-                        title="恢复"
-                      >
-                        <Redo2 size={14} />
-                        恢复
-                      </Button>
-                    </div>
-                    <Button
-                      variant="primary"
-                      disabled={busy}
-                      onClick={() =>
-                        run(() => {
-                          commitSceneDraft();
-                          return flush();
-                        }, "场景已保存")
+
+                    {sceneInsp === "panel" && (() => {
+                      const panels = d.devices.filter(
+                        (v) =>
+                          v.type === "面板" &&
+                          (Number.isFinite(v.floor)
+                            ? v.floor
+                            : d.rooms.find((r) => r.id === v.roomId)?.floor || 1) === floor,
+                      );
+                      if (!panels.length) {
+                        return (
+                          <div className="scene-insp-pane">
+                            <p className="scene-insp-empty">
+                              本层还没有面板：在「智能设备」里添加，或在 3D 画布上点一块面板。
+                            </p>
+                          </div>
+                        );
                       }
-                    >
-                      <Save size={14} />
-                      保存场景
-                    </Button>
-                    <Button
-                      variant="danger"
-                      onClick={() => {
-                        if (confirm("删除此情景？"))
-                          update((n) => {
-                            n.scenes = n.scenes.filter(
-                              (s) => s.id !== scene.id,
-                            );
-                          });
-                      }}
-                    >
-                      <Trash2 size={14} />
-                      删除情景
-                    </Button>
-                  </fieldset>
-                  <hr />
-                  <Button
-                    variant="primary"
-                    disabled={busy}
-                    onClick={() =>
-                      run(
-                        () =>
-                          operation("/renders", { sceneId: scene.id, floor }),
-                        "情景示意图已生成，可在「效果与示意」查看",
-                      )
-                    }
-                  >
-                    <Image size={16} />
-                    生成此情景示意图
-                  </Button>
-                  <p className="inspector-disclaimer">
-                    切换情景时按该情景的「渐变时间」缓变过渡（亮度与色温逐步变化，不是瞬间跳变）。预览仅展示亮度与色温的视觉差异，不进行物理光照或照度计算。
-                  </p>
+                      const dev = panels.find((v) => v.id === inspPanelId) || panels[0];
+                      return (
+                        <div className="scene-insp-pane">
+                          <select
+                            className="scene-insp-select"
+                            value={dev.id}
+                            onChange={(e) => setInspPanelId(e.target.value)}
+                            aria-label="选择面板"
+                          >
+                            {panels.map((v) => (
+                              <option key={v.id} value={v.id}>
+                                {v.code || "未编号"} · {d.rooms.find((r) => r.id === v.roomId)?.name || "未分配"} · {Number(v.keys) || PANEL_DEFAULT_KEYS} 键
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            disabled={locked}
+                            onClick={() => {
+                              setSelection({ kind: "devices", id: dev.id });
+                              setPanelEditorOpen(true);
+                            }}
+                          >
+                            <PencilRuler size={14} /> 选型与刻字
+                          </Button>
+                          <PanelKeyEditor
+                            dev={dev}
+                            scenes={d.scenes}
+                            disabled={locked}
+                            room={d.rooms.find((r) => r.id === dev.roomId)}
+                            onEdit={(mutate) =>
+                              update((n) => {
+                                const dv = n.devices.find((v) => v.id === dev.id)!;
+                                normalizePanel(dv);
+                                mutate(dv);
+                              })
+                            }
+                          />
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </aside>
               </div>
-          {!noSmart && (() => {
-            const panels = d.devices.filter(
-              (v) =>
-                v.type === "面板" &&
-                (Number.isFinite(v.floor)
-                  ? v.floor
-                  : d.rooms.find((r) => r.id === v.roomId)?.floor || 1) === floor &&
-                ((v.keyLabels || []).length || (v.keyLongLabels || []).length),
-            );
-            if (!panels.length) return null;
-            return (
-              <div className="panel-demo">
-                <div className="panel-demo-head">
-                  情景面板演示
-                  <small>点键＝整场切换到该情景，所有灯具状态与情景完全一致</small>
-                </div>
-                <div className="panel-demo-list">
-                  {panels.map((dev) => {
-                    const keys: number = Number(dev.keys) || PANEL_DEFAULT_KEYS;
-                    // 4 键＝2 个大按键、每个大按键上 2 个小按键；每个小按键再分「短按 / 长按」→ 共 8 格。
-                    const groups: number[][] =
-                      keys === 4
-                        ? [[0, 1], [2, 3]]
-                        : Array.from({ length: keys }, (_, i) => [i]);
-                    const grouped = groups.length > 1 && groups[0].length > 1;
-                    const cell = (i: number, long: boolean) => {
-                      const press = PANEL_PRESSES[long ? 1 : 0];
-                      const labels: string[] = (long ? dev.keyLongLabels : dev.keyLabels) || [];
-                      const binds: string[] = (long ? dev.keyLongScenes : dev.keyScenes) || [];
-                      const sid = binds[i];
-                      const on = !!sid && scene?.id === sid;
-                      return (
-                        <button
-                          key={`${i}-${press}`}
-                          className={`panel-demo-key${long ? " long" : ""}${on ? " active" : ""}`}
-                          disabled={!sid}
-                          title={sid ? `第 ${i + 1} 键${press}：整场切换到该情景` : "未绑定情景"}
-                          onClick={() => {
-                            if (sid) setActiveScene(sid);
-                          }}
-                        >
-                          <span className="no">{long ? (panelModel(dev.productId)?.engraveLong ? "长按·下方刻字" : "长按·不刻字") : press}</span>
-                          {long ? (
-                            <b>{labels[i] || "—"}</b>
-                          ) : (
-                            <b>
-                              {keyFace(dev, i).main || "未刻字"}
-                              {keyFace(dev, i).sub && <small> {keyFace(dev, i).sub}</small>}
-                            </b>
-                          )}
-                        </button>
-                      );
-                    };
-                    const subKey = (i: number) => (
-                      <div className="panel-demo-subkey" key={i}>
-                        <span className="panel-demo-subkey-label">第 {i + 1} 键</span>
-                        {cell(i, false)}
-                        {cell(i, true)}
-                      </div>
-                    );
-                    return (
-                      <div className="panel-demo-panel" key={dev.id}>
-                        <div className="panel-demo-name">
-                          {dev.code} · {dev.name}
-                          {` · ${dev.brand || "品牌待选"} ${dev.series || ""} ${dev.model || "型号待选"} · ${keys} 键 · ${engraveModeLabel(dev.engraveMode)} · ${panelModel(dev.productId)?.engraveLong ? "长按刻在键下方" : "长按不刻字"}`}
-                        </div>
-                        <div
-                          className={`panel-demo-grid${grouped ? " grouped" : ""}`}
-                          style={{
-                            gridTemplateColumns: `repeat(${groups.length}, 1fr)`,
-                          }}
-                        >
-                          {groups.map((grp, gi) =>
-                            grouped ? (
-                              <div className="panel-demo-bigkey" key={gi}>
-                                <span className="panel-demo-bigkey-label">大按键 {gi + 1}</span>
-                                {grp.map((i) => subKey(i))}
-                              </div>
-                            ) : (
-                              grp.map((i) => subKey(i))
-                            ),
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-              <section className="scene-lamps">
-                <div className="section-heading">
-                  <h2>
-                    {noSmart ? "按回路开闭" : "每一盏灯，独立调节"}{" "}
-                    <span>
-                      {noSmart
-                        ? circuitGroups.length
-                        : d.fixtures.filter(isSceneLight).length}
-                    </span>
-                  </h2>
-                  <span className="subtle">
-                    {noSmart ? "不做智能 · 回路开关 · 缓亮缓灭 1 秒" : "开关 · 亮度 · 色温"}
-                  </span>
-                </div>
-                {noSmart && (
-                  <p className="subtle circuit-hint">
-                    本项目「不做智能」：情景页只控制回路（整条回路一起开/关），不逐灯调光调色温。
-                    回路按空间自动划分，可在「灯具配置」里给单灯改回路编号。
-                  </p>
-                )}
-                {noSmart ? (
-                  <div className="circuit-grid">
-                    {circuitGroups.map((g) => {
-                      const on = g.fixtures.some((f) => (scene.states[f.id] || {}).on);
-                      const power = g.fixtures.reduce(
-                        (a, f) => a + (Number(f.power) || 0),
-                        0,
-                      );
-                      return (
-                        <div key={g.key} className={"circuit-card " + (on ? "is-on" : "")}>
-                          <div className="circuit-card-head">
-                            <span className="circuit-card-icon">
-                              <Power size={20} />
-                            </span>
-                            <section>
-                              <b>回路 {g.name}</b>
-                              <small>
-                                {p.floors > 1
-                                  ? `${floorLabel(g.floor, p.basements)} · `
-                                  : ""}
-                                {g.rooms.join("、")} · {g.fixtures.length} 盏 · {power} W
-                              </small>
-                            </section>
-                            <button
-                              disabled={locked}
-                              role="switch"
-                              aria-checked={on}
-                              aria-label={`回路 ${g.name} 开关`}
-                              className={"switch " + (on ? "on" : "")}
-                              onClick={() => circuitState(g, !on)}
-                            >
-                              <i />
-                            </button>
-                          </div>
-                          <div className="circuit-card-lamps">
-                            {g.fixtures.map((f) => (
-                              <span
-                                key={f.id}
-                                className={
-                                  "circuit-lamp " +
-                                  ((scene.states[f.id] || {}).on ? "on" : "")
-                                }
-                              >
-                                {f.code}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {!circuitGroups.length && (
-                      <p className="subtle">还没有灯具：先在「底图与空间」布灯。</p>
-                    )}
-                  </div>
-                ) : (
-                <div className="lamp-control-grid">
-                  {d.fixtures.filter(isSceneLight).map((f) => {
-                    const st = scene.states[f.id] || {
-                      on: false,
-                      brightness: 0,
-                      cct: f.cctMin,
-                    };
-                    return (
-                      <div
-                        key={f.id}
-                        className={"lamp-control " + (st.on ? "is-on" : "")}
-                      >
-                        <div>
-                          <span className="lamp-control-icon">
-                            <Lightbulb size={21} />
-                          </span>
-                          <section>
-                            <b>
-                              {f.code} · {f.name}
-                            </b>
-                            <small>
-                              {d.rooms.find((r) => r.id === f.roomId)?.name ||
-                                "未分配空间"}
-                            </small>
-                          </section>
-                          <button
-                            disabled={locked}
-                            role="switch"
-                            aria-checked={st.on}
-                            aria-label={`${f.code} 开关`}
-                            className={"switch " + (st.on ? "on" : "")}
-                            onClick={() => lampState(f.id, "on", !st.on)}
-                          >
-                            <i />
-                          </button>
-                        </div>
-                        <label>
-                          <span>
-                            亮度 <b>{st.brightness}%</b>
-                          </span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={f.brightnessMax}
-                            disabled={locked || !f.dimmable}
-                            value={st.brightness}
-                            aria-label={`${f.code} 亮度`}
-                            onChange={(e) =>
-                              lampState(f.id, "brightness", +e.target.value)
-                            }
-                          />
-                        </label>
-                        <label>
-                          <span>
-                            色温 <b>{st.cct} K</b>
-                          </span>
-                          <input
-                            className="cct-slider"
-                            type="range"
-                            min={f.cctMin}
-                            max={f.cctMax}
-                            step={100}
-                            disabled={locked || !f.tunable}
-                            value={st.cct}
-                            aria-label={`${f.code} 色温`}
-                            onChange={(e) =>
-                              lampState(f.id, "cct", +e.target.value)
-                            }
-                          />
-                        </label>
-                      </div>
-                    );
-                  })}
-                </div>
-                )}
-              </section>
             </>
           ) : (
             <>
@@ -6611,10 +6714,8 @@ export function Workspace({
                       ))}
                     </select>
                   </div>
-                  <SceneModel3D projectId={id} hasDxf={hasDxfDrawing} design={d} floor={floor}
-                    background={backgroundUrlFor(floor)} selection={selection} onSelect={setSelection}
-                   
-                    showFixtures={fixtureLayer} showDevices={deviceLayer} />
+                  {/* 这个分支里还没有任何情景：三维按内核自己的预置亮，不传 states */}
+                  <Ueyi3D projectId={id} floor={floor} back={false} />
                 </div>
               )}
               <div className="empty-state">
@@ -6770,7 +6871,7 @@ export function Workspace({
               <div>
                 <h1>交付之前，再认真一点。</h1>
                 <p>
-                  五道人工复核与版本绑定，其中「需求」「报价」「交付」三道要先在「设计师协作」里完成前置确认（见各卡片），否则签名会被拦下；全部五道签完才能冻结。任何设计修改重置复核。业务仍为 NOT_RELEASED。
+                  五道人工复核与版本绑定，其中「需求」「价格」「交付」三道要先在「设计师协作」里完成前置确认（见各卡片），否则签名会被拦下；全部五道签完才能冻结。任何设计修改重置复核。业务仍为 NOT_RELEASED。
                 </p>
               </div>
               <Button
@@ -6819,11 +6920,11 @@ export function Workspace({
             {[
               ["requirements", "需求复核", "资料完整、客户保护、范围与责任确认",
                 "前置：在「设计师协作」确认客户保护规则与合作范围、补齐十项责任人与需求资料"],
-              ["layout", "户型和图纸复核", "墙体、门窗、房间名称、尺寸和楼层", ""],
-              ["lighting", "产品和灯具复核", "独立灯具、电源回路、智能场景与安装参数", ""],
-              ["pricing", "成本和报价复核", "实际采购、工程费用、准备金及增项取证",
+              ["layout", "布置复核", "墙体、门窗、房间名称、尺寸和楼层", ""],
+              ["lighting", "灯光复核", "独立灯具、电源回路、智能场景与安装参数", ""],
+              ["pricing", "价格复核", "实际采购、工程费用、准备金及增项取证",
                 "前置：在「设计师协作」确认范围、核实成本，并补齐增项 / 付款 / 退款返工规则"],
-              ["delivery", "交付和施工复核", "交付资料、碰撞检查、安装调试与变更闭环",
+              ["delivery", "交付复核", "交付资料、碰撞检查、安装调试与变更闭环",
                 "前置：在「设计师协作」逐个确认四个交付包，且没有待确认的变更"],
             ].map(([key, title, desc, pre]) => (
               <div key={key} className={p.reviews[key] ? "done" : ""}>
@@ -7626,7 +7727,9 @@ export function Workspace({
               title={lampNeedsReason && !lampCctReason.trim() ? "请先填写偏离 3000K 单色的原因" : undefined}
               onClick={() => {
                 placeLamps(lampCount);
-                closePlace();
+                // W-1：不走 closePlace()（它会把 tool 打回 select）。只关弹窗、清落点，保持布灯模式好连点。
+                setModal("");
+                setPlacePoint(null);
               }}
             >
               <Plus size={15} /> 确认布灯
@@ -7741,9 +7844,14 @@ export function Workspace({
               variant="primary"
               disabled={locked}
               onClick={() => {
-                if (addObject === "curtain") placeCurtain();
-                else placeDevice();
-                exitAddMode();
+                if (addObject === "curtain") {
+                  placeCurtain();
+                  exitAddMode();
+                  return;
+                }
+                // F6（批 5）：加设备确认后只关对话框、清落点、保模式好连加（同 7728 布灯 W-1）；窗帘照旧退出。
+                placeDevice();
+                setPlacePoint(null);
               }}
             >
               <Plus size={15} /> {addObject === "curtain" ? "确认添加窗帘" : "确认添加设备"}
@@ -7939,6 +8047,70 @@ export function Workspace({
               各自的灯具与情景分别统计。
             </p>
           </div>
+        </Modal>
+      )}
+      {addSpaceOpen && (
+        <Modal
+          title="新增空间"
+          subtitle="先选分区，再选房间；同一分区连续新增时直接落到房间屏。空间不需要画边界，编号与情景按空间码生成。"
+          onClose={() => setAddSpaceOpen(false)}
+        >
+          {addSpaceActive ? (
+            <>
+              <div className="add-space-head">
+                <button
+                  className="mini-btn"
+                  title="返回分区列表"
+                  onClick={() => setAddSpaceGroup("")}
+                >
+                  ←
+                </button>
+                <b>{addSpaceActive.group}</b>
+                <span className="subtle">本分区 {addSpaceActive.spaces.length} 间</span>
+              </div>
+              <div className="add-space-rows">
+                {addSpaceActive.spaces.map((sc) => {
+                  const count = (d?.rooms || []).filter(
+                    (r) => roomSpaceCodeOf(r)?.code === sc.code,
+                  ).length;
+                  return (
+                    <button
+                      key={sc.code}
+                      className="add-space-row"
+                      disabled={locked}
+                      onClick={() => {
+                        addSpaceByCode(sc.code);
+                        setAddSpaceOpen(false);
+                      }}
+                    >
+                      <span className="nm">{sc.name}</span>
+                      <span className="ct">{count ? `已有 ${count} · 再加一间` : "未选"}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <>
+              {!addSpaceHouse && (
+                <p className="subtle" style={{ margin: "0 0 8px" }}>
+                  未填户型，显示全部分区
+                </p>
+              )}
+              <div className="add-space-rows">
+                {addSpaceGroups.map((g) => (
+                  <button
+                    key={g.group}
+                    className="add-space-row"
+                    onClick={() => setAddSpaceGroup(g.group)}
+                  >
+                    <span className="nm">{g.group}</span>
+                    <span className="ct">{g.spaces.length} 间</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </Modal>
       )}
       {modal === "scene-setup" && (
@@ -8504,6 +8676,23 @@ function FixtureFields({
             </p>
           </>
         )}
+        <Num
+          label="功率 W"
+          value={f.power}
+          min={0}
+          onChange={(v) => patch("power", v)}
+        />
+        <Num
+          label="光通量 lm"
+          value={f.lumen ?? 0}
+          min={0}
+          onChange={(v) => patch("lumen", v)}
+        />
+        {String(f.type || "").includes("吊灯") && !(Number(f.power) > 0) && (
+          <p className="field-hint">
+            吊灯需手填功率与光通量（产品库补全后以产品库为准）。
+          </p>
+        )}
         {f.type !== "灯带" && !isDecorativeLight(f.type) && (
           <>
         <Num
@@ -8602,23 +8791,6 @@ function FixtureFields({
           长宽比只改形状（拉伸），不改外径。
         </p>
           </>
-        )}
-        <Num
-          label="功率 W"
-          value={f.power}
-          min={0}
-          onChange={(v) => patch("power", v)}
-        />
-        <Num
-          label="光通量 lm"
-          value={f.lumen ?? 0}
-          min={0}
-          onChange={(v) => patch("lumen", v)}
-        />
-        {String(f.type || "").includes("吊灯") && !(Number(f.power) > 0) && (
-          <p className="field-hint">
-            吊灯需手填功率与光通量（产品库补全后以产品库为准）。
-          </p>
         )}
         {!isDecorativeLight(f.type) && (
         <Num

@@ -8,6 +8,8 @@
 
 来自 **光律 GUANGLV**（晷季照明）—— 一套在真实照明项目里跑出来的出图工具，开源给你用。
 
+**当前版本 v1.3.1**：单用户免登录、空库启动，设置页可一键检查更新。
+
 ![三维灯光场景](docs/preview-3d.png)
 ![图纸解析与情景](docs/preview-plan.png)
 
@@ -99,13 +101,13 @@ cd guanglv-workbench
 
 **首次启动要下依赖（约 1–3 分钟），之后每次都是一秒起。**
 
-打开 `http://127.0.0.1:8000`。**初始密码会直接打印在终端里**（同时也写在 `data/.initial-admin-password`），账号 `admin`，登录后要求改密。
+打开 `http://127.0.0.1:8000` 就能用。**没有账号、没有密码、没有登录页**——这是单用户本机工作台，谁在这台机器上打开就是谁的工作空间。首次启动是**空库**，不带任何示例项目。
 
 ### Docker
 
 ```bash
 docker compose up -d
-docker logs guanglv-workbench      # 首次启动在这里看初始密码
+docker logs guanglv-workbench      # 看启动是否正常
 ```
 
 数据落在 `guanglv-data` 卷里，删卷即重置。换端口改 `docker-compose.yml` 里 `8000:8000` 的左边。
@@ -139,10 +141,33 @@ python3 start.py --host 0.0.0.0     # 允许局域网访问（默认只监听本
 python3 start.py --rebuild          # 改了前端源码后重建
 ```
 
+## 检查更新
+
+工作台设置页点「检查更新」，后端去 GitHub 问一次版本，三种口径依次回退：
+
+1. 仓库的 latest release
+2. 仓库里版本号最大的 tag
+3. `main` 分支的 `VERSION` 文件
+
+比较的是版本号本身，不是发布时间。没网、被墙、GitHub 限流都只是显示「检查失败」，不影响本机使用。
+
+```env
+# .env 里改成你自己的仓库（fork 之后）
+UPDATE_REPO=你的账号/guanglv-workbench
+```
+
+手动更新（仓库里 `frontend/dist/` 已构建好，覆盖代码不用装 Node）：
+
+```bash
+cd guanglv-workbench
+git pull            # 或者下载新版本压缩包覆盖
+python3 start.py    # 后端重启即生效；data/ 不动，项目还在
+```
+
 ## 数据与配置
 
 - 数据全在 `data/`（SQLite + 上传文件），删掉就等于全部重置
-- 配置在 `.env`（首次启动自动从 `.env.example` 复制）：`HOST` / `PORT` / `DATA_DIR` / `MAX_UPLOAD_MB`
+- 配置在 `.env`（首次启动自动从 `.env.example` 复制）：`HOST` / `PORT` / `DATA_DIR` / `MAX_UPLOAD_MB` / `UPDATE_REPO`
 - 想换图纸识别模型，改 `.env` 里的 `PLAN_VISION_*`；不填也能出图，用的是本地几何分析
 
 ## 接入你自己的 AI（可选）
@@ -183,7 +208,7 @@ requirements.txt      Python 依赖
 - 三维是**观感演示**：不做照度计算，不能当施工或报价依据
 - 家具类型按形状尺寸推断，会出错——可以手动改
 - 施工、电气校核、正式报价仍须专业人员
-- 服务默认只监听 `127.0.0.1`。用 `--host 0.0.0.0` 放到局域网或公网时，请自己加一层反向代理和 HTTPS——它自带登录，但不是为公网暴露设计的
+- 服务默认只监听 `127.0.0.1`。它没有登录口令，**不要直接暴露到公网**；确实要在局域网共享，用 `--host 0.0.0.0` 并自己加反向代理与访问控制
 
 ## 许可
 
@@ -199,54 +224,34 @@ MIT License（内置 three.js、字体等遵循其自身许可）。绘图字体
 
 <table>
 <tr>
-<td align="center" width="50%">
+<td align="center" width="33%">
 
 **技术咨询**
 
-扫码加老胡
+出图、三维、情景规则怎么用
 
-<img src="docs/wechat-support.jpg" width="240" alt="技术咨询 · 老胡">
+<img src="docs/wechat-support.jpg" width="220" alt="技术咨询">
 
 </td>
-<td align="center" width="50%">
+<td align="center" width="33%">
 
 **商务合作**
 
-扫码加檀越
+设计、智能、产品与落地交付
 
-<img src="docs/wechat-business.jpg" width="240" alt="商务合作 · 檀越">
+<img src="docs/wechat-business.jpg" width="220" alt="商务合作">
+
+</td>
+<td align="center" width="33%">
+
+**KNX培训课程咨询**
+
+KNX 系统课程与项目陪跑
+
+<img src="docs/wechat-knx.jpg" width="220" alt="KNX培训课程咨询">
 
 </td>
 </tr>
 </table>
 
----
-
-## English
-
-**Guanglv Workbench** turns a lighting-design DXF drawing into an interactive 3D lighting scene plus a full set of smart-home scenes.
-
-```bash
-git clone https://github.com/twbzpngd58-beep/guanglv-workbench.git
-cd guanglv-workbench
-./start.sh                     # Windows: double-click start.bat
-```
-
-Open `http://127.0.0.1:8000` and log in as `admin` — **the initial password is printed in the terminal on first run**. Then create a project, upload `samples/sample-plan.dxf`, and export.
-
-Or with Docker:
-
-```bash
-docker compose up -d
-docker logs guanglv-workbench   # initial password appears here
-```
-
-**Requirements:** Python 3.11+ (or Docker). No Node, no database server, no cloud account, no API key — the frontend ships prebuilt and the whole pipeline runs offline.
-
-**What it does:** parse DXF → confirm rooms → place fixtures → generate circuits and panel key layouts → derive smart scenes from selector rules → export offline interactive HTML, JSON, Excel, Word, PDF, PNG, DXF or ZIP.
-
-**What it is not:** a lighting simulation (no illuminance calculation), a construction-drawing generator, or a pricing tool. Parsing produces a high-quality draft that a designer confirms.
-
-**License:** MIT.
-
-*This is the upstream of our own production pipeline. If you want to use it in a real project — design, smart-home integration, fixtures, delivery — talk to us (QR codes above).*
+同一组二维码也内嵌在工作台里：**使用指南**弹窗底部「需要帮助？」和**工作台设置 → 关于与联系**。

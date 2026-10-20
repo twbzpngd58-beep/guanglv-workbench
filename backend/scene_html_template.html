@@ -315,7 +315,7 @@ function buildStage() {
         g.appendChild(el("circle", {cx:0, cy:0, r:radius, fill:`url(#spot-${name}-${f.id})`}));
       });
       g.appendChild(defs);
-      // 光斑不穿墙（2026-10-17）：按「空间边界 + 墙体」裁一圈，只在这一圈里铺光。
+      // 光斑不穿墙（现场 2026-10-17）：按「空间边界 + 墙体」裁一圈，只在这一圈里铺光。
       const clipD = poolClipPathOf(f, r * Math.max(1, ratio));
       if (clipD) {
         const cp = el("clipPath", {id:`spotclip-${f.id}`, clipPathUnits:"userSpaceOnUse"});

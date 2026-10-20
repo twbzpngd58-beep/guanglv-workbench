@@ -90,6 +90,33 @@ function applyFixtureClip(
   }
 }
 
+/** 灯位到最近墙/空间边界（米）。光锥半径收到这个距离，避免穿墙，又不用裁成扇面。 */
+function wallClearance(design: Obj, fixture: Obj): number {
+  const fx = +fixture.x, fy = +fixture.y;
+  if (!Number.isFinite(fx) || !Number.isFinite(fy)) return 0.9;
+  const segs: { x: number; y: number; x2: number; y2: number }[] = [];
+  for (const w of (design.walls || [])) {
+    segs.push({ x: +w.x0, y: +w.y0, x2: +w.x1, y2: +w.y1 });
+  }
+  for (const r of (design.rooms || [])) {
+    const poly = boundary(r);
+    for (let i = 0; i < poly.length; i += 1) {
+      const a = poly[i], b = poly[(i + 1) % poly.length];
+      segs.push({ x: a.x, y: a.y, x2: b.x, y2: b.y });
+    }
+  }
+  let best = Infinity;
+  for (const s of segs) {
+    if (![s.x, s.y, s.x2, s.y2].every(Number.isFinite)) continue;
+    const dx = s.x2 - s.x, dy = s.y2 - s.y;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((fx - s.x) * dx + (fy - s.y) * dy) / len2)) : 0;
+    const d = Math.hypot(fx - (s.x + dx * t), fy - (s.y + dy * t)) / 26;
+    if (d > 0.05 && d < best) best = d;
+  }
+  return Number.isFinite(best) ? best : 0.9;
+}
+
 function loadThree(): Promise<any> {
   if (window.THREE?.OrbitControls) return Promise.resolve(window.THREE);
   if (!threeReady) {
@@ -114,7 +141,7 @@ function loadThree(): Promise<any> {
 }
 
 /** 光斑贴图：径向渐变的暖光圈。
- *  2026-10-16 报「三维里看不到灯具亮灯效果」——原来是「纯色圆盘平铺」，在浅色地面上几乎看不见；
+ *  现场 2026-10-16 报「三维里看不到灯具亮灯效果」——原来是「纯色圆盘平铺」，在浅色地面上几乎看不见；
  *  换成径向渐变 + 加色混合，才像一摊真的灯光。贴图只做一次，所有灯具共用。 */
 let _poolTex: any = null;
 function poolTexture(): any {
@@ -158,13 +185,13 @@ export function SceneModel3D({
   selectedRoomId?: string;
   selectedFurnitureId?: string;
   onFurnitureSelect?: (id: string) => void;
-  /** 拖完一盏灯就把新位置报给外层（2026-10-16：三维里灯具要能挪）。 */
+  /** 拖完一盏灯就把新位置报给外层（现场 2026-10-16：三维里灯具要能挪）。 */
   onFixtureMove?: (id: string, x: number, y: number) => void;
   showFurniture?: boolean;
-  /** 正在「放置灯具」：不铺光斑（一团光晕挡着看不清灯在哪），只留灯具图标（2026-10-16）。 */
+  /** 正在「放置灯具」：不铺光斑（一团光晕挡着看不清灯在哪），只留灯具图标（现场 2026-10-16）。 */
   placingLamps?: boolean;
   editFixtures?: boolean;
-  /** 小人漫游（2026-10-17「3d 界面中小人漫游无法使用」）：非空＝在这个设计坐标画小人，
+  /** 小人漫游（现场 2026-10-17「3d 界面中小人漫游无法使用」）：非空＝在这个设计坐标画小人，
    *  按住地面拖动就走；传感器范围同时铺在地上，走进范围关联灯亮（外层已叠进 scene）。 */
   roam?: { x: number; y: number } | null;
   onRoamMove?: (x: number, y: number) => void;
@@ -182,7 +209,7 @@ export function SceneModel3D({
   onRoamMoveRef.current = onRoamMove;
   const topViewRef = useRef<(() => void) | null>(null);
   const [topView, setTopView] = useState(false);
-  const [night, setNight] = useState(false), [beams, setBeams] = useState(true);
+  const [night, setNight] = useState(true), [beams, setBeams] = useState(true);
   const appearance = useRef({night, beams, editFixtures});
   appearance.current = {night, beams, editFixtures};
   // 俯视图是锁定状态：画布重建（改灯位、换情景）不能把它悄悄弹回立体角度
@@ -192,7 +219,7 @@ export function SceneModel3D({
   const [ready, setReady] = useState(false);
   const lightMeshes = useRef<Map<string, any>>(new Map());
   const selectedMeshes = useRef<Map<string, any>>(new Map());
-  // 情景切换渐变（2026-10-17「渐变时间失效」）：三维里也要按情景的渐变时间缓变，
+  // 情景切换渐变（现场 2026-10-17「渐变时间失效」）：三维里也要按情景的渐变时间缓变，
   // 不能瞬间跳变。shownStates 逐帧变化，下面的渲染循环据此重画。
   const shownStates = useSceneFade(activeScene);
   const live = useRef({ activeScene, activeStates: shownStates, selection, showFixtures, showDevices, selectedRoomId, selectedFurnitureId, showFurniture, placingLamps, roam });
@@ -220,21 +247,35 @@ export function SceneModel3D({
       const el = host.current;
       if (disposed || !el) return;
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-      renderer.setClearColor(0x1c2927);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setClearColor(0x0d0e12);
       renderer.outputEncoding = THREE.sRGBEncoding;
+      // 对齐优邑珺和（2026-10-19 作者：光线表达要一致）：
+      // ACES 压高光 + 开阴影，灯照下去才有明暗层次，不是一片平涂。
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.18;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       el.appendChild(renderer.domElement);
       const world = new THREE.Scene();
-      world.background = new THREE.Color(0x1c2927);
+      world.background = new THREE.Color(0x0d0e12);
       const camera = new THREE.PerspectiveCamera(48, 1, .05, 250);
       const controls = new THREE.OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
       controls.maxPolarAngle = Math.PI / 2.08;
-      const hemi = new THREE.HemisphereLight(0xe4f3ff, 0x484d40, .9);
+      // 配比照优邑珺和：半球光打底、主光斜射投影、补光提暗部（夜里不做满亮环境光）
+      const hemi = new THREE.HemisphereLight(0xdfe8ff, 0x1a1c22, .12);
       world.add(hemi);
-      const sun = new THREE.DirectionalLight(0xffe9c8, .65);
+      const sun = new THREE.DirectionalLight(0xfff2e2, .32);
       sun.position.set(-8, 16, 9);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(2048, 2048);
+      sun.shadow.bias = -0.0006;
+      sun.shadow.normalBias = 0.02;
       world.add(sun);
+      const fill = new THREE.DirectionalLight(0xcfe0ff, .10);
+      fill.position.set(10, 9, -8);
+      world.add(fill);
 
       // DXF geometry is only assigned to floor 1: the parser does not carry a floor
       // identifier. Never present the same CAD walls as verified geometry on every level.
@@ -251,6 +292,18 @@ export function SceneModel3D({
       const [x0, z0, x1, z1] = box;
       const width = Math.max(1, x1 - x0), depth = Math.max(1, z1 - z0);
       const centerX = (x0 + x1) / 2, centerZ = (z0 + z1) / 2;
+      // 阴影相机按模型尺度铺开：太小只有中间有影子，太大阴影就糊了
+      const diag = Math.max(x1 - x0, z1 - z0, 3);
+      sun.position.set(-diag * 0.45, diag * 1.6, diag * 0.6);
+      sun.target.position.set(0, 0, 0);
+      world.add(sun.target);
+      {
+        const sc = sun.shadow.camera;
+        sc.left = -diag; sc.right = diag; sc.top = diag; sc.bottom = -diag;
+        sc.near = 0.5; sc.far = diag * 8; sc.updateProjectionMatrix();
+      }
+      // 夜色下要换色的材质：白天浅、夜里深（优邑珺和是暗场打光）
+      const toneMats: { mat: any; day: number; night: number }[] = [];
       const toWorld = (x: number, z: number) => [x - centerX, z - centerZ];
       // CAD 项目：设计坐标 = 米 × 26（与导出 DXF、二维画布、图纸灯位同步同一口径）；
       // 无 CAD 的项目沿用 820×690 画布铺满模型范围。
@@ -265,6 +318,8 @@ export function SceneModel3D({
       );
       floorMesh.rotation.x = -Math.PI / 2;
       floorMesh.position.y = -.025;
+      floorMesh.receiveShadow = true;
+      toneMats.push({ mat: floorMesh.material, day: 0xb0bdb0, night: 0x171a1f });
       world.add(floorMesh);
       if (background) {
         const texture = new THREE.TextureLoader().load(background, () => { if (!disposed) render(); },
@@ -273,7 +328,8 @@ export function SceneModel3D({
         floorMesh.material.map = texture;
         floorMesh.material.needsUpdate = true;
       }
-      const wallMat = new THREE.MeshStandardMaterial({ color: 0x9dafa6, roughness: .86, side: THREE.DoubleSide });
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0x9dafa6, roughness: .70, metalness: .02, side: THREE.DoubleSide });
+      toneMats.push({ mat: wallMat, day: 0x9dafa6, night: 0x33383f });
       // 墙段同时按世界坐标存一份：面板这类墙装设备要吸到墙上（不能悬浮在半空）。
       const wallSegs: WallSeg[] = [];
       const roomPatches: { id: string; color: any; mesh: any }[] = [];
@@ -289,6 +345,7 @@ export function SceneModel3D({
         const [cx, cz] = toWorld((ax + bx) / 2, (az + bz) / 2);
         wall.position.set(cx, bottom + height / 2, cz);
         wall.rotation.y = -Math.atan2(bz - az, bx - ax);
+        wall.castShadow = true; wall.receiveShadow = true;
         world.add(wall);
         const [wax, waz] = toWorld(ax, az);
         const [wbx, wbz] = toWorld(bx, bz);
@@ -301,7 +358,7 @@ export function SceneModel3D({
       }
       if (cad || useDesign) {
         // 家具走共享的固定样式（frontend/src/furnitureModels.ts），与三维页引擎同一套构件表：
-        // 以前这里每件只是一个大方盒——2026-10-14「家具基本上都是矩形框」说的就是它。
+        // 以前这里每件只是一个大方盒——现场 2026-10-14「家具基本上都是矩形框」说的就是它。
         // 材质四档（木/布/白/金属），朝向按「背面贴最近的墙」自动转正。
         const furnMats: any[] = [
           null,
@@ -310,9 +367,11 @@ export function SceneModel3D({
           new THREE.MeshStandardMaterial({ color: 0xe4e0d6, roughness: .85 }),   // 白
           new THREE.MeshStandardMaterial({ color: 0xa9b1b6, roughness: .50 }),   // 金属
         ];
+        [[0xa9834f, 0x4a3524], [0x93a094, 0x39413d], [0xe4e0d6, 0x6f7168], [0xa9b1b6, 0x4a5257]]
+          .forEach(([day, nightC], i) => toneMats.push({ mat: furnMats[i + 1], day, night: nightC }));
         const furniture = Array.isArray(design.furniture) ? design.furniture
           .filter(f => +(f.floor || 1) === floor)
-          // 画之前先规范：有轮廓的件 x/y 一律取轮廓外接框中心（2026-10-16「形状全错、穿墙」
+          // 画之前先规范：有轮廓的件 x/y 一律取轮廓外接框中心（现场 2026-10-16「形状全错、穿墙」
           // 就是 x/y 被别的写入方覆盖成了老位置、轮廓却在新位置——三维盒子于是画到墙外）。
           .map(f => {
             const nf = normalizeFurniture(f);
@@ -320,7 +379,7 @@ export function SceneModel3D({
               w: +nf.widthM, d: +nf.depthM, h: +nf.heightM,
               rot: -(+nf.rotation || 0), designFurniture: true,
               // 只有「占地即形状」的大类（柜/沙发/岛台/地毯）且轮廓明显不是矩形时才挤出；
-              // 马桶、浴缸、床这些器物一律用标准造型（2026-10-16）。
+              // 马桶、浴缸、床这些器物一律用标准造型（现场 2026-10-16）。
               pts: outlineDrivesShape(nf) ? furniturePoints(nf) : null };
           })
           : (model?.furniture || []).map((f: Obj, i: number) => ({ ...f, id: `cad-furniture-${f.id || f.i || i}` }));
@@ -336,7 +395,7 @@ export function SceneModel3D({
           // 逐件改过的朝向（rot 度）优先，其次是贴墙推断出来的
           group.rotation.y = item.rot != null ? (Number(item.rot) || 0) * Math.PI / 180 : fit.yaw;
           if (Array.isArray(item.pts) && item.pts.length >= 3) {
-            // 画过轮廓的家具（2026-10-16「主卧衣帽间的柜子轮廓我改过、没生效」）：
+            // 画过轮廓的家具（现场 2026-10-16「主卧衣帽间的柜子轮廓我改过、没生效」）：
             // 按轮廓挤出真形状；只按外接框画，L 形柜子会变成一个方盒子。
             const shape = new THREE.Shape();
             item.pts.forEach((q: Obj, i: number) => {
@@ -367,6 +426,7 @@ export function SceneModel3D({
               group.add(mesh);
             }
           }
+          group.traverse((o: any) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
           world.add(group);
           const outline = new THREE.BoxHelper(group, 0xf4ba64);
           outline.visible = false; world.add(outline);
@@ -466,10 +526,11 @@ export function SceneModel3D({
         const glow = new THREE.Mesh(new THREE.CircleGeometry(.66, 32),
           new THREE.MeshBasicMaterial({ map: poolTexture(), color: 0xffc98a, transparent: true,
             opacity: .42, blending: THREE.AdditiveBlending,
-            depthWrite: false, side: THREE.DoubleSide }));
+            depthWrite: false, side: THREE.DoubleSide, toneMapped: false,
+            polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
         glow.rotation.x = -Math.PI / 2;
         glow.position.set(x, .015, z);
-        // 灯具图标（2026-10-16「需要有灯具图标，方便移动」）：地上一枚**灯符号**——
+        // 灯具图标（现场 2026-10-16「需要有灯具图标，方便移动」）：地上一枚**灯符号**——
         // 深色外圈＋暖色灯面＋中心亮点（跟二维画布那个灯点一个意思），放在光斑之上。
         // 关键在于：不管光斑在不在、灯亮不亮，这个符号始终看得见，俯视图才认得出「哪是一盏灯」。
         const icon = new THREE.Group();
@@ -486,19 +547,22 @@ export function SceneModel3D({
         flat(new THREE.CircleGeometry(.225, 32), 0xffc978, .032);      // 灯面
         flat(new THREE.CircleGeometry(.075, 16), 0xfff6de, .034);      // 中心亮点
         icon.position.set(x, 0, z);
-        // 抓取球（2026-10-16「能选中灯具但不能拖动」）：0.42m 的隐形球，
+        // 抓取球（现场 2026-10-16「能选中灯具但不能拖动」）：0.42m 的隐形球，
         // 点/拖灯靠它命中——原来只有 0.12m 的小球，鼠标根本点不中，更别说拖。
         const grab = new THREE.Mesh(new THREE.SphereGeometry(.42, 10, 8),
           new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
         grab.position.set(x, .24, z);
         grab.userData = { kind: "fixtures", id: fixture.id, roomId: fixture.roomId };
+        // 光斑贴地但用 polygonOffset 往相机方向顶一点：
+        // 和房间地面片只差 13mm，远视角下 z-fighting 会把整块光斑吃掉（实测抬到 1.5m 就出现）
+        glow.position.y = .012; glow.renderOrder = 3;
         world.add(marker, glow, icon, grab);
         let strip;
         const stripY = Math.max(.3, (+fixture.installHeight || +floorRooms.find(r => r.id === fixture.roomId)?.heightM || 2.8) - .05);
         if (fixture.stripPath?.length > 1) {
           const path = fixture.stripPath.map((p: Obj) => {
             const [px, pz] = fromPlan(+p.x, +p.y);
-            // 灯带装在吊顶 / 灯槽里（2026-10-17「3D 视角下在地面上，这是不对的」）：按安装高度画，不贴地。
+            // 灯带装在吊顶 / 灯槽里（现场 2026-10-17「3D 视角下在地面上，这是不对的」）：按安装高度画，不贴地。
             return new THREE.Vector3(px, stripY, pz);
           });
           strip = new THREE.Line(new THREE.BufferGeometry().setFromPoints(path),
@@ -511,12 +575,21 @@ export function SceneModel3D({
         const { cone, radius } = createFixtureBeam(THREE, mount, +fixture.beamAngle || 36);
         cone.position.set(x, mount / 2 + .03, z); cone.renderOrder = 2;
         world.add(cone); glow.scale.setScalar(radius / .66);
-        // 光斑与光锥都不穿墙、门、高柜（2026-10-17）：与二维同一套射线裁剪。
+        // 光斑与光锥都不穿墙、门、高柜（现场 2026-10-17）：与二维同一套射线裁剪。
         // 拖灯时（dragMove）会带着新位置再裁一次，见下面的 applyFixtureClip。
-        if (cad || useDesign) applyFixtureClip(THREE, design, fixture, glow, cone, radius, mount);
+        // 观感优先（2026-10-19 对齐优邑珺和）：效果示意这一层不做射线裁剪——
+        // 裁剪出来的是多边形扇面，看上去像一片片三角纸片；改成「贴图 + 半径收到最近的墙」，
+        // 一样不穿墙，但光看起来是软的。出图口径的裁剪仍在二维画布与完整三维页保留。
+        const safeR = Math.min(radius, wallClearance(design, fixture));
+        glow.scale.setScalar(Math.max(0.6, (safeR / .66) * 1.55));
+        if (cone) {
+          cone.geometry.dispose();
+          cone.geometry = new THREE.ConeGeometry(safeR * .92, mount, 28, 1, true);
+          cone.scale.set(1, 1, 1);
+        }
         lightMeshes.current.set(fixture.id, { marker, glow, strip, icon, grab, cone, fixture, radius, mount });
         selectedMeshes.current.set(fixture.id, marker);
-        // 灯具编号不再挂在画布上（2026-10-16：编号标签压在灯图标上，图标都看不见了）：
+        // 灯具编号不再挂在画布上（现场 2026-10-16：编号标签压在灯图标上，图标都看不见了）：
         // 编号与灯具基本信息改成单击灯具后在页面读数（.canvas-lamp-badge / 右侧属性）里看。
       }
       // Imported CAD lights may exist before the user syncs them into the editable
@@ -537,8 +610,8 @@ export function SceneModel3D({
         const [x, z] = fromPlan(+device.x, +device.y);
         const panel = device.type === "面板";
         // 面板 / 温控器是墙面设备：吸到最近一段墙上并转正（背面贴墙、正面朝室内）。
-        // 2026-10-14：面板加进设计后不能悬浮在空间里，必须是装在墙上的。
-        // 2026-10-16：① 安装高度可自己设（device.installHeight，没设＝墙高中上部的默认值）；
+        // 现场 2026-10-14：面板加进设计后不能悬浮在空间里，必须是装在墙上的。
+        // 现场 2026-10-16：① 安装高度可自己设（device.installHeight，没设＝墙高中上部的默认值）；
         // ②「时光之轮」遥控器除外——它不是墙装件，直接在家具/空间里可见，
         //    点在家具（比如茶几）上就出现在家具顶面，点在空间里就落在地面。
         const tabletop = isTabletopDevice(device);
@@ -654,12 +727,21 @@ export function SceneModel3D({
         controls.mouseButtons.LEFT = top ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
         controls.touches.ONE = top ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
         const fit = Math.max(1, el.clientHeight / Math.max(1, el.clientWidth));
-        camera.position.set(top ? 0 : width * .6 * fit, top ? span * 1.55 * fit : span * 1.2 * fit,
-          top ? .001 : span * 1.2 * fit);
+        camera.position.set(top ? 0 : width * .42 * fit, top ? span * 1.10 * fit : span * .82 * fit,
+          top ? .001 : span * .82 * fit);
         controls.target.set(0, 0, 0);
         controls.update();
       };
       applyView(topOn.current);
+      // 调试用（只在三维页内存里，不进任何导出）：看光斑/光锥的真实可见性与尺寸
+      (window as any).__scene3d = {
+        lights: lightMeshes.current,
+        info: () => [...lightMeshes.current.entries()].map(([id, o]: any) => ({
+          id, glow: o.glow ? { v: o.glow.visible, o: +o.glow.material.opacity.toFixed(2), s: +o.glow.scale.x.toFixed(2), y: +o.glow.position.y.toFixed(3) } : null,
+          cone: o.cone ? { v: o.cone.visible, o: +o.cone.material.opacity.toFixed(2), h: +o.cone.geometry.parameters?.height?.toFixed?.(2) } : null,
+          marker: o.marker ? o.marker.visible : null, mount: +o.mount.toFixed(2), radius: +o.radius.toFixed(2),
+        })),
+      };
       topViewRef.current = () => {
         topOn.current = !topOn.current;
         applyView(topOn.current);
@@ -683,7 +765,7 @@ export function SceneModel3D({
           : { x: Math.max(0, Math.min(820, (g.point.x + centerX - x0) / width * 820)),
               y: Math.max(0, Math.min(690, (g.point.z + centerZ - z0) / depth * 690)) };
       }
-      // 三维里拖灯具（2026-10-16「俯视图里能选中灯具但不能拖动」）：按住灯沿地面挪。
+      // 三维里拖灯具（现场 2026-10-16「俯视图里能选中灯具但不能拖动」）：按住灯沿地面挪。
       let fixtureDrag: { id: string; cx: number; cy: number; moved: boolean } | null = null;
       let roamDrag = false;
       function down(ev: PointerEvent) {
@@ -729,7 +811,7 @@ export function SceneModel3D({
           if (L.grab) L.grab.position.set(wx, .24, wz);
           if (L.cone) { L.cone.position.x=wx; L.cone.position.z=wz; }
           if (L.strip) { const [x,z]=fromPlan(+L.fixture.x,+L.fixture.y); L.strip.position.set(wx-x,0,wz-z); }
-          // 拖到哪、光斑就按哪重裁一次：不然拖动过程中光斑会越出墙（2026-10-17）。
+          // 拖到哪、光斑就按哪重裁一次：不然拖动过程中光斑会越出墙（现场 2026-10-17）。
           if (L.radius) applyFixtureClip(THREE, design, { ...L.fixture, x: at.x, y: at.y }, L.glow, L.cone, L.radius, L.mount);
         }
         render();
@@ -810,7 +892,7 @@ export function SceneModel3D({
       function render() {
         needsRender = true;
       }
-      // ★ 俯视图缩放失灵的根因（2026-10-16 报）：OrbitControls 的滚轮/平移处理里
+      // ★ 俯视图缩放失灵的根因（现场 2026-10-16 报）：OrbitControls 的滚轮/平移处理里
       //   **自己就会调一次 update()**，而这张画布是按需渲染（`const moved = controls.update()`），
       //   等我们下一帧再调 update() 时「位移已经被内部消费掉了」→ 返回 false → 不重画。
       //   相机其实已经缩放/平移了，只是画面没跟着刷新（旋转带阻尼时不调 update()，所以只有
@@ -821,13 +903,17 @@ export function SceneModel3D({
         const moved = controls.update();
         if (needsRender || moved || renderedState !== live.current || renderedAppearance !== appearance.current) {
         renderedAppearance = appearance.current;
-        hemi.intensity = appearance.current.night ? .12 : .9;
-        sun.intensity = appearance.current.night ? .08 : .65;
+        const isNight = appearance.current.night;
+        hemi.intensity = isNight ? .12 : .9;
+        sun.intensity = isNight ? .32 : .65;
+        fill.intensity = isNight ? .10 : .28;
+        if (toneMats.length) for (const t of toneMats) t.mat.color.setHex(isNight ? t.night : t.day);
         needsRender = false; renderedState = live.current;
         const { activeScene: scene, activeStates, selection: selected, showFixtures: fixturesOn, showDevices: devicesOn } = live.current;
         const sceneStates: Obj = activeStates || scene?.states || {};
+        const dark = appearance.current.night ? .16 : 1;
         for (const room of roomPatches) {
-          if (!live.current.selectedRoomId) room.mesh.material.color.copy(room.color);
+          if (!live.current.selectedRoomId) room.mesh.material.color.copy(room.color).multiplyScalar(dark);
           else room.mesh.material.color.setHex(room.id===live.current.selectedRoomId?0xb5d6bd:0x969e98);
         }
         for (const furniture of furnitureGroups) {
@@ -841,17 +927,17 @@ export function SceneModel3D({
           const power = (scene ? (state?.on ? Math.max(0, Math.min(100, +state.brightness || 0)) / 100 : 0) : 1)*(dimmed ? .2 : 1);
           marker.visible = fixturesOn;
           if (grab) grab.visible = fixturesOn;
-          // 放置灯具时把光斑关掉（2026-10-16）：留灯具图标，才看得清一盏一盏落在哪、好不好挪。
+          // 放置灯具时把光斑关掉（现场 2026-10-16）：留灯具图标，才看得清一盏一盏落在哪、好不好挪。
           // 灯带不在锚点铺一团圆光斑（它是一条线光源，光在灯带那条线上）
           glow.visible = fixturesOn && power > .01 && !live.current.placingLamps && !strip;
           if (icon) icon.visible = fixturesOn;
           if (strip) strip.visible = fixturesOn;
-          if (cone) { cone.visible = fixturesOn && power > .01 && appearance.current.beams && !live.current.placingLamps && !strip; cone.material.opacity = power * .22; }
+          if (cone) { cone.visible = fixturesOn && power > .01 && appearance.current.beams && !live.current.placingLamps && !strip; cone.material.opacity = power * (appearance.current.night ? .13 : .10); }
           const kelvin = +state?.cct || +fixture?.cct || 3000;
           const tint = new THREE.Color().setHSL(.09, Math.max(0, Math.min(.65, (6500-kelvin)/6500)), .72);
           glow.material.color.copy(tint);
           if (cone) cone.material.color.copy(tint);
-          glow.material.opacity = .08 + power * .48;
+          glow.material.opacity = appearance.current.night ? .22 + power * 1.05 : .06 + power * .40;
 
           marker.material.emissiveIntensity = power * 2.2;
           if (power > .01) litCount += 1;

@@ -393,7 +393,7 @@ def _managed_vision_json(path: Path, metadata: dict, prompt: str, key: str = "ro
         raise ValueError("当前环境未找到 Hermes 受管 DeepSeek 服务")
     profile_home = os.getenv(
         "HERMES_PROFILE_HOME",
-        os.path.expanduser("~/.hermes/profiles/designer"),
+        "",
     )
     profile = os.getenv("HERMES_PROFILE", "designer")
     model = os.getenv("PLAN_VISION_MODEL", "deepseek-v4-flash")
@@ -404,7 +404,7 @@ def _managed_vision_json(path: Path, metadata: dict, prompt: str, key: str = "ro
     # for the semantic contract.
     source = raster_image(path, metadata)
     source.thumbnail((2000, 2000), Image.Resampling.LANCZOS)
-    page_dir = tempfile.mkdtemp(prefix="guanglv-planvision-")
+    page_dir = tempfile.mkdtemp(prefix="gv-planvision-")
     page_path = Path(page_dir) / "page.png"
     source.save(page_path, format="PNG")
     env = os.environ.copy()

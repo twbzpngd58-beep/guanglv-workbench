@@ -27,7 +27,7 @@ export function sensorShape(s: Obj) {
  *  画布、漫游演示、交付页共用同一套判定。
  *  角度用画布坐标系（y 向下，0° 指向 +x，顺时针），与真机正对图纸右侧装法一致。 */
 export function sensorCovers(s: Obj, x: number, y: number, opts?: CoverageOpts): boolean {
-  // 手动调过的范围优先：视场角/半径不再参与；但墙仍然挡（2026-10-17：感应不能穿墙）——
+  // 手动调过的范围优先：视场角/半径不再参与；但墙仍然挡（现场 2026-10-17：感应不能穿墙）——
   // 手拖的顶点越过了墙，墙后那块也不算覆盖。
   if (hasManualCoverage(s)) return manualCovers(s, x, y) && sensorCoversWithGeometry(s, x, y, opts);
   const { range, fov, heading, sector } = sensorShape(s);
@@ -399,7 +399,7 @@ export function manualCovers(s: Obj, x: number, y: number): boolean {
 }
 
 /** 探测范围（绝对设计坐标多边形）：手动范围 > 按空间边界 / 墙裁剪 > 整圆 / 扇形，
- *  与 sensorCovers 判定同一套几何——三维漫游把它铺在地面上（2026-10-17）。 */
+ *  与 sensorCovers 判定同一套几何——三维漫游把它铺在地面上（现场 2026-10-17）。 */
 export function coverageAbsolute(s: Obj, design: { rooms?: Obj[]; walls?: Obj[] }): Point[] | null {
   const ox = Number(s?.x) || 0, oy = Number(s?.y) || 0;
   const floor = Number.isFinite(+s?.floor) && s?.floor != null ? +s.floor

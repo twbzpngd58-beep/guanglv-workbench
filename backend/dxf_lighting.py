@@ -2026,9 +2026,7 @@ def to_engine(parsed, opts=None):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        raise SystemExit("用法: python backend/dxf_lighting.py <图纸.dxf> [输出.json]")
-    src = sys.argv[1]
+    src = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "samples", "sample-plan.dxf")
     out = sys.argv[2] if len(sys.argv) > 2 else os.path.splitext(src)[0] + ".lighting3d.json"
     d = parse(src)
     with open(out, "w", encoding="utf-8") as f:
