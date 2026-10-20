@@ -95,7 +95,7 @@
   let walls = [], washes = [], luminaires = [], stripObjs = [], sensorObjs = [], rooms = [];
   const manual = {};
   let sceneId = null, mode = "night", beamsOn = true, cutOn = true;
-  // 情景切换渐变（老板 2026-10-17「情景模式切换时的渐变时间也失效了」）：
+  // 情景切换渐变（2026-10-17「情景模式切换时的渐变时间也失效了」）：
   // 切情景时按**目标情景自己的渐变时间**把亮度/色温缓变过去，不再瞬间跳变。
   let fade = null;                 // { from, to, t0, dur, guard }
   let shownStates = {};            // 逐帧的灯状态（id → {on, brightness, cct}）
@@ -335,7 +335,7 @@
 
   /* 「轮廓本身就是它的形状」的大类（柜/沙发/岛台/地毯……）：只有这些、
    *  且轮廓明显不是矩形时，才按轮廓挤出。马桶/浴缸/床这类器物是「设计过的器物」，
-   *  图纸里那圈轮廓只是识别出来的占地，照它挤出就是一块怪疙瘩（老板 2026-10-16 报的马桶）。
+   *  图纸里那圈轮廓只是识别出来的占地，照它挤出就是一块怪疙瘩（2026-10-16 报的马桶）。
    *  与 frontend/src/furniturePolygon.ts 的 outlineDrivesShape 同一口径。 */
   const FOOTPRINT_KIND = /柜|沙发|岛台|吧台|地毯|案台|工作台|岛柜/;
   function outlineNearBox(pts) {
@@ -371,7 +371,7 @@
       const fit = !f.designFurniture && api && typeof api.yaw === "function"
         ? api.yaw(f.x, f.z, w, d, walls, f.kind) : { yaw: 0, w: w, d: d };
       g.rotation.y = f.rot != null ? (Number(f.rot) || 0) * Math.PI / 180 : fit.yaw;
-      // 画过轮廓的家具（老板 2026-10-16「主卧衣帽间的柜子轮廓我改过、没生效」）：
+      // 画过轮廓的家具（2026-10-16「主卧衣帽间的柜子轮廓我改过、没生效」）：
       // f.pts 是轮廓点（三维米坐标），按它挤出真形状——只按外接框画，L 形柜子会变成一个方盒子。
       if (outlineDrivesShape(f.kind, f.pts)) {
         const sh = new THREE.Shape();
@@ -395,7 +395,7 @@
     });
   }
 
-  /* 光斑遮挡（老板 2026-10-17「光斑不能穿过墙体、门、家具表面」）：从灯位水平打 96 条射线，
+  /* 光斑遮挡（2026-10-17「光斑不能穿过墙体、门、家具表面」）：从灯位水平打 96 条射线，
    * 碰到墙段、或 ≥1.8 m 的高家具外框就停，得到看得见的那一圈；地面光斑只铺在圈里。
    * 门洞上方的过梁（bottomM>0）不挡地面光，所以只取落地的墙段；与二维 lightOcclusion.ts 同口径。
    * 2026-10-17 补：灯所在**空间的边界**也算挡光段（闭口多边形，门洞那一段同样挡）——
@@ -614,7 +614,7 @@
           depthWrite: false, toneMapped: false
         }));
         wash.rotation.set(-Math.PI / 2, 0, ang);
-        // 灯带是吊顶 / 灯槽里的线光源（老板 2026-10-17「平面布置了灯带，3D 视角下在地面上，这是不对的」）：
+        // 灯带是吊顶 / 灯槽里的线光源（2026-10-17「平面布置了灯带，3D 视角下在地面上，这是不对的」）：
         // 原来这里在地上铺一条亮带，看上去就像灯带贴在地面。改成贴着顶面的一层漫射，光从上面来。
         const mountY = s.mount != null ? +s.mount : NET - 0.06;
         wash.rotation.set(Math.PI / 2, 0, -ang);
@@ -639,7 +639,7 @@
   }
 
   /* ---------------- 唯一入口 ---------------- */
-  // 情景兜底（老板 2026-10-16「三维里看不到亮灯效果，两盏灯一盏都不亮」）：
+  // 情景兜底（2026-10-16「三维里看不到亮灯效果，两盏灯一盏都不亮」）：
   // 选中的情景名若不在数据里，原来一律 return 0——于是连「全开」也是全灭。
   // 现在按情景名兜底：全关＝0，其余（含全开、以及认不出的名字）＝全亮，别让整屋子黑着。
   const SCENE_OFF = { "全关": 0 };
@@ -731,7 +731,7 @@
       }
       o.lv = lv;
       o.cone.material.opacity = lv * 0.26;
-      // 老板 2026-10-16「白天晚上可以手动切换」：光锥是**独立开关**，白天勾了也要看得见
+      // 作者 2026-10-16「白天晚上可以手动切换」：光锥是**独立开关**，白天勾了也要看得见
       // （原来限定 mode === "night"，白天勾「光锥示意」等于没反应）。
       o.cone.visible = beamsOn && lv > 0.01;
       o.pool.material.opacity = lv * 0.55;
@@ -1218,14 +1218,14 @@
   /* ---------------- 点选 / 拖灯 ---------------- */
   const ray = new THREE.Raycaster(), pointer = new THREE.Vector2();
   let down = null;
-  let dragging = null;                   // 正在拖着某盏灯（老板 2026-10-16：三维里灯具要能挪）
+  let dragging = null;                   // 正在拖着某盏灯（2026-10-16：三维里灯具要能挪）
   /** 灯位动了：圆盘 / 抓取球 / 光锥 / 光斑一起挪。 */
   function moveLuminaire(o) {
     o.disc.position.set(o.l.x, o.mount - 0.02, o.l.z);
     o.grab.position.copy(o.disc.position);
     o.cone.position.set(o.l.x, o.mount / 2, o.l.z);
     o.pool.position.set(o.l.x, 0.012, o.l.z);
-    // 拖到哪、光斑与光锥就按哪重裁：不然拖动过程中会越出墙（老板 2026-10-17）
+    // 拖到哪、光斑与光锥就按哪重裁：不然拖动过程中会越出墙（2026-10-17）
     reclipLuminaire(o);
   }
   function pickLuminaire(e) {
@@ -1257,7 +1257,7 @@
   renderer.domElement.addEventListener("pointerdown", e => {
     down = [e.clientX, e.clientY];
     if (placing) return;
-    // 三维只用来看（老板 2026-10-17）：外层没挂 onLightMove 就不拖灯，灯位在 2D 平面上改。
+    // 三维只用来看（2026-10-17）：外层没挂 onLightMove 就不拖灯，灯位在 2D 平面上改。
     if (!(window.__api && typeof window.__api.onLightMove === "function")) return;
     const o = pickLuminaire(e);
     if (!o) return;
