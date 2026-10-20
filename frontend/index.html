@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#B08A4A" />
+    <title>光律 · 灯光设计工作台</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      /* 构建产物文件名带哈希，而这份壳可能被浏览器缓存住：一旦它指向的 bundle 已经被删
+         （重建期间、或者从旧页面里刷新），页面就白屏 —— 用户看到的就是「三维引擎加载失败」这类报错。
+         兜底：8 秒还没挂上就自动刷新一次；第二次仍不行就明确让人强刷。 */
+      window.__gvMounted = false;
+      setTimeout(function () {
+        if (window.__gvMounted) return;
+        try {
+          if (!sessionStorage.getItem("gv-guard-reloaded")) {
+            sessionStorage.setItem("gv-guard-reloaded", "1");
+            location.reload();
+            return;
+          }
+        } catch (e) {}
+        document.body.insertAdjacentHTML("afterbegin",
+          '<div style="position:fixed;inset:0;z-index:99;display:flex;align-items:center;justify-content:center;' +
+          'background:#0d0e12;color:#e8ebf0;font:14px/1.8 -apple-system,PingFang SC,sans-serif;text-align:center">' +
+          '<div>工作台更新过，页面版本对不上了<br>请按 <b>Ctrl / \u2318 + Shift + R</b> 强制刷新一次</div></div>');
+      }, 8000);
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

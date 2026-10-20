@@ -1,0 +1,733 @@
+{
+ "id": "citron-panels",
+ "brand": "世聪",
+ "version": "2026-10-11",
+ "source": [
+  "知识库/15-产品库/CITRON世聪智能/CITRON世聪智能KNX体系产品清单.md",
+  "知识库/15-产品库/CITRON世聪智能/CITRON世聪智能DALI-PLUS产品清单.md",
+  "知识库/15-产品库/CITRON世聪智能/世聪智能产品库_官网全量.md",
+  "知识库/15-产品库/CITRON世聪智能/图片/（2026-10-06 官网配图本地化；缩略图存 frontend/src/data/citron-img/）",
+  "知识库/02-智能家居/场景联动/刻字与面板触发源.md（世聪《面板定制说明手册》2024.12 三版）",
+  "知识库/15-产品库/CITRON世聪智能/CITRON世聪智能KNX体系产品清单.md（九、时光之轮遥控器）"
+ ],
+ "note": "型号、键数、刻字一律以官网为准（官网未列的旧型号标 offline，仅兼容旧方案、不进选型）；只收可刻字 / 可设定按键的情景面板；温控器、语音控制器（交付文件不出现「语音」）、连框、空白面板不进选型。",
+ "rules": {
+  "textMax": 2,
+  "textMaxWide": 4,
+  "functionWords": [
+   "主灯",
+   "灯带",
+   "氛围",
+   "射灯",
+   "筒灯",
+   "全关",
+   "全开",
+   "调光",
+   "窗帘",
+   "回家",
+   "离家",
+   "夜灯",
+   "阅读"
+  ],
+  "icons": {
+   "观影": "Movie",
+   "会客": "Guests",
+   "温馨": "Cozy",
+   "就餐": "Diner",
+   "备餐": "Cooking",
+   "清洁": "Cleaning",
+   "阅读": "Reading",
+   "全关": "OFF",
+   "电竞": "Game",
+   "夜灯": "Night",
+   "派对": "Party",
+   "灯光": "Light",
+   "离家": "Leaving",
+   "音乐": "Music"
+  },
+  "offWall": [
+   "睡眠",
+   "起夜",
+   "晨唤",
+   "来访",
+   "入户",
+   "动线",
+   "楼梯",
+   "电梯",
+   "布防",
+   "撤防",
+   "节能",
+   "逃生",
+   "小憩",
+   "午休",
+   "淋浴",
+   "盆浴",
+   "洗漱",
+   "遮阳"
+  ],
+  "forbidden": [
+   "语音"
+  ],
+  "aliases": {
+   "观影": [
+    "观影",
+    "电影",
+    "影音"
+   ],
+   "电竞": [
+    "电竞",
+    "游戏"
+   ],
+   "会客": [
+    "会客"
+   ],
+   "温馨": [
+    "温馨"
+   ],
+   "就餐": [
+    "就餐",
+    "用餐"
+   ],
+   "备餐": [
+    "备餐"
+   ],
+   "清洁": [
+    "清洁"
+   ],
+   "阅读": [
+    "阅读"
+   ],
+   "回家": [
+    "回家"
+   ],
+   "离家": [
+    "离家",
+    "离开"
+   ],
+   "夜灯": [
+    "夜灯"
+   ],
+   "派对": [
+    "派对",
+    "聚会"
+   ],
+   "音乐": [
+    "音乐"
+   ],
+   "灯光": [
+    "灯光"
+   ]
+  },
+  "circuitWords": [
+   "主灯",
+   "灯带",
+   "氛围",
+   "射灯",
+   "筒灯",
+   "调光",
+   "窗帘"
+  ],
+  "roomTemplates": [
+   {
+    "match": [
+     "衣帽",
+     "收纳",
+     "储藏",
+     "储物"
+    ],
+    "mode": "text",
+    "words": [
+     "主灯",
+     "灯带",
+     "氛围",
+     "全关"
+    ]
+   },
+   {
+    "match": [
+     "卫",
+     "浴",
+     "厕",
+     "马桶",
+     "洗手",
+     "走廊",
+     "过道",
+     "走道",
+     "楼梯",
+     "电梯"
+    ],
+    "mode": "none",
+    "words": [],
+    "note": "卫浴 · 过道 · 楼梯 0 键：全自动，不刻"
+   },
+   {
+    "match": [
+     "玄关",
+     "门厅",
+     "入户",
+     "门廊",
+     "前廊"
+    ],
+    "mode": "text",
+    "words": [
+     "回家",
+     "离家",
+     "主灯",
+     "全关"
+    ]
+   },
+   {
+    "match": [
+     "客厅",
+     "起居"
+    ],
+    "mode": "icon",
+    "words": [
+     "观影",
+     "会客",
+     "温馨",
+     "清洁"
+    ],
+    "note": "客厅 4＋4：本板为 A 板（场景·纯图标）；B 板（回路·纯文字 主灯/灯带/氛围/全关）需另加一块"
+   },
+   {
+    "match": [
+     "餐厅",
+     "厨房",
+     "西厨",
+     "岛台"
+    ],
+    "mode": "icon",
+    "words": [
+     "就餐",
+     "备餐",
+     "清洁",
+     "全关"
+    ]
+   },
+   {
+    "match": [
+     "茶室",
+     "会客"
+    ],
+    "mode": "icon",
+    "words": [
+     "会客",
+     "温馨",
+     "清洁",
+     "全关"
+    ]
+   },
+   {
+    "match": [
+     "影音",
+     "电竞",
+     "游戏",
+     "娱乐",
+     "视听"
+    ],
+    "mode": "icon",
+    "words": [
+     "观影",
+     "电竞",
+     "温馨",
+     "全关"
+    ]
+   },
+   {
+    "match": [
+     "主卧"
+    ],
+    "mode": "text",
+    "words": [
+     "主灯",
+     "灯带",
+     "夜灯",
+     "全关"
+    ]
+   },
+   {
+    "match": [
+     "卧",
+     "书房",
+     "儿童",
+     "老人"
+    ],
+    "mode": "text",
+    "words": [
+     "阅读",
+     "主灯",
+     "灯带",
+     "全关"
+    ]
+   }
+  ],
+  "defaultTemplate": {
+   "mode": "text",
+   "words": [
+    "主灯",
+    "灯带",
+    "氛围",
+    "全关"
+   ]
+  }
+ },
+ "series": [
+  {
+   "protocol": "KNX",
+   "series": "重现 REnew",
+   "material": "金属按键",
+   "models": [
+    {
+     "id": "citron-knx-renew-tk2-a",
+     "model": "SC-TK2-4.8",
+     "name": "重现·KNX 智能控制器 A 色系",
+     "keys": 4,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "shapes": [
+      "方键",
+      "条键"
+     ],
+     "colors": [
+      "极地白",
+      "玄武黑",
+      "冰川银"
+     ],
+     "image": "485-renew-tr2",
+     "imageNote": "同系列 485 款官网图，仅外观参考",
+     "offline": "官网未列，仅兼容旧方案"
+    },
+    {
+     "id": "citron-knx-renew-tk2-b",
+     "model": "SC-TK2-4.8",
+     "name": "重现·KNX 智能控制器 B 色系",
+     "keys": 4,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "shapes": [
+      "方键",
+      "条键"
+     ],
+     "colors": [
+      "太空灰",
+      "冰川金",
+      "香槟金",
+      "水晶紫",
+      "淡曙红",
+      "孔雀绿",
+      "云山蓝"
+     ],
+     "image": "485-renew-tr2",
+     "imageNote": "同系列 485 款官网图，仅外观参考",
+     "offline": "官网未列，仅兼容旧方案"
+    },
+    {
+     "id": "citron-knx-renew-tk2-c",
+     "model": "SC-TK2-4.8",
+     "name": "重现·KNX 智能控制器 C 色系（无边框）",
+     "keys": 4,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "shapes": [
+      "方键"
+     ],
+     "colors": [
+      "金鸳黄",
+      "腮红金"
+     ],
+     "image": "485-renew-tr2",
+     "imageNote": "同系列 485 款官网图，仅外观参考",
+     "offline": "官网未列，仅兼容旧方案"
+    }
+   ]
+  },
+  {
+   "protocol": "KNX",
+   "series": "重溯 REfire",
+   "material": "CNC 金属按键",
+   "models": [
+    {
+     "id": "citron-knx-refire-tk2-48",
+     "model": "SC-TK2-4.8",
+     "name": "重溯·KNX 轻奢控制器 A（带框）4 键",
+     "keys": 4,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "colors": [
+      "越锋金",
+      "编钟茶",
+      "方尊灰"
+     ],
+     "image": "knx-refire",
+     "url": "https://www.citron-iot.com/product/zx/20220806/2486.aspx",
+     "manual": "https://www.citron-iot.com/upload/files/20220916/17556x2v6h.pdf",
+     "offline": "官网未列，仅兼容旧方案"
+    },
+    {
+     "id": "citron-knx-refire-tk2-28",
+     "model": "SC-TK2-2.8",
+     "name": "重溯·KNX 轻奢控制器 A（带框）2 键",
+     "keys": 2,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "colors": [
+      "越锋金",
+      "编钟茶",
+      "方尊灰"
+     ],
+     "verify": "2.8 款键数按型号推定，下单前以说明书核对",
+     "image": "knx-refire",
+     "url": "https://www.citron-iot.com/product/zx/20220806/2486.aspx",
+     "manual": "https://www.citron-iot.com/upload/files/20220916/17556x2v6h.pdf",
+     "offline": "官网未列，仅兼容旧方案"
+    },
+    {
+     "id": "citron-knx-refire-tk3-48",
+     "model": "SC-TK3-4.8",
+     "name": "重溯·KNX 轻奢控制器 B（无框）4 键",
+     "keys": 4,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "colors": [
+      "越锋金",
+      "编钟茶",
+      "方尊灰"
+     ],
+     "image": "knx-refire",
+     "url": "https://www.citron-iot.com/product/zx/20220806/2486.aspx",
+     "manual": "https://www.citron-iot.com/upload/files/20220916/17556x2v6h.pdf",
+     "engraveLong": true,
+     "verify": "每键上下两行刻字（上=短按、下=长按），对应关系下单前以说明书核对"
+    },
+    {
+     "id": "citron-knx-refire-tk3-28",
+     "model": "SC-TK3-2.8",
+     "name": "重溯·KNX 轻奢控制器 B（无框）2 键",
+     "keys": 2,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "colors": [
+      "越锋金",
+      "编钟茶",
+      "方尊灰"
+     ],
+     "verify": "每键上下两行刻字（上=短按、下=长按），对应关系下单前以说明书核对",
+     "image": "knx-refire",
+     "url": "https://www.citron-iot.com/product/zx/20220806/2486.aspx",
+     "manual": "https://www.citron-iot.com/upload/files/20220916/17556x2v6h.pdf",
+     "engraveLong": true
+    },
+    {
+     "id": "citron-knx-refire-st3-48r",
+     "model": "SC-ST3-4.8R",
+     "name": "KNX 智能场景面板（4 路继电器）",
+     "keys": 4,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "colors": [
+      "编钟茶",
+      "越锋金",
+      "方尊灰"
+     ],
+     "image": "knx-st3-48r",
+     "url": "https://www.citron-iot.com/product/zx/20260701/2624.aspx",
+     "verify": "官网图每键上下各刻一行（上=短按、下=长按，共 8 处刻字），单行限 4 字",
+     "engraveLong": true,
+     "textMax": 4
+    }
+   ]
+  },
+  {
+   "protocol": "KNX",
+   "series": "重见 REsense",
+   "material": "肤感按键（FENIX）",
+   "models": [
+    {
+     "id": "citron-knx-resense-tk2",
+     "model": "SC-TK2-4.8",
+     "name": "重见·KNX 超感智能控制器",
+     "keys": 4,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "colors": [
+      "花青蓝",
+      "星河灰",
+      "月影灰",
+      "嫩鹅黄",
+      "朱湛红",
+      "庭芜绿",
+      "松烟墨",
+      "润玉白"
+     ],
+     "image": "485-resense-tr2",
+     "imageNote": "同色系 485 款官网图，仅外观参考",
+     "offline": "官网未列，仅兼容旧方案"
+    },
+    {
+     "id": "citron-knx-resense-sk1",
+     "model": "SC-SK1-2.4",
+     "name": "重见·KNX 超感滑动调光面板（1 触摸条 + 2 键）",
+     "keys": 2,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "colors": [
+      "花青蓝",
+      "星河灰",
+      "月影灰",
+      "嫩鹅黄",
+      "朱湛红",
+      "庭芜绿",
+      "松烟墨",
+      "润玉白"
+     ],
+     "image": "knx-resense-sk1",
+     "url": "https://www.citron-iot.com/product/zx/20260702/2625.aspx"
+    },
+    {
+     "id": "citron-knx-resense-ya-a",
+     "model": "SC-TK2-4.8",
+     "name": "重见·雅奢色系智能场景面板（KNX，2 路 IO）",
+     "keys": 4,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "colors": [
+      "沉香",
+      "天珠",
+      "奇楠",
+      "玉犀",
+      "金乌",
+      "银纱",
+      "瑶池",
+      "丹桂"
+     ],
+     "image": "knx-yasha",
+     "url": "https://www.citron-iot.com/product/zx/20240629/2604.aspx",
+     "manual": "https://www.citron-iot.com/upload/files/20250613/17262l42j2.pdf",
+     "database": "https://www.citron-iot.com/upload/files/20260630/14496z46lh.zip"
+    },
+    {
+     "id": "citron-knx-resense-ya-b",
+     "model": "SC-TK2-4.8",
+     "name": "重见·KNX 雅奢智能控制器 B 色系（钢按键）",
+     "keys": 4,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "colors": [
+      "玉犀",
+      "金乌",
+      "银纱",
+      "瑶池",
+      "丹桂"
+     ],
+     "image": "knx-yasha",
+     "url": "https://www.citron-iot.com/product/zx/20240629/2604.aspx",
+     "manual": "https://www.citron-iot.com/upload/files/20250613/17262l42j2.pdf",
+     "offline": "官网未列，仅兼容旧方案"
+    }
+   ]
+  },
+  {
+   "protocol": "KNX",
+   "series": "重映 REmind",
+   "material": "触控屏",
+   "models": [
+    {
+     "id": "citron-knx-remind-mk1-19",
+     "model": "SC-MK1-1.9",
+     "name": "重映·1.9 寸多功能智能交互控制器（4 物理键 × 3 页）",
+     "keys": 12,
+     "longPress": false,
+     "engrave": "screen",
+     "colors": [
+      "工程款",
+      "超感",
+      "雅奢"
+     ],
+     "image": "knx-mk1-19",
+     "url": "https://www.citron-iot.com/product/zx/20260702/2626.aspx"
+    },
+    {
+     "id": "citron-knx-remind-mk1-3",
+     "model": "SC-MK1-3",
+     "name": "重映·KNX 智能触控屏 3 寸（2 物理键）",
+     "keys": 2,
+     "longPress": false,
+     "engrave": "screen",
+     "colors": [
+      "按样册"
+     ],
+     "image": "485-mr1-3",
+     "imageNote": "同系列 485 款官网图，仅外观参考",
+     "offline": "官网未列，仅兼容旧方案"
+    }
+   ]
+  },
+  {
+   "protocol": "RS-485",
+   "series": "重见 超感（485）",
+   "material": "肤感按键（FENIX）",
+   "models": [
+    {
+     "id": "citron-485-resense-tr2",
+     "model": "SC-TR2-4.8",
+     "name": "重见·超感色系智能场景面板（485）",
+     "keys": 4,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "shapes": [
+      "方键",
+      "条键"
+     ],
+     "colors": [
+      "松烟墨",
+      "花青蓝",
+      "星河灰",
+      "月影灰",
+      "嫩鹅黄",
+      "润玉白",
+      "朱湛红",
+      "庭芜绿"
+     ],
+     "image": "485-resense-tr2",
+     "url": "https://www.citron-iot.com/product/zx/20231117/2591.aspx",
+     "manual": "https://www.citron-iot.com/upload/files/20250606/1026rv0826.pdf"
+    },
+    {
+     "id": "citron-485-resense-tr3",
+     "model": "SC-TR3-2.4",
+     "name": "重见·超感滑动调光场景面板（485，1 触摸条 + 2 键）",
+     "keys": 2,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "colors": [
+      "松烟墨",
+      "花青蓝",
+      "星河灰",
+      "月影灰",
+      "嫩鹅黄",
+      "润玉白",
+      "朱湛红",
+      "庭芜绿"
+     ],
+     "image": "485-resense-tr3",
+     "url": "https://www.citron-iot.com/product/zx/20240522/2597.aspx",
+     "manual": "https://www.citron-iot.com/upload/files/20240805/16456l4nx6.pdf"
+    }
+   ]
+  },
+  {
+   "protocol": "RS-485",
+   "series": "重现 REnew（485）",
+   "material": "金属按键",
+   "models": [
+    {
+     "id": "citron-485-renew-tr2",
+     "model": "SC-TR2-4.8",
+     "name": "重现·智能场景面板（RS-485）",
+     "keys": 4,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "colors": [
+      "玄武黑",
+      "太空灰",
+      "冰川银",
+      "冰川金",
+      "极地白"
+     ],
+     "image": "485-renew-tr2",
+     "url": "https://www.citron-iot.com/product/zx/20230710/2509.aspx",
+     "manual": "https://www.citron-iot.com/upload/files/20250606/105128l020.pdf"
+    },
+    {
+     "id": "citron-485-renew-tr2-io",
+     "model": "SC-TR2-4.8",
+     "name": "重现·智能场景面板（485，金属按键，接近感应，1 路 IO）",
+     "keys": 4,
+     "longPress": true,
+     "engrave": "laser-hollow",
+     "colors": [
+      "玄武黑",
+      "太空灰",
+      "冰川银",
+      "冰川金",
+      "极地白"
+     ],
+     "image": "485-renew-tr2-io",
+     "url": "https://www.citron-iot.com/product/zx/20240605/2602.aspx",
+     "manual": "https://www.citron-iot.com/upload/files/20250606/1121htd8tb.pdf"
+    }
+   ]
+  },
+  {
+   "protocol": "RS-485",
+   "series": "重映 REmind（485）",
+   "material": "触控屏",
+   "models": [
+    {
+     "id": "citron-485-remind-mr1-19",
+     "model": "SC-MR1-1.9",
+     "name": "重映·智能交互控制器（485，APP 自定义 12 键）",
+     "keys": 12,
+     "longPress": false,
+     "engrave": "screen",
+     "colors": [
+      "按样册"
+     ],
+     "image": "485-mr1-19",
+     "url": "https://www.citron-iot.com/product/zx/20240805/2605.aspx",
+     "manual": "https://www.citron-iot.com/upload/files/20240805/17056bh84n.pdf"
+    },
+    {
+     "id": "citron-485-remind-mr1-3",
+     "model": "SC-MR1-3",
+     "name": "重映·两键多功能触控屏（485，3 寸 + 2 物理键）",
+     "keys": 2,
+     "longPress": false,
+     "engrave": "screen",
+     "colors": [
+      "玄武黑",
+      "太空灰",
+      "冰川银",
+      "冰川金",
+      "极地白"
+     ],
+     "image": "485-mr1-3",
+     "url": "https://www.citron-iot.com/product/zx/20240605/2603.aspx"
+    }
+   ]
+  },
+  {
+   "protocol": "蓝牙",
+   "series": "时光之轮",
+   "material": "旋钮遥控（磁吸无线充电）",
+   "models": [
+    {
+     "id": "citron-ble-sk-moon",
+     "model": "SC-BLE-SK",
+     "name": "时光之轮遥控器（皓月）",
+     "keys": 1,
+     "longPress": false,
+     "engrave": "screen",
+     "colors": [
+      "皓月"
+     ],
+     "verify": "配套蓝牙网桥 SC-BLE-BG/485；旋钮遥控＋磁吸无线充电（自带，不含底座），报价 ¥1,499（皓月核心价 ¥560）"
+    },
+    {
+     "id": "citron-ble-sk-gold",
+     "model": "SC-BLE-SK",
+     "name": "时光之轮遥控器（流金／鎏金）",
+     "keys": 1,
+     "longPress": false,
+     "engrave": "screen",
+     "colors": [
+      "流金（鎏金）"
+     ],
+     "verify": "默认按鎏金（核心价 ¥890，报价 ¥1,499）；配套蓝牙网桥 SC-BLE-BG/485"
+    }
+   ],
+   "note": "蓝牙遥控器（高亮度 LED 屏，全域控制，磁吸无线充电）：按「面板控制」计入清单，需配蓝牙网桥；不刻字（屏显）。**不含充电底座**（非标异形件、易翻车，2026-06 恩平项目已禁用）。"
+  }
+ ]
+}

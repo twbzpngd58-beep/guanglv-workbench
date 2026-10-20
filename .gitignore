@@ -1,0 +1,12 @@
+.venv/
+.tools/
+node_modules/
+# 前端构建产物随仓库提供（无 Node 也能直接跑），不要忽略
+__pycache__/
+.pytest_cache/
+# 只忽略仓库根的数据目录。写成 data/ 会匹配任意层级的 data 目录，
+# 连 frontend/src/data/（面板库/图库/场景数据）一起忽略，新加的文件会静默漏掉（2026-10-12 修）。
+/data/
+.env
+frontend/test-results/
+frontend/playwright-report/

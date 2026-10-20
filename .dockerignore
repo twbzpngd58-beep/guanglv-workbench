@@ -1,0 +1,15 @@
+.git
+.gitignore
+.venv
+.venv-python-too-old
+.tools
+node_modules
+frontend/node_modules
+frontend/test-results
+frontend/playwright-report
+data
+__pycache__
+*.pyc
+.pytest_cache
+.env
+*.log

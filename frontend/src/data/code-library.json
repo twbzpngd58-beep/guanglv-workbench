@@ -1,0 +1,4138 @@
+{
+ "source": "空间库 / 灯具编号词表（前端码表与后端对照表共用，勿单边手改）",
+ "revision": "2026-09-23",
+ "rule": "编号 = 空间码(小写, 1-3 位) + 位置码(小写, 1 位) + 职能码(大写, 可省略) + 序号；位置码按空间取表(positionPalettes + spacePalette)：每个空间有自己的家具/功能位，通用位 c/s/t/z/d/x/g/w/v/q 在任何空间里含义不变，空间专有位用另外 16 个字母，所以「空间+位置」永远唯一；position 表仅作老编号的通用兜底。",
+ "groups": [
+  "入口/过渡",
+  "公共会客",
+  "餐饮",
+  "居住/私密",
+  "卫浴",
+  "工作/学习",
+  "娱乐/休闲",
+  "交通/连接",
+  "室外/庭院",
+  "仓储/车辆",
+  "服务/员工",
+  "宠物",
+  "特殊/宗教",
+  "其他"
+ ],
+ "positionGroups": [
+  "通用",
+  "居住",
+  "卫浴",
+  "餐饮",
+  "交通",
+  "户外",
+  "别墅休闲"
+ ],
+ "spaces": [
+  {
+   "code": "m",
+   "name": "门厅",
+   "group": "入口/过渡",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅",
+    "商业空间"
+   ],
+   "aliases": [
+    "玄关",
+    "入户",
+    "前室",
+    "门厅"
+   ],
+   "note": "进出缓冲、换鞋、临时置物",
+   "legacy": true
+  },
+  {
+   "code": "k",
+   "name": "客厅",
+   "group": "公共会客",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅",
+    "商业空间"
+   ],
+   "aliases": [
+    "会客厅",
+    "起居室",
+    "正客厅",
+    "客厅"
+   ],
+   "note": "正式待客、家庭公共活动",
+   "legacy": true
+  },
+  {
+   "code": "c",
+   "name": "餐厅",
+   "group": "餐饮",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅",
+    "商业空间"
+   ],
+   "aliases": [
+    "正餐厅",
+    "餐厨",
+    "餐厅厨房",
+    "餐厅"
+   ],
+   "note": "正式宴请、家庭聚餐",
+   "legacy": true
+  },
+  {
+   "code": "f",
+   "name": "厨房",
+   "group": "餐饮",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅",
+    "商业空间"
+   ],
+   "aliases": [
+    "中厨",
+    "中式厨房",
+    "双厨房",
+    "厨房"
+   ],
+   "note": "中式爆炒与西式开放操作",
+   "legacy": true
+  },
+  {
+   "code": "z",
+   "name": "主卧",
+   "group": "居住/私密",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "主卧室",
+    "主卧房",
+    "主卧套房",
+    "主卧"
+   ],
+   "note": "主人睡眠休息（含套房）",
+   "legacy": true
+  },
+  {
+   "code": "w",
+   "name": "次卧",
+   "group": "居住/私密",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "卧室",
+    "次卧室",
+    "子女房",
+    "次卧"
+   ],
+   "note": "子女或家人居住",
+   "legacy": true
+  },
+  {
+   "code": "e",
+   "name": "儿童房",
+   "group": "居住/私密",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "儿童卧室",
+    "宝宝房",
+    "儿童房"
+   ],
+   "note": "儿童睡眠、学习、玩耍",
+   "legacy": true
+  },
+  {
+   "code": "s",
+   "name": "书房",
+   "group": "工作/学习",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "办公室",
+    "办公书房",
+    "书房"
+   ],
+   "note": "办公、阅读、视频会议",
+   "legacy": true
+  },
+  {
+   "code": "b",
+   "name": "卫生间",
+   "group": "卫浴",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅",
+    "商业空间"
+   ],
+   "aliases": [
+    "洗手间",
+    "浴室",
+    "卫浴",
+    "公卫",
+    "公共卫生间",
+    "卫生间"
+   ],
+   "note": "访客与公共区域使用",
+   "legacy": true
+  },
+  {
+   "code": "y",
+   "name": "衣帽间",
+   "group": "居住/私密",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "步入式衣帽间",
+    "更衣室",
+    "衣帽间"
+   ],
+   "note": "衣物饰品分区收纳",
+   "legacy": true
+  },
+  {
+   "code": "t",
+   "name": "阳台",
+   "group": "室外/庭院",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "露台",
+    "生活阳台",
+    "景观阳台",
+    "洗衣阳台",
+    "阳台"
+   ],
+   "note": "户外休憩、观景",
+   "legacy": true
+  },
+  {
+   "code": "g",
+   "name": "走廊",
+   "group": "交通/连接",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅",
+    "商业空间"
+   ],
+   "aliases": [
+    "过道",
+    "走道",
+    "廊道",
+    "走廊"
+   ],
+   "note": "房间连接动线",
+   "legacy": true
+  },
+  {
+   "code": "l",
+   "name": "楼梯间",
+   "group": "交通/连接",
+   "houses": [
+    "复式",
+    "别墅",
+    "商业空间"
+   ],
+   "aliases": [
+    "楼梯",
+    "梯间",
+    "主楼梯",
+    "次楼梯",
+    "楼梯间"
+   ],
+   "note": "楼层垂直通行",
+   "legacy": true
+  },
+  {
+   "code": "q",
+   "name": "设备间",
+   "group": "工作/学习",
+   "houses": [
+    "复式",
+    "别墅",
+    "商业空间"
+   ],
+   "aliases": [
+    "机房",
+    "设备平台",
+    "锅炉房",
+    "配电间",
+    "新风机房",
+    "设备间"
+   ],
+   "note": "锅炉、配电、新风、净水主机",
+   "legacy": true
+  },
+  {
+   "code": "u",
+   "name": "庭院",
+   "group": "室外/庭院",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "花园",
+    "院子",
+    "内院",
+    "下沉庭院",
+    "景观庭院",
+    "庭院"
+   ],
+   "note": "采光通风、景观休憩",
+   "legacy": true
+  },
+  {
+   "code": "v",
+   "name": "车库",
+   "group": "仓储/车辆",
+   "houses": [
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "车位",
+    "停车位",
+    "地下车库",
+    "车库"
+   ],
+   "note": "停放机动车",
+   "legacy": true
+  },
+  {
+   "code": "r",
+   "name": "影音室",
+   "group": "娱乐/休闲",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "家庭影院",
+    "影院",
+    "投影室",
+    "影音室"
+   ],
+   "note": "观影、投影、音响体验",
+   "legacy": true
+  },
+  {
+   "code": "x",
+   "name": "其他空间",
+   "group": "其他",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅",
+    "商业空间"
+   ],
+   "aliases": [
+    "其他空间"
+   ],
+   "note": "暂未归类的空间",
+   "legacy": true
+  },
+  {
+   "code": "ya",
+   "name": "玄关柜/衣帽区",
+   "group": "入口/过渡",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "玄关柜",
+    "衣帽区",
+    "鞋帽区",
+    "挂衣区"
+   ],
+   "note": "大衣、鞋帽、雨具收纳"
+  },
+  {
+   "code": "la",
+   "name": "前廊/门廊",
+   "group": "入口/过渡",
+   "houses": [
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "前廊",
+    "门廊",
+    "雨棚门廊"
+   ],
+   "note": "门前遮雨、接待等候"
+  },
+  {
+   "code": "ja",
+   "name": "家庭厅",
+   "group": "公共会客",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "家庭起居厅",
+    "家人厅",
+    "家庭室"
+   ],
+   "note": "家人日常休闲、看电视"
+  },
+  {
+   "code": "qa",
+   "name": "起居厅/小客厅",
+   "group": "公共会客",
+   "houses": [
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "起居厅",
+    "小客厅",
+    "家庭小客厅"
+   ],
+   "note": "楼层内私密休息聚谈"
+  },
+  {
+   "code": "ca",
+   "name": "茶室/会客茶间",
+   "group": "公共会客",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "茶室",
+    "茶间",
+    "会客茶间",
+    "品茶室"
+   ],
+   "note": "品茶、小型商谈"
+  },
+  {
+   "code": "qi",
+   "name": "琴房",
+   "group": "公共会客",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "琴房",
+    "练琴房",
+    "演奏室"
+   ],
+   "note": "练琴、小型演奏"
+  },
+  {
+   "code": "za",
+   "name": "早餐区/便餐厅",
+   "group": "餐饮",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "早餐区",
+    "便餐厅",
+    "简餐台",
+    "早餐台"
+   ],
+   "note": "日常快速用餐、简餐台"
+  },
+  {
+   "code": "fo",
+   "name": "西厨/岛台区",
+   "group": "餐饮",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "西厨",
+    "岛台",
+    "开放厨房",
+    "西厨岛台"
+   ],
+   "note": "备餐、烘焙、吧台社交"
+  },
+  {
+   "code": "ba",
+   "name": "吧台/酒水区",
+   "group": "餐饮",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "吧台",
+    "酒水区",
+    "水吧",
+    "饮品区"
+   ],
+   "note": "调酒、饮品、简餐吧台"
+  },
+  {
+   "code": "be",
+   "name": "备餐间/传菜间",
+   "group": "餐饮",
+   "houses": [
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "备餐间",
+    "传菜间",
+    "备餐区"
+   ],
+   "note": "宴请前置准备、传菜缓冲"
+  },
+  {
+   "code": "jo",
+   "name": "酒窖/恒温酒柜间",
+   "group": "餐饮",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "酒窖",
+    "恒温酒柜",
+    "藏酒间"
+   ],
+   "note": "藏酒与品酒"
+  },
+  {
+   "code": "xe",
+   "name": "雪茄房",
+   "group": "餐饮",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "雪茄房",
+    "储茄间"
+   ],
+   "note": "恒温恒湿储茄与交流"
+  },
+  {
+   "code": "co",
+   "name": "食品储藏间/冷库",
+   "group": "餐饮",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "食品储藏间",
+    "冷库",
+    "食材间",
+    "干货间"
+   ],
+   "note": "干货、食材、备用冷藏"
+  },
+  {
+   "code": "zb",
+   "name": "主卫",
+   "group": "居住/私密",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "主卫",
+    "主卫生间",
+    "卫浴套间",
+    "主浴室"
+   ],
+   "note": "双台盆、浴缸、淋浴、独立马桶间"
+  },
+  {
+   "code": "lb",
+   "name": "老人房",
+   "group": "居住/私密",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "长辈房",
+    "老人卧室",
+    "父母房",
+    "老人房"
+   ],
+   "note": "长辈居住，宜首层带卫浴"
+  },
+  {
+   "code": "ka",
+   "name": "客卧",
+   "group": "居住/私密",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "客房",
+    "客卧室",
+    "次客房",
+    "客卧"
+   ],
+   "note": "招待留宿客人"
+  },
+  {
+   "code": "pa",
+   "name": "保姆房",
+   "group": "居住/私密",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "家政房",
+    "住家人员房",
+    "管家房",
+    "保姆房"
+   ],
+   "note": "住家人员居住（带独立卫浴）"
+  },
+  {
+   "code": "sa",
+   "name": "梳妆区",
+   "group": "居住/私密",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "梳妆区",
+    "化妆间",
+    "梳妆台"
+   ],
+   "note": "更衣打扮"
+  },
+  {
+   "code": "yb",
+   "name": "婴儿房",
+   "group": "居住/私密",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "婴儿房",
+    "育婴室",
+    "婴儿室",
+    "育婴区"
+   ],
+   "note": "婴幼儿照护与睡眠"
+  },
+  {
+   "code": "wb",
+   "name": "次卫",
+   "group": "卫浴",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "次卫",
+    "客卫",
+    "客用卫生间",
+    "次卫生间"
+   ],
+   "note": "各卧室或楼层共用"
+  },
+  {
+   "code": "bb",
+   "name": "干湿分离卫浴",
+   "group": "卫浴",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "干湿分离卫浴",
+    "干湿分离卫生间",
+    "分区卫浴"
+   ],
+   "note": "淋浴与台盆分区"
+  },
+  {
+   "code": "bo",
+   "name": "独立马桶间",
+   "group": "卫浴",
+   "houses": [
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "独立马桶间",
+    "马桶间",
+    "独立厕位"
+   ],
+   "note": "主卫内私密分区"
+  },
+  {
+   "code": "na",
+   "name": "桑拿房",
+   "group": "卫浴",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "桑拿房",
+    "蒸汽房",
+    "汗蒸房"
+   ],
+   "note": "干湿蒸、放松理疗"
+  },
+  {
+   "code": "sp",
+   "name": "SPA/泡池区",
+   "group": "卫浴",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "SPA",
+    "泡池区",
+    "水疗区",
+    "按摩池"
+   ],
+   "note": "水疗、按摩池"
+  },
+  {
+   "code": "so",
+   "name": "独立工作室",
+   "group": "工作/学习",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "工作室",
+    "画室",
+    "手工间",
+    "创作室"
+   ],
+   "note": "绘画、手工、创作"
+  },
+  {
+   "code": "ef",
+   "name": "儿童学习区",
+   "group": "工作/学习",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "儿童学习区",
+    "学习区",
+    "书桌区"
+   ],
+   "note": "写作业、课外阅读"
+  },
+  {
+   "code": "pb",
+   "name": "家政间",
+   "group": "工作/学习",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "家政间",
+    "家务台",
+    "家务间",
+    "熨烫间"
+   ],
+   "note": "熨烫、缝补、家务操作"
+  },
+  {
+   "code": "xi",
+   "name": "洗衣房",
+   "group": "工作/学习",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "洗衣房",
+    "洗涤间",
+    "洗衣间"
+   ],
+   "note": "洗衣、烘干、晾晒整理"
+  },
+  {
+   "code": "cb",
+   "name": "收纳间",
+   "group": "工作/学习",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "收纳间",
+    "储藏室",
+    "储藏间",
+    "储物间",
+    "杂物间"
+   ],
+   "note": "季节性物品、杂物存放"
+  },
+  {
+   "code": "to",
+   "name": "工具间",
+   "group": "工作/学习",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "工具间",
+    "工作间",
+    "维修间",
+    "园艺工具间"
+   ],
+   "note": "维修、手工、花园工具"
+  },
+  {
+   "code": "ji",
+   "name": "健身房",
+   "group": "娱乐/休闲",
+   "houses": [
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "健身房",
+    "健身区",
+    "器械房"
+   ],
+   "note": "器械训练、家庭运动"
+  },
+  {
+   "code": "yo",
+   "name": "瑜伽房",
+   "group": "娱乐/休闲",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "瑜伽房",
+    "舞蹈室",
+    "形体室"
+   ],
+   "note": "瑜伽、拉伸、形体训练"
+  },
+  {
+   "code": "ta",
+   "name": "台球室",
+   "group": "娱乐/休闲",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "台球室",
+    "棋牌室",
+    "麻将室",
+    "桌游室"
+   ],
+   "note": "台球、麻将、桌游"
+  },
+  {
+   "code": "go",
+   "name": "游戏室",
+   "group": "娱乐/休闲",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "游戏室",
+    "娱乐室",
+    "电玩室",
+    "电竞房"
+   ],
+   "note": "电玩、青少年活动"
+  },
+  {
+   "code": "yi",
+   "name": "室内泳池",
+   "group": "娱乐/休闲",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "室内泳池",
+    "恒温泳池",
+    "室内游泳"
+   ],
+   "note": "恒温游泳、运动"
+  },
+  {
+   "code": "vo",
+   "name": "收藏陈列室",
+   "group": "娱乐/休闲",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "收藏陈列室",
+    "陈列室",
+    "展示厅",
+    "藏品室"
+   ],
+   "note": "藏品、艺术品展示"
+  },
+  {
+   "code": "io",
+   "name": "音乐室",
+   "group": "娱乐/休闲",
+   "houses": [
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "音乐室",
+    "录音间",
+    "录音室",
+    "排练室"
+   ],
+   "note": "乐器、编曲、录音"
+  },
+  {
+   "code": "da",
+   "name": "家用电梯",
+   "group": "交通/连接",
+   "houses": [
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "家用电梯",
+    "电梯",
+    "无障碍电梯"
+   ],
+   "note": "无障碍上下楼"
+  },
+  {
+   "code": "db",
+   "name": "地下连廊",
+   "group": "交通/连接",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "地下连廊",
+    "车库连廊",
+    "入户连廊"
+   ],
+   "note": "车库到室内无雨通行"
+  },
+  {
+   "code": "li",
+   "name": "楼梯平台",
+   "group": "交通/连接",
+   "houses": [
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "楼梯平台",
+    "中庭",
+    "楼梯厅"
+   ],
+   "note": "采光、视线贯通"
+  },
+  {
+   "code": "ua",
+   "name": "前院/车道",
+   "group": "室外/庭院",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "前院",
+    "车道",
+    "前庭",
+    "入户庭院"
+   ],
+   "note": "车辆进出、访客停车"
+  },
+  {
+   "code": "ub",
+   "name": "后院/草坪",
+   "group": "室外/庭院",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "后院",
+    "草坪",
+    "后庭"
+   ],
+   "note": "家庭活动、休闲聚会"
+  },
+  {
+   "code": "ue",
+   "name": "屋顶花园",
+   "group": "室外/庭院",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "屋顶花园",
+    "屋顶平台",
+    "屋面平台",
+    "屋顶露台"
+   ],
+   "note": "绿化、观景、设备放置"
+  },
+  {
+   "code": "uf",
+   "name": "檐廊/雨棚区",
+   "group": "室外/庭院",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "檐廊",
+    "雨棚区",
+    "廊下"
+   ],
+   "note": "半室外过渡空间"
+  },
+  {
+   "code": "ui",
+   "name": "烧烤区",
+   "group": "室外/庭院",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "烧烤区",
+    "户外餐区",
+    "BBQ区"
+   ],
+   "note": "户外烹饪聚餐"
+  },
+  {
+   "code": "uk",
+   "name": "阳光房",
+   "group": "室外/庭院",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "阳光房",
+    "温室",
+    "花房",
+    "玻璃房"
+   ],
+   "note": "植物养护、冬季休憩"
+  },
+  {
+   "code": "ul",
+   "name": "景观花园",
+   "group": "室外/庭院",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "景观花园",
+    "绿化庭院"
+   ],
+   "note": "绿化、赏景、散步"
+  },
+  {
+   "code": "uo",
+   "name": "水景",
+   "group": "室外/庭院",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "水景",
+    "喷泉",
+    "锦鲤池",
+    "景观水池"
+   ],
+   "note": "景观点缀、庭院焦点"
+  },
+  {
+   "code": "up",
+   "name": "户外泳池",
+   "group": "室外/庭院",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "户外泳池",
+    "泳池",
+    "游泳池",
+    "室外泳池",
+    "SPA池"
+   ],
+   "note": "室外游泳、水疗"
+  },
+  {
+   "code": "va",
+   "name": "车棚",
+   "group": "仓储/车辆",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "车棚",
+    "停车棚"
+   ],
+   "note": "半开放式停车"
+  },
+  {
+   "code": "vb",
+   "name": "自行车房",
+   "group": "仓储/车辆",
+   "houses": [
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "自行车房",
+    "单车房",
+    "摩托车存放间",
+    "非机动车库"
+   ],
+   "note": "轻便车辆收纳"
+  },
+  {
+   "code": "ve",
+   "name": "地下储物间",
+   "group": "仓储/车辆",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "地下储物间",
+    "地下储藏",
+    "杂物库"
+   ],
+   "note": "大件、换季物品存放"
+  },
+  {
+   "code": "vf",
+   "name": "独立库房",
+   "group": "仓储/车辆",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "独立库房",
+    "库房",
+    "园艺库房"
+   ],
+   "note": "园艺、备用物资"
+  },
+  {
+   "code": "pe",
+   "name": "员工区",
+   "group": "服务/员工",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "员工区",
+    "家政区",
+    "员工休息区"
+   ],
+   "note": "住家人员工作与生活配套"
+  },
+  {
+   "code": "ma",
+   "name": "门卫房",
+   "group": "服务/员工",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "门卫房",
+    "门房",
+    "保安室",
+    "门厅岗"
+   ],
+   "note": "安保值守、访客登记"
+  },
+  {
+   "code": "ki",
+   "name": "快递间",
+   "group": "服务/员工",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "快递间",
+    "快递收纳",
+    "收发室",
+    "配送收纳间"
+   ],
+   "note": "快递暂存、外部交接"
+  },
+  {
+   "code": "lk",
+   "name": "垃圾间",
+   "group": "服务/员工",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "垃圾间",
+    "垃圾分类间",
+    "垃圾暂存间",
+    "垃圾收纳间"
+   ],
+   "note": "垃圾暂存与分类"
+  },
+  {
+   "code": "ce",
+   "name": "宠物房",
+   "group": "宠物",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "宠物房",
+    "宠物间"
+   ],
+   "note": "宠物居住、活动"
+  },
+  {
+   "code": "cf",
+   "name": "宠物洗澡间",
+   "group": "宠物",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "宠物洗澡间",
+    "宠物清洁间"
+   ],
+   "note": "清洁、吹干护理"
+  },
+  {
+   "code": "ci",
+   "name": "宠物活动室",
+   "group": "宠物",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "宠物活动室",
+    "狗房",
+    "猫房",
+    "宠物活动区"
+   ],
+   "note": "室内活动与训练"
+  },
+  {
+   "code": "fa",
+   "name": "佛堂",
+   "group": "特殊/宗教",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "佛堂",
+    "供奉室",
+    "佛龛室",
+    "静修室"
+   ],
+   "note": "供奉、冥想、静心"
+  },
+  {
+   "code": "fb",
+   "name": "祈祷室",
+   "group": "特殊/宗教",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "祈祷室",
+    "禅意空间",
+    "静心室"
+   ],
+   "note": "宗教或冥想用途"
+  },
+  {
+   "code": "fi",
+   "name": "冥想室",
+   "group": "特殊/宗教",
+   "houses": [
+    "平层",
+    "复式",
+    "别墅"
+   ],
+   "aliases": [
+    "冥想室",
+    "打坐间",
+    "禅修室"
+   ],
+   "note": "静坐、放松"
+  },
+  {
+   "code": "vp",
+   "name": "收藏品储藏间",
+   "group": "其他",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "收藏品储藏间",
+    "恒温藏品间",
+    "藏品储藏间"
+   ],
+   "note": "恒温恒湿藏品存放"
+  },
+  {
+   "code": "bi",
+   "name": "保险库",
+   "group": "其他",
+   "houses": [
+    "别墅"
+   ],
+   "aliases": [
+    "保险库",
+    "金库",
+    "贵重品保管间",
+    "保险间"
+   ],
+   "note": "贵重物品安全存放"
+  }
+ ],
+ "positions": [
+  {
+   "code": "c",
+   "name": "茶几",
+   "group": "通用",
+   "defaultRole": "E",
+   "note": "客厅茶几上方重点照明"
+  },
+  {
+   "code": "s",
+   "name": "沙发",
+   "group": "通用",
+   "defaultRole": "A",
+   "note": "沙发区氛围/洗墙"
+  },
+  {
+   "code": "t",
+   "name": "电视墙",
+   "group": "通用",
+   "defaultRole": "E",
+   "note": "电视墙重点"
+  },
+  {
+   "code": "z",
+   "name": "餐桌/桌面",
+   "group": "通用",
+   "defaultRole": "E",
+   "note": "餐桌、书桌、茶台等重点照明"
+  },
+  {
+   "code": "d",
+   "name": "天花灯带",
+   "group": "通用",
+   "defaultRole": "A",
+   "note": "天花暗藏灯带"
+  },
+  {
+   "code": "x",
+   "name": "线型/洗墙",
+   "group": "通用",
+   "defaultRole": "A",
+   "note": "线型灯、洗墙"
+  },
+  {
+   "code": "g",
+   "name": "柜体/柜内",
+   "group": "通用",
+   "defaultRole": "E",
+   "note": "柜内、柜下、层板灯"
+  },
+  {
+   "code": "w",
+   "name": "墙面/壁灯",
+   "group": "通用",
+   "defaultRole": "A",
+   "note": "墙面、壁灯"
+  },
+  {
+   "code": "v",
+   "name": "展示/挂画",
+   "group": "通用",
+   "defaultRole": "E",
+   "note": "挂画、展示重点"
+  },
+  {
+   "code": "q",
+   "name": "其他位置",
+   "group": "通用",
+   "defaultRole": "M",
+   "note": "暂未归类的位置"
+  },
+  {
+   "code": "h",
+   "name": "床头",
+   "group": "居住",
+   "defaultRole": "F",
+   "note": "床头阅读/主照明"
+  },
+  {
+   "code": "j",
+   "name": "床头柜/起夜",
+   "group": "居住",
+   "defaultRole": "G",
+   "note": "起夜引导"
+  },
+  {
+   "code": "m",
+   "name": "镜柜/镜前",
+   "group": "卫浴",
+   "defaultRole": "F",
+   "note": "镜前、台盆补光"
+  },
+  {
+   "code": "n",
+   "name": "中岛/操作台",
+   "group": "餐饮",
+   "defaultRole": "F",
+   "note": "中岛、操作台、备餐台"
+  },
+  {
+   "code": "u",
+   "name": "踏步/楼梯",
+   "group": "交通",
+   "defaultRole": "G",
+   "note": "踏步、楼梯引导"
+  },
+  {
+   "code": "y",
+   "name": "阳台/户外",
+   "group": "户外",
+   "defaultRole": "A",
+   "note": "阳台、露台、檐廊"
+  },
+  {
+   "code": "r",
+   "name": "花架/园艺",
+   "group": "户外",
+   "defaultRole": "A",
+   "note": "花架、树池、园艺照明"
+  },
+  {
+   "code": "i",
+   "name": "池边/水面",
+   "group": "户外",
+   "defaultRole": "A",
+   "note": "泳池水面与池边"
+  },
+  {
+   "code": "e",
+   "name": "影幕/投影",
+   "group": "别墅休闲",
+   "defaultRole": "A",
+   "note": "幕布背景与观影氛围"
+  },
+  {
+   "code": "f",
+   "name": "器械/训练区",
+   "group": "别墅休闲",
+   "defaultRole": "F",
+   "note": "健身房器械区补光"
+  },
+  {
+   "code": "k",
+   "name": "泡池/SPA台",
+   "group": "别墅休闲",
+   "defaultRole": "A",
+   "note": "泡池、SPA 平台"
+  },
+  {
+   "code": "l",
+   "name": "汗蒸/座椅",
+   "group": "别墅休闲",
+   "defaultRole": "A",
+   "note": "桑拿房座椅与墙体"
+  },
+  {
+   "code": "a",
+   "name": "酒柜/恒温柜",
+   "group": "别墅休闲",
+   "defaultRole": "E",
+   "note": "酒窖、恒温酒柜展示"
+  },
+  {
+   "code": "b",
+   "name": "台球桌/棋牌桌",
+   "group": "别墅休闲",
+   "defaultRole": "E",
+   "note": "台球桌、棋牌桌上方"
+  },
+  {
+   "code": "o",
+   "name": "供台/佛龛",
+   "group": "别墅休闲",
+   "defaultRole": "E",
+   "note": "佛龛、供台、静修位"
+  },
+  {
+   "code": "p",
+   "name": "宠物垫/窝",
+   "group": "别墅休闲",
+   "defaultRole": "F",
+   "note": "宠物房清洁补光"
+  }
+ ],
+ "positionPalettes": {
+  "entry": {
+   "name": "入口/过渡",
+   "groups": [
+    "家具/陈设",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "a",
+     "name": "鞋柜/玄关柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "柜内、柜下灯与鞋区重点"
+    },
+    {
+     "code": "b",
+     "name": "换鞋凳/落座区",
+     "group": "家具/陈设",
+     "defaultRole": "G",
+     "note": "换鞋区引导与落座照明"
+    },
+    {
+     "code": "e",
+     "name": "挂衣/衣帽区",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "挂衣区、雨具收纳区"
+    },
+    {
+     "code": "i",
+     "name": "端景/装饰台面",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "玄关端景、装饰摆件"
+    },
+    {
+     "code": "o",
+     "name": "门厅主灯位",
+     "group": "家具/陈设",
+     "defaultRole": "M",
+     "note": "吊灯、吸顶灯位置"
+    },
+    {
+     "code": "p",
+     "name": "收纳柜/雨具柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "柜内灯、柜下灯"
+    },
+    {
+     "code": "u",
+     "name": "踏步/门槛",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "入户台阶、门槛引导"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "living": {
+   "name": "公共会客",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "c",
+     "name": "茶几",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "客厅茶几上方重点照明"
+    },
+    {
+     "code": "s",
+     "name": "沙发",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "沙发区氛围/洗墙"
+    },
+    {
+     "code": "t",
+     "name": "电视墙",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "电视墙重点"
+    },
+    {
+     "code": "z",
+     "name": "餐桌/桌面",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "餐桌、书桌、茶台等重点照明"
+    },
+    {
+     "code": "a",
+     "name": "单椅/休闲椅",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "单人位、边角休闲位"
+    },
+    {
+     "code": "b",
+     "name": "边几/角几",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "边几、角落重点"
+    },
+    {
+     "code": "e",
+     "name": "书柜/展示架",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "书柜、展示架层板"
+    },
+    {
+     "code": "i",
+     "name": "钢琴/乐器位",
+     "group": "功能位",
+     "defaultRole": "E",
+     "note": "钢琴、乐器重点照明"
+    },
+    {
+     "code": "k",
+     "name": "地面/地毯",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "地面、地毯区域氛围"
+    },
+    {
+     "code": "l",
+     "name": "落地窗/窗帘",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "落地窗、窗帘盒洗光"
+    },
+    {
+     "code": "m",
+     "name": "装饰边柜/端景",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "边柜、端景柜"
+    },
+    {
+     "code": "n",
+     "name": "挑空/中庭",
+     "group": "功能位",
+     "defaultRole": "A",
+     "note": "挑空、中庭垂吊照明"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "tea": {
+   "name": "茶室/琴房",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "z",
+     "name": "餐桌/桌面",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "茶台、琴台桌面重点照明"
+    },
+    {
+     "code": "a",
+     "name": "茶席/座垫位",
+     "group": "家具/陈设",
+     "defaultRole": "F",
+     "note": "茶席、座垫区补光"
+    },
+    {
+     "code": "b",
+     "name": "茶柜/收纳柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "茶柜、器具收纳柜内灯"
+    },
+    {
+     "code": "e",
+     "name": "琴台/乐器位",
+     "group": "功能位",
+     "defaultRole": "E",
+     "note": "古琴、乐器本体重点"
+    },
+    {
+     "code": "i",
+     "name": "博古架/展示柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "博古架、茶器展示"
+    },
+    {
+     "code": "k",
+     "name": "地面/地毯",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "地面、地毯氛围"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "dining": {
+   "name": "餐饮",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "z",
+     "name": "餐桌/桌面",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "餐桌桌面重点照明"
+    },
+    {
+     "code": "a",
+     "name": "吊灯位/餐桌上空",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "餐桌正上方吊灯"
+    },
+    {
+     "code": "b",
+     "name": "餐边柜/备餐柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "餐边柜、备餐柜内灯"
+    },
+    {
+     "code": "e",
+     "name": "卡座/长凳",
+     "group": "家具/陈设",
+     "defaultRole": "F",
+     "note": "卡座、长凳区补光"
+    },
+    {
+     "code": "i",
+     "name": "酒柜/展示柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "酒柜、餐瓷展示"
+    },
+    {
+     "code": "k",
+     "name": "吧台/酒水台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "吧台、酒水台面"
+    },
+    {
+     "code": "l",
+     "name": "传菜口/备餐台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "传菜口、备餐操作台"
+    },
+    {
+     "code": "m",
+     "name": "早餐台/简餐桌",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "早餐台、简餐桌面"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "cellar": {
+   "name": "酒窖/储食",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "a",
+     "name": "酒柜/恒温柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "酒窖、恒温酒柜展示"
+    },
+    {
+     "code": "b",
+     "name": "酒架/层板",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "酒架、层板洗光"
+    },
+    {
+     "code": "e",
+     "name": "雪茄柜/恒湿柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "雪茄柜、恒湿柜"
+    },
+    {
+     "code": "i",
+     "name": "品鉴台/吧台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "品鉴台、取酒操作台"
+    },
+    {
+     "code": "k",
+     "name": "地面/防滑引导",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "地面、储区通道引导"
+    },
+    {
+     "code": "l",
+     "name": "货架/储藏架",
+     "group": "家具/陈设",
+     "defaultRole": "F",
+     "note": "干货、食材货架"
+    },
+    {
+     "code": "m",
+     "name": "分装台/操作台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "食材分装、冷库操作台"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "kitchen": {
+   "name": "厨房/操作",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "n",
+     "name": "中岛/操作台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "中岛、操作台、备餐台"
+    },
+    {
+     "code": "a",
+     "name": "吊柜/上柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "吊柜柜内灯"
+    },
+    {
+     "code": "b",
+     "name": "地柜/下柜",
+     "group": "家具/陈设",
+     "defaultRole": "F",
+     "note": "地柜台面、柜下灯"
+    },
+    {
+     "code": "e",
+     "name": "灶台/烟机位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "灶台、烟机操作补光"
+    },
+    {
+     "code": "i",
+     "name": "水槽/洗涤区",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "水槽、洗涤区补光"
+    },
+    {
+     "code": "k",
+     "name": "冰箱/电器高柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "冰箱、电器高柜"
+    },
+    {
+     "code": "l",
+     "name": "备餐台/操作台面",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "备餐、切配台面"
+    },
+    {
+     "code": "m",
+     "name": "早餐吧台/简餐",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "早餐吧台、简餐位"
+    },
+    {
+     "code": "o",
+     "name": "吧台/酒水台",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "开放式吧台、酒水台"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "bedroom": {
+   "name": "卧室",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "h",
+     "name": "床头",
+     "group": "家具/陈设",
+     "defaultRole": "F",
+     "note": "床头阅读/主照明"
+    },
+    {
+     "code": "j",
+     "name": "床头柜/起夜",
+     "group": "家具/陈设",
+     "defaultRole": "G",
+     "note": "起夜引导"
+    },
+    {
+     "code": "a",
+     "name": "床尾/床尾凳",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "床尾凳、床尾背景"
+    },
+    {
+     "code": "b",
+     "name": "床榻/卧榻",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "日间榻、卧榻区"
+    },
+    {
+     "code": "e",
+     "name": "衣柜/衣橱",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "衣柜柜内、柜门灯"
+    },
+    {
+     "code": "i",
+     "name": "梳妆台/妆台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "梳妆台镜前补光"
+    },
+    {
+     "code": "k",
+     "name": "书桌/工作位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "卧室书桌、工作位"
+    },
+    {
+     "code": "l",
+     "name": "电视/投影位",
+     "group": "功能位",
+     "defaultRole": "A",
+     "note": "卧室电视、投影氛围"
+    },
+    {
+     "code": "m",
+     "name": "飘窗/窗边",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "飘窗、窗边坐塌"
+    },
+    {
+     "code": "n",
+     "name": "单椅/阅读角",
+     "group": "家具/陈设",
+     "defaultRole": "F",
+     "note": "单椅、阅读角补光"
+    },
+    {
+     "code": "o",
+     "name": "地面/起夜脚边",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "床侧地脚灯、起夜引导"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "kidroom": {
+   "name": "儿童房",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "h",
+     "name": "床头",
+     "group": "家具/陈设",
+     "defaultRole": "F",
+     "note": "床头阅读照明"
+    },
+    {
+     "code": "j",
+     "name": "床头柜/起夜",
+     "group": "家具/陈设",
+     "defaultRole": "G",
+     "note": "起夜引导"
+    },
+    {
+     "code": "a",
+     "name": "书桌/学习位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "写作业、阅读补光"
+    },
+    {
+     "code": "b",
+     "name": "玩具/游戏区",
+     "group": "功能位",
+     "defaultRole": "A",
+     "note": "玩耍、游戏区氛围"
+    },
+    {
+     "code": "e",
+     "name": "衣柜/衣橱",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "衣柜柜内灯"
+    },
+    {
+     "code": "i",
+     "name": "书柜/置物架",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "书柜、置物架层板"
+    },
+    {
+     "code": "k",
+     "name": "地面/地毯",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "地面、地毯区域"
+    },
+    {
+     "code": "l",
+     "name": "上下床/高架床",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "上下床、高架床体"
+    },
+    {
+     "code": "m",
+     "name": "飘窗/窗边",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "飘窗、窗边"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "babyroom": {
+   "name": "婴儿房",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "h",
+     "name": "婴儿床/床头",
+     "group": "家具/陈设",
+     "defaultRole": "G",
+     "note": "婴儿床区柔光"
+    },
+    {
+     "code": "j",
+     "name": "床边柜/照护位",
+     "group": "家具/陈设",
+     "defaultRole": "G",
+     "note": "床边照护位引导"
+    },
+    {
+     "code": "a",
+     "name": "护理台/换尿布台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "护理台操作补光"
+    },
+    {
+     "code": "b",
+     "name": "哺乳椅/摇椅",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "哺乳椅、摇椅区"
+    },
+    {
+     "code": "e",
+     "name": "衣柜/收纳",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "衣柜、收纳柜内灯"
+    },
+    {
+     "code": "k",
+     "name": "地面/爬行垫",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "地面、爬行垫区"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "bath": {
+   "name": "卫浴",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "m",
+     "name": "镜柜/镜前",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "镜前、台盆补光"
+    },
+    {
+     "code": "k",
+     "name": "台盆/洗手台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "台盆、洗手台面补光"
+    },
+    {
+     "code": "o",
+     "name": "马桶/坐便位",
+     "group": "功能位",
+     "defaultRole": "G",
+     "note": "坐便位引导与阅读补光"
+    },
+    {
+     "code": "l",
+     "name": "淋浴区",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "淋浴间、湿区照明"
+    },
+    {
+     "code": "i",
+     "name": "浴缸/泡池",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "浴缸、泡池氛围"
+    },
+    {
+     "code": "a",
+     "name": "干区/更衣区",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "干区、更衣与浴巾位"
+    },
+    {
+     "code": "b",
+     "name": "湿区/地面引导",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "淋浴湿区、防滑引导"
+    },
+    {
+     "code": "e",
+     "name": "浴霸/暖风位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "浴霸、暖风出风位"
+    },
+    {
+     "code": "f",
+     "name": "置物/壁龛",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "壁龛、置物架"
+    },
+    {
+     "code": "u",
+     "name": "淋浴台阶/落座",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "淋浴台阶、淋浴凳"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "wc": {
+   "name": "独立马桶间",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "o",
+     "name": "马桶/坐便位",
+     "group": "功能位",
+     "defaultRole": "G",
+     "note": "坐便位引导与补光"
+    },
+    {
+     "code": "b",
+     "name": "地面/防滑引导",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "地面、夜间起夜引导"
+    },
+    {
+     "code": "f",
+     "name": "置物/壁龛",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "纸巾架、置物壁龛"
+    },
+    {
+     "code": "e",
+     "name": "排风/暖风位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "排风、暖风出风位"
+    },
+    {
+     "code": "a",
+     "name": "小台盆/干区",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "独立小台盆"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "sauna": {
+   "name": "桑拿/汗蒸",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "l",
+     "name": "汗蒸/座椅",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "桑拿房座椅与墙体"
+    },
+    {
+     "code": "p",
+     "name": "蒸汽/淋浴位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "蒸汽发生、冲淋位"
+    },
+    {
+     "code": "a",
+     "name": "更衣/挂衣区",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "更衣、挂衣与浴巾"
+    },
+    {
+     "code": "b",
+     "name": "地面/防滑引导",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "湿区地面、防滑引导"
+    },
+    {
+     "code": "m",
+     "name": "镜前/整理位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "整理、镜前补光"
+    },
+    {
+     "code": "e",
+     "name": "暖风/加热位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "暖风、加热设备位"
+    },
+    {
+     "code": "i",
+     "name": "冷水池/冲淋",
+     "group": "家具/陈设",
+     "defaultRole": "F",
+     "note": "冷水池、冲淋区"
+    },
+    {
+     "code": "k",
+     "name": "台盆/洗手台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "台盆、洗手台面"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "spa": {
+   "name": "SPA/泡池",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "k",
+     "name": "泡池/SPA台",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "泡池、SPA 平台"
+    },
+    {
+     "code": "n",
+     "name": "按摩池/水力位",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "按摩池、水力按摩位"
+    },
+    {
+     "code": "a",
+     "name": "躺椅/休息位",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "躺椅、休息位氛围"
+    },
+    {
+     "code": "b",
+     "name": "池边地面/防滑",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "池边地面、防滑引导"
+    },
+    {
+     "code": "m",
+     "name": "更衣/镜前",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "更衣、镜前补光"
+    },
+    {
+     "code": "e",
+     "name": "暖风/加热位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "暖风、加热设备位"
+    },
+    {
+     "code": "i",
+     "name": "淋浴/冲淋",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "冲淋、沐浴区"
+    },
+    {
+     "code": "o",
+     "name": "干蒸/湿蒸位",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "干蒸、湿蒸房体"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "pool": {
+   "name": "泳池/水景",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "i",
+     "name": "池边/水面",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "泳池水面与池边"
+    },
+    {
+     "code": "k",
+     "name": "泡池/SPA台",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "泡池、SPA 平台"
+    },
+    {
+     "code": "n",
+     "name": "泳道/水下灯位",
+     "group": "功能位",
+     "defaultRole": "A",
+     "note": "泳道水下灯、池壁灯"
+    },
+    {
+     "code": "a",
+     "name": "躺椅/休息位",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "池边躺椅、休息位"
+    },
+    {
+     "code": "b",
+     "name": "池边地面/防滑",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "池边地面、防滑引导"
+    },
+    {
+     "code": "l",
+     "name": "更衣/冲淋",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "更衣、冲淋区"
+    },
+    {
+     "code": "m",
+     "name": "池边台阶/扶手",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "入池台阶、扶手"
+    },
+    {
+     "code": "o",
+     "name": "水景/喷泉",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "水景、喷泉、锦鲤池"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "dressing": {
+   "name": "衣帽/梳妆",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "a",
+     "name": "挂衣/长衣区",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "挂衣区、长衣区灯"
+    },
+    {
+     "code": "b",
+     "name": "叠放/抽屉柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "叠放区、抽屉柜内灯"
+    },
+    {
+     "code": "e",
+     "name": "首饰/饰品柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "饰品柜、表柜"
+    },
+    {
+     "code": "i",
+     "name": "梳妆台/妆台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "梳妆台镜前补光"
+    },
+    {
+     "code": "k",
+     "name": "试衣镜/全身镜",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "试衣镜、全身镜补光"
+    },
+    {
+     "code": "l",
+     "name": "地面/地毯",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "地面、地毯区域"
+    },
+    {
+     "code": "o",
+     "name": "中岛/饰品台",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "衣帽间中岛台"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "study": {
+   "name": "书房/工作室",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "a",
+     "name": "书桌/工作台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "书桌、工作台补光"
+    },
+    {
+     "code": "b",
+     "name": "书柜/书架",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "书柜、书架层板灯"
+    },
+    {
+     "code": "e",
+     "name": "会议/对谈位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "洽谈、会议桌照明"
+    },
+    {
+     "code": "i",
+     "name": "白板/投影位",
+     "group": "功能位",
+     "defaultRole": "E",
+     "note": "白板、投影墙重点"
+    },
+    {
+     "code": "k",
+     "name": "地面/地毯",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "地面、地毯区域"
+    },
+    {
+     "code": "l",
+     "name": "单椅/阅读角",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "阅读角、单椅氛围"
+    },
+    {
+     "code": "m",
+     "name": "展示/奖杯柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "展示柜、荣誉墙"
+    },
+    {
+     "code": "n",
+     "name": "打印/设备位",
+     "group": "功能位",
+     "defaultRole": "E",
+     "note": "打印、设备高柜"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "leisure": {
+   "name": "娱乐/休闲",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "e",
+     "name": "影幕/投影",
+     "group": "功能位",
+     "defaultRole": "A",
+     "note": "幕布背景与观影氛围"
+    },
+    {
+     "code": "s",
+     "name": "沙发",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "观影座席、休闲沙发"
+    },
+    {
+     "code": "t",
+     "name": "电视墙",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "电视墙、大屏重点"
+    },
+    {
+     "code": "c",
+     "name": "茶几",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "茶几上方重点照明"
+    },
+    {
+     "code": "b",
+     "name": "台球桌/棋牌桌",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "台球桌、棋牌桌上方"
+    },
+    {
+     "code": "f",
+     "name": "器械/训练区",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "健身房器械区补光"
+    },
+    {
+     "code": "i",
+     "name": "乐器/演奏位",
+     "group": "功能位",
+     "defaultRole": "E",
+     "note": "乐器、演奏位重点"
+    },
+    {
+     "code": "l",
+     "name": "收藏/陈列柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "陈列柜、收藏展示"
+    },
+    {
+     "code": "m",
+     "name": "瑜伽/拉伸位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "瑜伽、拉伸区补光"
+    },
+    {
+     "code": "n",
+     "name": "游戏机/电玩位",
+     "group": "功能位",
+     "defaultRole": "A",
+     "note": "电玩、游戏机位"
+    },
+    {
+     "code": "o",
+     "name": "藏品/展示台",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "藏品台、展品重点"
+    },
+    {
+     "code": "k",
+     "name": "地面/地毯",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "地面、地毯区域"
+    },
+    {
+     "code": "a",
+     "name": "吧台/酒水区",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "吧台、酒水台"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "corridor": {
+   "name": "交通/连接",
+   "groups": [
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "u",
+     "name": "踏步/楼梯",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "踏步、楼梯引导"
+    },
+    {
+     "code": "a",
+     "name": "扶手/墙面引导",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "扶手、墙面洗光引导"
+    },
+    {
+     "code": "b",
+     "name": "转角/平台",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "转角、歇脚平台"
+    },
+    {
+     "code": "e",
+     "name": "电梯轿厢/井道",
+     "group": "功能位",
+     "defaultRole": "M",
+     "note": "电梯轿厢、井道照明"
+    },
+    {
+     "code": "i",
+     "name": "侯梯区/门厅",
+     "group": "功能位",
+     "defaultRole": "M",
+     "note": "侯梯区、连廊出口"
+    },
+    {
+     "code": "k",
+     "name": "地面/踢脚引导",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "地脚灯、踢脚线引导"
+    },
+    {
+     "code": "l",
+     "name": "中庭/挑空",
+     "group": "功能位",
+     "defaultRole": "A",
+     "note": "中庭、挑空垂吊照明"
+    },
+    {
+     "code": "m",
+     "name": "连廊/通道",
+     "group": "功能位",
+     "defaultRole": "M",
+     "note": "连廊、地下通道基础照明"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "outdoor": {
+   "name": "室外/庭院",
+   "groups": [
+    "地面/引导",
+    "户外",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "y",
+     "name": "阳台/户外",
+     "group": "户外",
+     "defaultRole": "A",
+     "note": "阳台、露台、檐廊"
+    },
+    {
+     "code": "i",
+     "name": "池边/水面",
+     "group": "户外",
+     "defaultRole": "A",
+     "note": "泳池水面与池边"
+    },
+    {
+     "code": "r",
+     "name": "花架/园艺",
+     "group": "户外",
+     "defaultRole": "A",
+     "note": "花架、树池、园艺照明"
+    },
+    {
+     "code": "o",
+     "name": "水景/喷泉",
+     "group": "户外",
+     "defaultRole": "E",
+     "note": "水景、喷泉、锦鲤池"
+    },
+    {
+     "code": "a",
+     "name": "露台/座椅区",
+     "group": "户外",
+     "defaultRole": "A",
+     "note": "户外座椅、茶座区"
+    },
+    {
+     "code": "b",
+     "name": "草坪/步道",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "草坪、步道地埋灯"
+    },
+    {
+     "code": "e",
+     "name": "烧烤/外餐台",
+     "group": "户外",
+     "defaultRole": "F",
+     "note": "烧烤台、户外餐桌"
+    },
+    {
+     "code": "k",
+     "name": "阳光房/温室",
+     "group": "户外",
+     "defaultRole": "M",
+     "note": "阳光房、温室基础照明"
+    },
+    {
+     "code": "l",
+     "name": "廊架/藤架",
+     "group": "户外",
+     "defaultRole": "A",
+     "note": "廊架、藤架洗光"
+    },
+    {
+     "code": "m",
+     "name": "台阶/汀步",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "台阶、汀步引导"
+    },
+    {
+     "code": "n",
+     "name": "树池/绿植",
+     "group": "户外",
+     "defaultRole": "E",
+     "note": "乔木、绿植投光"
+    },
+    {
+     "code": "p",
+     "name": "泳池/泡池",
+     "group": "户外",
+     "defaultRole": "A",
+     "note": "室外泳池、泡池"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "雕塑、景墙、挂画重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "utility": {
+   "name": "设备/家政/服务",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "设备/机电",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "a",
+     "name": "设备机柜/配电箱",
+     "group": "设备/机电",
+     "defaultRole": "F",
+     "note": "配电、新风机房设备位"
+    },
+    {
+     "code": "b",
+     "name": "洗衣机/烘干机位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "洗衣、烘干机位"
+    },
+    {
+     "code": "e",
+     "name": "家政台/熨烫台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "熨烫、家务操作台"
+    },
+    {
+     "code": "i",
+     "name": "工具墙/工作台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "工具墙、维修工作台"
+    },
+    {
+     "code": "k",
+     "name": "货架/收纳架",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "货架、收纳架层板"
+    },
+    {
+     "code": "l",
+     "name": "垃圾桶/分类位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "垃圾暂存、分类位"
+    },
+    {
+     "code": "m",
+     "name": "快递架/交接台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "快递暂存、交接台"
+    },
+    {
+     "code": "n",
+     "name": "更衣柜/员工储物",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "更衣柜、员工储物柜"
+    },
+    {
+     "code": "o",
+     "name": "值班台/登记位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "值班、登记台面"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "garage": {
+   "name": "车辆/仓储",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "设备/机电",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "a",
+     "name": "车位/停车位",
+     "group": "功能位",
+     "defaultRole": "X",
+     "note": "车位布防补光"
+    },
+    {
+     "code": "b",
+     "name": "车道/坡道",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "车道、坡道引导"
+    },
+    {
+     "code": "e",
+     "name": "充电桩位",
+     "group": "设备/机电",
+     "defaultRole": "X",
+     "note": "充电桩、设备位"
+    },
+    {
+     "code": "i",
+     "name": "工具台/工作台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "工具台、维修工作台"
+    },
+    {
+     "code": "k",
+     "name": "货架/储物架",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "货架、储物架层板"
+    },
+    {
+     "code": "l",
+     "name": "保险柜/贵重柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "保险柜、贵重品柜"
+    },
+    {
+     "code": "m",
+     "name": "恒温藏柜",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "恒温恒湿藏品柜"
+    },
+    {
+     "code": "o",
+     "name": "出入口/卷帘门",
+     "group": "功能位",
+     "defaultRole": "X",
+     "note": "卷帘门、出入口照明"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "pet": {
+   "name": "宠物",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "p",
+     "name": "宠物垫/窝",
+     "group": "家具/陈设",
+     "defaultRole": "F",
+     "note": "宠物房清洁补光"
+    },
+    {
+     "code": "a",
+     "name": "喂食/水碗位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "喂食器、水碗位"
+    },
+    {
+     "code": "b",
+     "name": "猫爬架/活动架",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "猫爬架、活动架"
+    },
+    {
+     "code": "e",
+     "name": "宠物洗澡台",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "宠物洗澡、吹干台"
+    },
+    {
+     "code": "i",
+     "name": "吹干/护理位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "护理、吹干操作位"
+    },
+    {
+     "code": "k",
+     "name": "地面/清洁引导",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "地面、清洁区引导"
+    },
+    {
+     "code": "l",
+     "name": "围栏/活动区",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "围栏、宠物活动区"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "worship": {
+   "name": "特殊/宗教",
+   "groups": [
+    "家具/陈设",
+    "功能位",
+    "地面/引导",
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "o",
+     "name": "供台/佛龛",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "佛龛、供台、静修位"
+    },
+    {
+     "code": "a",
+     "name": "静修/打坐位",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "打坐、静修位"
+    },
+    {
+     "code": "b",
+     "name": "诵经/阅读位",
+     "group": "功能位",
+     "defaultRole": "F",
+     "note": "诵经、阅读补光"
+    },
+    {
+     "code": "e",
+     "name": "香炉/烛台位",
+     "group": "家具/陈设",
+     "defaultRole": "A",
+     "note": "香炉、烛台重点"
+    },
+    {
+     "code": "i",
+     "name": "经柜/收纳",
+     "group": "家具/陈设",
+     "defaultRole": "E",
+     "note": "经柜、法器收纳"
+    },
+    {
+     "code": "k",
+     "name": "地面/地毯",
+     "group": "地面/引导",
+     "defaultRole": "G",
+     "note": "地面、地毯区域"
+    },
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  },
+  "other": {
+   "name": "其他空间",
+   "groups": [
+    "通用"
+   ],
+   "positions": [
+    {
+     "code": "d",
+     "name": "天花灯带",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "天花暗藏灯带"
+    },
+    {
+     "code": "x",
+     "name": "线型/洗墙",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "线型灯、洗墙"
+    },
+    {
+     "code": "g",
+     "name": "柜体/柜内",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "柜内、柜下、层板灯"
+    },
+    {
+     "code": "w",
+     "name": "墙面/壁灯",
+     "group": "通用",
+     "defaultRole": "A",
+     "note": "墙面、壁灯"
+    },
+    {
+     "code": "v",
+     "name": "展示/挂画",
+     "group": "通用",
+     "defaultRole": "E",
+     "note": "挂画、展示重点"
+    },
+    {
+     "code": "q",
+     "name": "其他位置",
+     "group": "通用",
+     "defaultRole": "M",
+     "note": "暂未归类的位置"
+    }
+   ]
+  }
+ },
+ "spacePalette": {
+  "m": "entry",
+  "ya": "entry",
+  "la": "entry",
+  "k": "living",
+  "ja": "living",
+  "qa": "living",
+  "ca": "tea",
+  "qi": "tea",
+  "c": "dining",
+  "za": "dining",
+  "ba": "dining",
+  "be": "dining",
+  "jo": "cellar",
+  "xe": "cellar",
+  "co": "cellar",
+  "f": "kitchen",
+  "fo": "kitchen",
+  "z": "bedroom",
+  "w": "bedroom",
+  "lb": "bedroom",
+  "ka": "bedroom",
+  "pa": "bedroom",
+  "e": "kidroom",
+  "yb": "babyroom",
+  "b": "bath",
+  "zb": "bath",
+  "wb": "bath",
+  "bb": "bath",
+  "bo": "wc",
+  "na": "sauna",
+  "sp": "spa",
+  "yi": "pool",
+  "up": "pool",
+  "uo": "pool",
+  "y": "dressing",
+  "sa": "dressing",
+  "s": "study",
+  "so": "study",
+  "ef": "study",
+  "r": "leisure",
+  "ji": "leisure",
+  "yo": "leisure",
+  "ta": "leisure",
+  "go": "leisure",
+  "vo": "leisure",
+  "io": "leisure",
+  "g": "corridor",
+  "l": "corridor",
+  "li": "corridor",
+  "da": "corridor",
+  "db": "corridor",
+  "t": "outdoor",
+  "u": "outdoor",
+  "ua": "outdoor",
+  "ub": "outdoor",
+  "ue": "outdoor",
+  "uf": "outdoor",
+  "ui": "outdoor",
+  "uk": "outdoor",
+  "ul": "outdoor",
+  "q": "utility",
+  "xi": "utility",
+  "pb": "utility",
+  "to": "utility",
+  "cb": "utility",
+  "lk": "utility",
+  "ki": "utility",
+  "pe": "utility",
+  "ma": "utility",
+  "v": "garage",
+  "va": "garage",
+  "vb": "garage",
+  "ve": "garage",
+  "vf": "garage",
+  "vp": "garage",
+  "bi": "garage",
+  "ce": "pet",
+  "cf": "pet",
+  "ci": "pet",
+  "fa": "worship",
+  "fb": "worship",
+  "fi": "worship",
+  "x": "other"
+ },
+ "universalPositionCodes": [
+  "c",
+  "s",
+  "t",
+  "z",
+  "d",
+  "x",
+  "g",
+  "w",
+  "v",
+  "q"
+ ],
+ "positionRuleNote": "位置按空间取：换空间时位置下拉自动换成该空间的家具/功能位（卫生间＝镜前/台盆/马桶/淋浴/浴缸…，卧室＝床头/床尾/床头柜/床榻/衣柜…）。"
+}

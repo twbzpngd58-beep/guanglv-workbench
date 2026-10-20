@@ -1,0 +1,28 @@
+{
+  "name": "guanglv",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test:e2e": "playwright test",
+    "check:floors": "node scripts/check-floor-detect.mjs",
+    "check:positions": "node scripts/check-positions.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.1",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.4.1",
+    "prettier": "3.6.2",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.5"
+  }
+}

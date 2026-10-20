@@ -1,0 +1,20 @@
+{
+  "_note": "R5 回路检查提示原文，唯一一份：frontend/src/circuitRules.ts 与 backend/circuit_rules.py 都从这里读，不许在两边另抄。{name} 为占位，按名替换。",
+  "unassigned": "未分配回路",
+  "unassignedRoom": "未分配空间",
+  "d3Note": "按 D3 默认上限",
+  "daliNote": "组数未判",
+  "listSep": "、",
+  "issueSep": "；",
+  "mixed": "回路 {circuit} 混用调光方式：{controls}",
+  "overD3": "回路 {circuit} 超 D3 上限：{reading}",
+  "wirelessCross": "回路 {circuit} 无线（{controls}）跨 {n} 个空间：{detail}",
+  "wirelessCrossItem": "{room} {n} 盏",
+  "unassignedLamps": "{room} 有 {n} 盏灯没分回路",
+  "block": "被 {n} 条拦住：{items}",
+  "readingRelay": "驱动 {n}/{maxDrivers}、功率 {w}/{maxWatts}W（{d3Note}）",
+  "readingDali": "地址 {n}/{maxAddresses}、功率 {w}W（{d3Note}，{daliNote}）",
+  "readingOther": "驱动 {n}、功率 {w}W",
+  "flagOverD3": "超 D3",
+  "flagWirelessCross": "无线跨空间"
+}

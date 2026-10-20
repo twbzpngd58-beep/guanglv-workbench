@@ -1,0 +1,16 @@
+fastapi==0.135.1
+uvicorn==0.41.0
+python-multipart==0.0.22
+pillow==12.1.1
+reportlab==4.4.10
+openpyxl==3.1.5
+python-docx==1.2.0
+pymupdf==1.27.1
+ezdxf==1.4.3
+pytest==9.0.2
+httpx==0.28.1
+python-dotenv==1.2.2
+opencv-python-headless==4.13.0.92
+shapely==2.1.2
+edge-tts==7.3.1
+qrcode==8.2

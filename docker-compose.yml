@@ -1,0 +1,13 @@
+services:
+  workbench:
+    build: .
+    image: guanglv-workbench:1.0.0
+    container_name: guanglv-workbench
+    ports:
+      - "8000:8000"
+    volumes:
+      - guanglv-data:/data
+    restart: unless-stopped
+
+volumes:
+  guanglv-data:

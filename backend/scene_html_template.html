@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>灯光情景演示</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #10151a;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent; color: #e7ece8; }
+  #stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  #stage svg { width: 100%; height: 100%; max-width: 100vw; max-height: 100vh; }
+
+  #hud { position: fixed; top: calc(10px + env(safe-area-inset-top)); left: 12px; right: 12px;
+    pointer-events: none; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .hud-card { pointer-events: auto; max-width: min(560px, 100%);
+    background: rgba(16,21,26,.78); border: 1px solid rgba(255,255,255,.12); border-radius: 14px;
+    padding: 10px 14px; backdrop-filter: blur(10px); }
+  .hud-title { font-size: 12px; letter-spacing: .08em; color: #9fb0a6; }
+  .hud-scene { font-size: 20px; font-weight: 700; color: #f0d9a8; margin-top: 2px; line-height: 1.25; }
+  .hud-meta { font-size: 12px; color: #b9c6bd; margin-top: 6px; line-height: 1.55; }
+  .tag { display: inline-block; border-radius: 999px; padding: 1px 8px; margin: 0 6px 4px 0;
+    font-size: 11px; border: 1px solid rgba(255,255,255,.22); color: #dce6de; }
+  .tag.sensor { border-color: #7fd2a3; color: #a9ecc6; }
+  .tag.timer { border-color: #8fb8e8; color: #bcd9f7; }
+  .tag.panel { border-color: #e8bc73; color: #f3d9a6; }
+  .tag.manual { border-color: #a9a9a9; color: #d8d8d8; }
+
+  #floorBar { display: none; gap: 6px; flex-wrap: wrap; pointer-events: auto; }
+  #floorBar.on { display: flex; }
+  .floor-btn { border: 1px solid rgba(255,255,255,.18); background: rgba(20,26,32,.78); color: #cfd8d1;
+    border-radius: 999px; padding: 8px 14px; min-height: 40px; font-size: 13px; cursor: pointer;
+    backdrop-filter: blur(8px); }
+  .floor-btn.active { background: #e8bc73; border-color: #e8bc73; color: #2a2113; font-weight: 600; }
+
+  #switcher { position: fixed; left: 0; right: 0; bottom: 0;
+    display: flex; flex-wrap: nowrap; gap: 8px; justify-content: safe center;
+    overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; user-select: none; -webkit-user-select: none;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  #switcher::-webkit-scrollbar { display: none; }
+  .scene-btn { flex: 0 0 auto; border: 1px solid rgba(255,255,255,.16); background: rgba(20,26,32,.72);
+    color: #c9d2cc; padding: 10px 16px; min-height: 46px; border-radius: 999px; cursor: pointer;
+    font-size: 14px; letter-spacing: .5px; transition: all .25s; backdrop-filter: blur(6px);
+    white-space: nowrap; }
+  .scene-btn .trg { display: block; font-size: 10px; opacity: .68; margin-top: 2px; }
+  .scene-btn:hover { border-color: rgba(255,255,255,.4); color: #fff; }
+  .scene-btn.active { background: #e8bc73; border-color: #e8bc73; color: #2a2113; font-weight: 600; }
+  .scene-btn.active .trg { opacity: .8; }
+  .scene-btn.alloff { border-color: rgba(255,255,255,.28); }
+
+  #groupToggle { position: fixed; right: 12px; top: calc(10px + env(safe-area-inset-top));
+    border: 1px solid rgba(255,255,255,.18); background: rgba(20,26,32,.78); color: #dbe6dd;
+    border-radius: 999px; padding: 10px 16px; min-height: 44px; font-size: 13px; cursor: pointer;
+    backdrop-filter: blur(8px); }
+  #groupToggle.active { background: #e8bc73; border-color: #e8bc73; color: #2a2113; font-weight: 600; }
+  #groupPanel { position: fixed; z-index: 20; display: none; background: rgba(14,19,24,.94);
+    border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(12px); overflow-y: auto;
+    -webkit-overflow-scrolling: touch; }
+  #groupPanel.open { display: block; }
+  @media (min-width: 760px) {
+    #groupPanel { top: calc(168px + env(safe-area-inset-top)); right: 12px; width: 330px;
+      max-height: 64vh; border-radius: 16px; }
+  }
+  @media (max-width: 759px) {
+    #groupPanel { left: 0; right: 0; bottom: 0; max-height: 62vh;
+      border-radius: 16px 16px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  }
+  .gp-head { position: sticky; top: 0; background: rgba(14,19,24,.98); padding: 12px 16px 8px;
+    font-size: 13px; color: #9fb0a6; letter-spacing: .06em; }
+  .gp-item { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    width: 100%; text-align: left; padding: 12px 16px; min-height: 48px; cursor: pointer;
+    border: 0; border-top: 1px solid rgba(255,255,255,.07); background: transparent; color: #e7ece8;
+    font-size: 14px; }
+  .gp-item:hover { background: rgba(255,255,255,.05); }
+  .gp-item.on { background: rgba(232,188,115,.16); color: #f4dfb2; }
+  .gp-item .count { font-size: 12px; color: #9fb0a6; white-space: nowrap; }
+  .gp-item .codes { display: block; font-size: 11px; color: #8fa095; margin-top: 3px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46vw; }
+  .gp-note { padding: 10px 16px 14px; font-size: 11px; color: #8fa095; line-height: 1.6; }
+  #panelToggle { position: fixed; right: 12px; top: calc(62px + env(safe-area-inset-top));
+    border: 1px solid rgba(255,255,255,.18); background: rgba(20,26,32,.78); color: #dbe6dd;
+    border-radius: 999px; padding: 10px 16px; min-height: 44px; font-size: 13px; cursor: pointer;
+    backdrop-filter: blur(8px); }
+  #panelToggle.active { background: #e8bc73; border-color: #e8bc73; color: #2a2113; font-weight: 600; }
+  #panelBox { position: fixed; z-index: 21; display: none; background: rgba(14,19,24,.94);
+    border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(12px); overflow-y: auto;
+    -webkit-overflow-scrolling: touch; }
+  #panelBox.open { display: block; }
+  @media (min-width: 760px) {
+    #panelBox { top: calc(168px + env(safe-area-inset-top)); right: 12px; width: 360px;
+      max-height: 60vh; border-radius: 16px; }
+  }
+  @media (max-width: 759px) {
+    #panelBox { left: 0; right: 0; bottom: 0; max-height: 62vh;
+      border-radius: 16px 16px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  }
+  .pn-head { position: sticky; top: 0; background: rgba(14,19,24,.98); padding: 12px 16px 8px;
+    font-size: 13px; color: #9fb0a6; letter-spacing: .06em; }
+  .pn-card { padding: 10px 16px 14px; border-top: 1px solid rgba(255,255,255,.07); }
+  .pn-title { font-size: 12px; color: #cfd8d1; margin-bottom: 8px; }
+  .pn-grid { display: grid; gap: 6px; }
+  .pn-grid.grouped { gap: 10px; }
+  .pn-bigkey { display: grid; gap: 6px; border: 1px solid rgba(255,255,255,.18);
+    border-radius: 12px; padding: 6px; }
+  .pn-bigkey .pn-key { min-height: 40px; }
+  .pn-bigkey-label { font-size: 10px; color: #8fa095; text-align: center; }
+  .pn-subkey { display: grid; gap: 4px; }
+  .pn-subkey-label { font-size: 10px; color: #8fa095; }
+  .pn-key.long { border-style: dashed; }
+  .pn-key.long .no { color: #c2a172; }
+  .pn-key { display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    min-height: 52px; padding: 8px 10px; border-radius: 10px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,.16); background: rgba(20,26,32,.72); color: #e7ece8;
+    font-size: 13px; text-align: left; }
+  .pn-key .no { font-size: 10px; color: #8fa095; }
+  .pn-key b { font-weight: 600; }
+  .pn-key.active { background: #e8bc73; border-color: #e8bc73; color: #2a2113; }
+  .pn-key.active .no { color: #6b5a32; }
+  .pn-key:disabled { opacity: .45; cursor: default; }
+  .pn-note { padding: 10px 16px 14px; font-size: 11px; color: #8fa095; line-height: 1.6; }
+  #sensorToggle { position: fixed; right: 12px; top: calc(114px + env(safe-area-inset-top));
+    border: 1px solid rgba(255,255,255,.18); background: rgba(20,26,32,.78); color: #dbe6dd;
+    border-radius: 999px; padding: 10px 16px; min-height: 44px; font-size: 13px; cursor: pointer;
+    backdrop-filter: blur(8px); }
+  #sensorToggle.active { background: #7fd2a3; border-color: #7fd2a3; color: #10261a; font-weight: 600; }
+  #sensorLayer, #personNode, #lampLayer, #deviceLayer { pointer-events: none; }
+  .dev-label { font-size: 8.5px; fill: #dbe6de; paint-order: stroke;
+    stroke: rgba(16,21,26,.78); stroke-width: 2.4px; stroke-linejoin: round; }
+  #lampToggle { position: fixed; right: 12px; top: calc(166px + env(safe-area-inset-top));
+    border: 1px solid rgba(255,255,255,.18); background: rgba(20,26,32,.78); color: #dbe6dd;
+    border-radius: 999px; padding: 10px 16px; min-height: 44px; font-size: 13px; cursor: pointer;
+    backdrop-filter: blur(8px); }
+  #lampToggle.active { background: #e8bc73; border-color: #e8bc73; color: #2a2113; font-weight: 600; }
+  #deviceToggle { position: fixed; right: 12px; top: calc(218px + env(safe-area-inset-top));
+    border: 1px solid rgba(255,255,255,.18); background: rgba(20,26,32,.78); color: #dbe6dd;
+    border-radius: 999px; padding: 10px 16px; min-height: 44px; font-size: 13px; cursor: pointer;
+    backdrop-filter: blur(8px); }
+  #deviceToggle.active { background: #8fb8e8; border-color: #8fb8e8; color: #10202e; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+
+<div id="hud">
+  <div class="hud-card">
+    <div class="hud-title" id="hudTitle">灯光情景演示</div>
+    <div class="hud-scene" id="hudScene">—</div>
+    <div class="hud-meta" id="hudMeta"></div>
+  </div>
+  <div id="floorBar"></div>
+</div>
+
+<button id="groupToggle" type="button">灯具分组</button>
+<div id="groupPanel">
+  <div class="gp-head" id="groupHead">灯具分组（点一组＝只点亮这一组）</div>
+  <div id="groupList"></div>
+  <div class="gp-note" id="groupNote"></div>
+</div>
+
+<button id="panelToggle" type="button">情景面板</button>
+<div id="panelBox">
+  <div class="pn-head" id="panelHead">情景面板（点键＝整场切换到该情景）</div>
+  <div id="panelList"></div>
+  <div class="pn-note" id="panelNote"></div>
+</div>
+
+<button id="sensorToggle" type="button">感应漫游</button>
+<button id="lampToggle" type="button">灯具层</button>
+<button id="deviceToggle" type="button">设备层</button>
+
+<div id="switcher"></div>
+
+<script>
+const DATA = @@DATA@@;
+const NS = "http://www.w3.org/2000/svg";
+const SPOT_BASE_RADIUS = 80;
+const IMAGES = DATA.images || {};
+const PLANS = (DATA.plans || []);
+const SCENES = DATA.scenes || [];
+
+let floorIdx = 0;
+const activePlan = () => PLANS[floorIdx] || { fixtures: [], imageId: "", floor: 1 };
+const activeBase = () => IMAGES[activePlan().imageId] || "";
+const activeFixtures = () => activePlan().fixtures || [];
+
+function warmSpotColour(cct) {
+  const stops = [[1800,[255,169,63]],[2700,[255,192,106]],[3000,[255,203,128]],
+    [3500,[255,215,154]],[4000,[255,226,180]],[5000,[255,236,205]],[6500,[255,244,224]]];
+  const c = Number.isFinite(cct) ? cct : 3000;
+  let lo = stops[0], hi = stops[stops.length-1];
+  for (let i=0;i<stops.length-1;i++){ if (c>=stops[i][0] && c<=stops[i+1][0]){ lo=stops[i]; hi=stops[i+1]; break; } }
+  const span = Math.max(1, hi[0]-lo[0]);
+  const t = Math.min(1, Math.max(0, (c-lo[0])/span));
+  const r = Math.round(lo[1][0]+(hi[1][0]-lo[1][0])*t);
+  const g = Math.round(lo[1][1]+(hi[1][1]-lo[1][1])*t);
+  const b = Math.round(lo[1][2]+(hi[1][2]-lo[1][2])*t);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+function stripReflectColour(cct) {
+  const c = Number.isFinite(cct) ? cct : 3000;
+  if (c < 3200) return "#f5edda";
+  if (c < 4400) return "#f2f0e6";
+  return "#edf0ee";
+}
+function glowColourOf(f, cct) {
+  if (f && f.colored && f.colorHex) return f.colorHex;
+  return warmSpotColour(cct);
+}
+function reflectColourOf(f, cct) {
+  if (f && f.colored && f.colorHex) {
+    const hex = f.colorHex.replace("#", "");
+    const r = parseInt(hex.slice(0,2),16) || 255;
+    const g = parseInt(hex.slice(2,4),16) || 90;
+    const b = parseInt(hex.slice(4,6),16) || 168;
+    return `rgba(${r}, ${g}, ${b}, 0.9)`;
+  }
+  return stripReflectColour(cct);
+}
+function stripPoints(f) {
+  if (Array.isArray(f.stripPath) && f.stripPath.length > 1) return f.stripPath;
+  const len = Math.max(30, (Number(f.length)||1)*26);
+  const rad = ((Number(f.stripRotation)||0)*Math.PI)/180;
+  return [{x:f.x, y:f.y}, {x:f.x+len*Math.cos(rad), y:f.y+len*Math.sin(rad)}];
+}
+
+const svg = document.createElementNS(NS, "svg");
+svg.setAttribute("viewBox", "0 0 820 690");
+svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+document.getElementById("stage").appendChild(svg);
+
+function el(name, attrs) {
+  const n = document.createElementNS(NS, name);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+}
+
+let fixtureNodes = {};
+
+function buildStage() {
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  fixtureNodes = {};
+  const base = activeBase();
+  svg.appendChild(el("rect", {x:0,y:0,width:820,height:690,fill:"#182822"}));
+  if (base) {
+    svg.appendChild(el("image", {href:base, x:25, y:25, width:750, height:610,
+      opacity:0.88, preserveAspectRatio:"xMidYMid meet"}));
+  }
+  svg.appendChild(el("rect", {x:0,y:0,width:820,height:690,fill:"#31353a",opacity:0.66,"pointer-events":"none"}));
+
+  // 灯具层：与设备层分开，面板和灯具叠在同一个家具位置时，各开各关就都认得出来。
+  lampLayer = el("g", {id: "lampLayer"});
+  lampLayer.style.display = lampOn ? "" : "none";
+  svg.appendChild(lampLayer);
+
+  // 挑空（贯通）区域：业主页没有房间多边形，这里单独画一层斜线 + 虚线 + 标注
+  const voidPolyOf = (r) => {
+    const pts = (r.points || [])
+      .map(p => ({x: Number(p && p.x), y: Number(p && p.y)}))
+      .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
+    if (pts.length >= 3) return pts;
+    const x = Number(r.x), y = Number(r.y), w = Number(r.width), h = Number(r.height);
+    if (!(w > 1 && h > 1) || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return [{x: x, y: y}, {x: x + w, y: y}, {x: x + w, y: y + h}, {x: x, y: y + h}];
+  };
+  const voidRooms = (((activePlan() || {}).geometry || {}).rooms || []).filter(r => r && r.isVoid);
+  if (voidRooms.length) {
+    const defs = el("defs", {});
+    const pat = el("pattern", {id: "voidHatch", width: 12, height: 12,
+      patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)"});
+    pat.appendChild(el("line", {x1: 0, y1: 0, x2: 0, y2: 12, stroke: "#cfd8d1",
+      "stroke-width": 3, opacity: 0.45}));
+    defs.appendChild(pat);
+    svg.appendChild(defs);
+    const layer = el("g", {id: "voidLayer", "pointer-events": "none"});
+    voidRooms.forEach(r => {
+      const poly = voidPolyOf(r);
+      if (!poly) return;
+      const d = "M " + poly.map(p => p.x + " " + p.y).join(" L ") + " Z";
+      layer.appendChild(el("path", {d: d, fill: "url(#voidHatch)", "fill-opacity": 0.45}));
+      layer.appendChild(el("path", {d: d, fill: "none", stroke: "#8fb8a2",
+        "stroke-dasharray": "6 4", "stroke-width": 2}));
+      const label = el("text", {x: (Number(r.x) || 0) + (Number(r.width) || 0) / 2,
+        y: (Number(r.y) || 0) + 20, "text-anchor": "middle", "font-size": 11, fill: "#a9d0b6"});
+      label.textContent = "挑空" + (Number(r.heightM) > 0 ? " " + Number(r.heightM) + "m" : "") +
+        " · 贯通 " + (Number(r.voidLevels) || 2) + " 层";
+      layer.appendChild(label);
+    });
+    svg.appendChild(layer);
+  }
+
+  activeFixtures().forEach(f => {
+    const scale = Number(f.spotScale) > 0 ? Number(f.spotScale) : 1;
+    if (f.type !== "灯带") {
+      const ratio = Number(f.spotRatio) > 0 ? Number(f.spotRatio) : 1;
+      const r = SPOT_BASE_RADIUS * scale;
+      const g = el("g", {transform:`translate(${f.x} ${f.y}) scale(1 ${ratio})`, style:"mix-blend-mode:screen"});
+      const defs = el("defs", {});
+      const stops = [];
+      const layers = [
+        ["core", r*0.5,  [[0,1],[40,0.62],[75,0.2],[100,0]]],
+        ["mid",  r*0.85, [[0,0.55],[50,0.4],[78,0.18],[92,0.06],[100,0]]],
+        ["wash", r,      [[0,0.3],[55,0.19],[85,0.07],[100,0]]],
+      ];
+      layers.forEach(([name, radius, spec]) => {
+        const grad = el("radialGradient", {cx:"50%", cy:"50%", r:"50%"});
+        grad.id = `spot-${name}-${f.id}`;
+        spec.forEach(([off, factor]) => {
+          const st = el("stop", {offset: off+"%"});
+          grad.appendChild(st);
+          stops.push({e: st, factor});
+        });
+        defs.appendChild(grad);
+        g.appendChild(el("circle", {cx:0, cy:0, r:radius, fill:`url(#spot-${name}-${f.id})`}));
+      });
+      g.appendChild(defs);
+      // 光斑不穿墙（老板 2026-10-17）：按「空间边界 + 墙体」裁一圈，只在这一圈里铺光。
+      const clipD = poolClipPathOf(f, r * Math.max(1, ratio));
+      if (clipD) {
+        const cp = el("clipPath", {id:`spotclip-${f.id}`, clipPathUnits:"userSpaceOnUse"});
+        cp.appendChild(el("path", {d: clipD}));
+        const holder = el("g", {"clip-path":`url(#spotclip-${f.id})`});
+        holder.appendChild(cp);
+        holder.appendChild(g);
+        lampLayer.appendChild(holder);
+      } else {
+        lampLayer.appendChild(g);
+      }
+      fixtureNodes[f.id] = {kind:"spot", stops};
+    } else {
+      const g = el("g", {});
+      const pts = stripPoints(f);
+      const reflectWidth = 90 * scale;
+      const castRight = f.stripCast !== "left";
+      const lineStops = [];
+      const segments = pts.slice(0, -1).map((p, i) => ({p, q: pts[i+1]}));
+      segments.forEach(({p, q}, i) => {
+        const len = Math.max(1, Math.hypot(q.x-p.x, q.y-p.y));
+        const ang = (Math.atan2(q.y-p.y, q.x-p.x)*180)/Math.PI;
+        const mx = (p.x+q.x)/2, my = (p.y+q.y)/2;
+        const yTop = castRight ? 4 : -(reflectWidth+4);
+        const y1 = castRight ? "0" : "1", y2 = castRight ? "1" : "0";
+        const seg = el("g", {transform:`translate(${mx} ${my}) rotate(${ang})`, style:"mix-blend-mode:screen", "pointer-events":"none"});
+        const defs = el("defs", {});
+        const grad = el("linearGradient", {x1:0, y1, x2:0, y2});
+        grad.id = `reflect-${f.id}-${i}`;
+        const s0 = el("stop", {offset:"0%"});
+        const s1 = el("stop", {offset:"100%", "stop-opacity":0});
+        grad.appendChild(s0); grad.appendChild(s1);
+        defs.appendChild(grad);
+        const endGrad = el("linearGradient", {x1:0, y1:0, x2:1, y2:0});
+        endGrad.id = `reflectend-${f.id}-${i}`;
+        [[0,"#000"],[2,"#fff"],[98,"#fff"],[100,"#000"]].forEach(([o,c])=>{
+          endGrad.appendChild(el("stop", {offset:o+"%", "stop-color":c}));
+        });
+        defs.appendChild(endGrad);
+        const mask = el("mask", {id:`reflectmask-${f.id}-${i}`, maskUnits:"userSpaceOnUse",
+          x:-len/2, y:-reflectWidth-6, width:len, height:2*reflectWidth+12});
+        mask.appendChild(el("rect", {x:-len/2, y:-reflectWidth-6, width:len, height:2*reflectWidth+12,
+          fill:`url(#reflectend-${f.id}-${i})`}));
+        defs.appendChild(mask);
+        seg.appendChild(defs);
+        seg.appendChild(el("rect", {x:-len/2, y:yTop, width:len, height:reflectWidth,
+          fill:`url(#reflect-${f.id}-${i})`, mask:`url(#reflectmask-${f.id}-${i})`}));
+        g.appendChild(seg);
+        lineStops.push(s0);
+      });
+      const line = el("polyline", {points: pts.map(p=>`${p.x},${p.y}`).join(" "),
+        fill:"none", stroke:"#d8a75b", "stroke-width":3, "stroke-linecap":"round"});
+      g.appendChild(line);
+      lampLayer.appendChild(g);
+      fixtureNodes[f.id] = {kind:"strip", line, reflStops: lineStops};
+    }
+  });
+
+  // 挑空（贯通）灯具：归在别的楼层、挑空通到本层 → 本层淡显一份（只读、跟随情景）
+  const ghosts = (activePlan() || {}).ghosts || [];
+  if (ghosts.length) {
+    const ghostLayer = el("g", {id: "ghostLayer", "pointer-events": "none", opacity: 0.42});
+    ghosts.forEach(g => {
+      const st = (SCENES[currentIdx] || {states: {}}).states[g.id] || {};
+      const on = !!st.on;
+      const gx = Number(g.x) || 0;
+      const gy = Number(g.y) || 0;
+      ghostLayer.appendChild(el("circle", {cx: gx, cy: gy, r: 6,
+        fill: on ? "#e8bc73" : "#b9c2b2", stroke: "#8fb8a2", "stroke-dasharray": "3 3",
+        "stroke-width": 1.6}));
+      const label = el("text", {x: gx + 9, y: gy - 9, "font-size": 9, fill: "#c5ceb9",
+        class: "dev-label"});
+      label.textContent = (g.code || "") + " · 挑空（" + (g.voidRoom || "挑空") + "）";
+      ghostLayer.appendChild(label);
+    });
+    svg.appendChild(ghostLayer);
+  }
+  // 本层挑空提示（角上）
+  const planVoidNote = (activePlan() || {}).voidNote || "";
+  if (planVoidNote) {
+    const note = el("text", {x: 812, y: 680, "text-anchor": "end", "font-size": 11,
+      fill: "#a9d0b6", "pointer-events": "none"});
+    note.textContent = planVoidNote;
+    svg.appendChild(note);
+  }
+
+  // 传感器探测范围 + 可拖动的小人（漫游演示），永远画在灯具之上。
+  sensorLayer = el("g", {id: "sensorLayer"});
+  svg.appendChild(sensorLayer);
+  personNode = el("g", {id: "personNode"});
+  personNode.appendChild(el("circle", {cx: 0, cy: 0, r: 16, fill: "#f0d9a8", opacity: 0.16}));
+  personNode.appendChild(el("circle", {cx: 0, cy: -8, r: 5.5, fill: "#f7e7c2", stroke: "#2a2113", "stroke-width": 1.2}));
+  personNode.appendChild(el("rect", {x: -6, y: -2, width: 12, height: 16, rx: 5, fill: "#f7e7c2", stroke: "#2a2113", "stroke-width": 1.2}));
+  personNode.setAttribute("transform", "translate(" + person.x + " " + person.y + ")");
+  personNode.style.display = roamOn ? "" : "none";
+  svg.appendChild(personNode);
+  deviceLayer = el("g", {id: "deviceLayer"});
+  deviceLayer.style.display = deviceOn ? "" : "none";
+  svg.appendChild(deviceLayer);
+  renderSensorRanges();
+  renderDevices();
+}
+
+function apply(f, st) {
+  const node = fixtureNodes[f.id];
+  if (!node) return;
+  if (node.kind === "spot") {
+    const colour = glowColourOf(f, st.cct);
+    const strength = st.on * (0.5 + 0.34 * st.brightness / 100);
+    node.stops.forEach(({e, factor}) => {
+      e.setAttribute("stop-color", colour);
+      e.setAttribute("stop-opacity", (strength * factor).toFixed(4));
+    });
+  } else {
+    const colour = reflectColourOf(f, st.cct);
+    const strength = st.on * (0.3 + 0.28 * st.brightness / 100);
+    node.reflStops.forEach(s => {
+      s.setAttribute("stop-color", colour);
+      s.setAttribute("stop-opacity", strength.toFixed(4));
+    });
+    node.line.setAttribute("opacity", (0.12 + 0.88 * st.on).toFixed(3));
+  }
+}
+
+/* ── 状态 ─────────────────────────────────────────────────────── */
+function stateFor(scene) {
+  const out = {};
+  activeFixtures().forEach(f => {
+    // 窗帘不接入场景联动：始终保持固定状态，不随情景变化。
+    if (f.type === "窗帘") { out[f.id] = { on: 0, brightness: 0, cct: 3000 }; return; }
+    const st = (scene.states || {})[f.id] || {};
+    out[f.id] = { on: st.on ? 1 : 0, brightness: st.brightness ?? 0, cct: st.cct ?? 3000 };
+  });
+  return out;
+}
+const smooth = t => t*t*(3-2*t);
+let currentIdx = 0;
+let onlyGroup = null;
+let current = {};
+let raf = null;
+let sceneLabel = "";
+
+function targetState() {
+  const base = stateFor(SCENES[currentIdx] || { states: {} });
+  if (!onlyGroup) return base;
+  const out = {};
+  activeFixtures().forEach(f => {
+    const key = (f.group || "").trim() || "未分组";
+    out[f.id] = key === onlyGroup
+      ? base[f.id]
+      : { on: 0, brightness: 0, cct: (base[f.id] || {}).cct ?? 3000 };
+  });
+  return out;
+}
+
+const TRIGGER_LABEL = {"传感器": "感应触发", "定时": "定时触发", "面板按键": "面板/语音", "手动": "手动"};
+const TRIGGER_CLASS = {"传感器": "sensor", "定时": "timer", "面板按键": "panel", "手动": "manual"};
+const trigLabel = t => TRIGGER_LABEL[t] || t || "手动";
+const trigClass = t => TRIGGER_CLASS[t] || "manual";
+
+function runTo(to, dur) {
+  if (raf) cancelAnimationFrame(raf);
+  const from = current;
+  const fade = (SCENES[currentIdx] || {}).fade;
+  const ms = dur == null ? Math.max(160, (Number(fade) || 1) * 1000) : dur;
+  const t0 = performance.now();
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / ms);
+    const e = smooth(k);
+    activeFixtures().forEach(f => {
+      const a = from[f.id] || {on:0,brightness:0,cct:3000};
+      const b = to[f.id] || {on:0,brightness:0,cct:3000};
+      apply(f, {
+        on: a.on + (b.on - a.on) * e,
+        brightness: a.brightness + (b.brightness - a.brightness) * e,
+        cct: a.cct + (b.cct - a.cct) * e,
+      });
+    });
+    if (k < 1) raf = requestAnimationFrame(step);
+    else current = to;
+  };
+  raf = requestAnimationFrame(step);
+}
+
+function immediate() {
+  current = targetState();
+  activeFixtures().forEach(f => apply(f, current[f.id]));
+}
+
+function hud() {
+  const s = SCENES[currentIdx] || { name: "—" };
+  if (!SCENES.length) {
+    document.getElementById("hudTitle").textContent =
+      (DATA.title || "灯光情景演示") + " · " + DATA.fixtureCount + " 盏灯具";
+    document.getElementById("hudScene").textContent = "尚未建立情景";
+    document.getElementById("hudMeta").innerHTML =
+      '<div>这个项目还没有情景：在工作台「智能情景」里设置情景后重新导出，业主就能点按钮触发。</div>' +
+      '<div style="opacity:.72;margin-top:4px">离线演示文件 · 不连接真实设备</div>';
+    return;
+  }
+  const plan = activePlan();
+  const multi = PLANS.length > 1;
+  document.getElementById("hudTitle").textContent =
+    (DATA.title || "灯光情景演示") + " · " + DATA.fixtureCount + " 盏灯具" +
+    (multi ? " · " + PLANS.length + " 层" : "");
+  document.getElementById("hudScene").textContent = sceneLabel || s.name || "—";
+  const bits = [];
+  if (sceneLabel) {
+    bits.push('<span class="tag manual">全关</span>');
+  } else {
+    bits.push('<span class="tag ' + trigClass(s.trigger) + '">触发：' + trigLabel(s.trigger) + '</span>');
+    if (s.priority) bits.push('<span class="tag">' + s.priority + '</span>');
+    if (s.fade) bits.push('<span class="tag">渐变 ' + s.fade + 's</span>');
+    if (multi) bits.push('<span class="tag">' + (plan.label || plan.floor + 'F') + '</span>');
+  }
+  let html = bits.join("");
+  if (sceneLabel) {
+    html += '<div>已全部关闭。点下方任意情景按钮即可触发。</div>';
+  } else if (s.trigger === "传感器") {
+    html += '<div>该情景由传感器自动触发；现场也保留手动/面板覆盖。点这个情景按钮即可预览效果。</div>';
+  } else if (s.trigger === "定时") {
+    html += '<div>该情景按时间自动触发；点这个情景按钮即可预览效果。</div>';
+  } else {
+    html += '<div>点下方情景按钮即触发；手机、电脑都能直接操作。</div>';
+  }
+  if (onlyGroup) html += '<div>当前只预览灯组「' + onlyGroup + '」。</div>';
+  if (!deviceOn) html += '<div>设备层已关闭：只显示灯具（灯具层）。点右上「设备层」可重新显示面板与传感器。</div>';
+  if (roamOn && deviceOn) html += '<div>感应漫游：' + (sensorsOfFloor().length
+    ? '拖动小人走过传感器，联动灯自动亮／灭。探测范围按工作台设置示意（整圆或扇形），实际以现场调试为准（灵敏度/视场/安装位置）。'
+    : '本层还没有设置探测半径的传感器。') + '</div>';
+  if (DATA.deliveryNote) {
+    html += '<div style="opacity:.72;margin-top:4px">' + DATA.deliveryNote + '</div>';
+  }
+  html += '<div style="opacity:.72;margin-top:4px">离线演示文件 · 不连接真实设备' +
+    (multi ? '；上方可切换楼层' : '') + '</div>';
+  document.getElementById("hudMeta").innerHTML = html;
+}
+
+/* ── 情景按钮 ─────────────────────────────────────────────────── */
+const switcher = document.getElementById("switcher");
+const offBtn = document.createElement("button");
+offBtn.className = "scene-btn alloff";
+offBtn.innerHTML = '全关<span class="trg">一键关闭</span>';
+offBtn.addEventListener("click", () => {
+  onlyGroup = null;
+  sceneLabel = "全关";
+  const off = {};
+  activeFixtures().forEach(f => { off[f.id] = { on: 0, brightness: 0, cct: 3000 }; });
+  runTo(off);
+  [...switcher.children].forEach(b => b.classList.remove("active"));
+  hud();
+  renderGroups();
+});
+switcher.appendChild(offBtn);
+
+SCENES.forEach((s, i) => {
+  const b = document.createElement("button");
+  b.className = "scene-btn";
+  b.innerHTML = s.name + '<span class="trg">' + trigLabel(s.trigger) + '</span>';
+  b.addEventListener("click", () => select(i));
+  switcher.appendChild(b);
+});
+if (!SCENES.length) offBtn.style.display = "none";
+function markActive(i) {
+  [...switcher.children].forEach((b, j) => b.classList.toggle("active", j === i + 1));
+  const active = switcher.children[i + 1];
+  if (active) {
+    const left = active.offsetLeft + active.offsetWidth / 2 - switcher.clientWidth / 2;
+    switcher.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+  }
+}
+
+function select(i) {
+  currentIdx = i;
+  onlyGroup = null;
+  sceneLabel = "";
+  markActive(i);
+  clearOverlay();
+  runTo(targetState());
+  hud();
+  renderGroups();
+  renderPanels();
+}
+
+/* ── 楼层切换 ─────────────────────────────────────────────────── */
+const floorBar = document.getElementById("floorBar");
+function renderFloors() {
+  floorBar.innerHTML = "";
+  if (PLANS.length <= 1) { floorBar.classList.remove("on"); return; }
+  floorBar.classList.add("on");
+  PLANS.forEach((p, i) => {
+    const b = document.createElement("button");
+    b.className = "floor-btn" + (i === floorIdx ? " active" : "");
+    b.textContent = p.label || p.floor + "F";
+    b.addEventListener("click", () => {
+      floorIdx = i;
+      onlyGroup = null;
+      clearOverlay();
+      buildStage();
+      immediate();
+      renderFloors();
+      hud();
+      renderGroups();
+      renderPanels();
+    });
+    floorBar.appendChild(b);
+  });
+}
+
+/* ── 分组面板 ─────────────────────────────────────────────────── */
+const panel = document.getElementById("groupPanel");
+const listEl = document.getElementById("groupList");
+const toggleBtn = document.getElementById("groupToggle");
+toggleBtn.addEventListener("click", () => {
+  const open = panel.classList.toggle("open");
+  toggleBtn.classList.toggle("active", open);
+  if (open) { panelBox.classList.remove("open"); panelToggleBtn.classList.remove("active"); }
+});
+
+const PANELS = DATA.panels || [];
+const panelBox = document.getElementById("panelBox");
+const panelListEl = document.getElementById("panelList");
+const panelToggleBtn = document.getElementById("panelToggle");
+panelToggleBtn.addEventListener("click", () => {
+  const open = panelBox.classList.toggle("open");
+  panelToggleBtn.classList.toggle("active", open);
+  if (open) { panel.classList.remove("open"); toggleBtn.classList.remove("active"); }
+});
+const PANEL_COLS = {1: 1, 2: 2, 3: 3, 4: 2, 6: 3, 8: 4, 12: 4};
+
+function renderPanels() {
+  if (!PANELS.length) { panelToggleBtn.style.display = "none"; return; }
+  panelToggleBtn.style.display = "";
+  const plan = activePlan();
+  const floorNo = plan.floor || 1;
+  const mine = PANELS.filter(p => (Number(p.floor) || 1) === floorNo);
+  document.getElementById("panelHead").textContent =
+    "情景面板（" + (plan.label || floorNo + "F") + " · 点键＝整场切换到该情景）";
+  document.getElementById("panelNote").textContent = mine.length
+    ? "点任意一格即整场切换到它绑定的情景。4 键＝「4键8功能」：每键只刻一次（短按），长按仅功能不刻字（TK3 / ST3 上下双刻除外）；刻字来自工作台「面板刻字」。"
+    : "当前楼层还没有放置面板：可在工作台给面板设置按键与刻字后重新导出。";
+  panelListEl.innerHTML = "";
+  mine.forEach(p => {
+    const card = document.createElement("div");
+    card.className = "pn-card";
+    const title = document.createElement("div");
+    title.className = "pn-title";
+    title.textContent = [p.code, p.name, p.brand, p.series, p.model].filter(Boolean).join(" · ");
+    card.appendChild(title);
+    const keys = p.keys || [];
+    // 4 键面板＝2 个大按键、每个大按键上 2 个小按键；每个小按键再分「短按 / 长按」→ 共 8 格。
+    const groups = keys.length === 4 ? [[0, 1], [2, 3]] : keys.map((_, i) => [i]);
+    const grouped = groups.length > 1 && groups[0].length > 1;
+    const grid = document.createElement("div");
+    grid.className = "pn-grid" + (grouped ? " grouped" : "");
+    grid.style.gridTemplateColumns = "repeat(" + groups.length + ", 1fr)";
+    const mkKey = (i, isLong) => {
+      const k = keys[i] || {};
+      const b = document.createElement("button");
+      b.className = "pn-key" + (isLong ? " long" : "");
+      const sid = (isLong ? k.longScene : k.scene) || "";
+      const idx = sid ? SCENES.findIndex(s => s.id === sid) : -1;
+      if (idx >= 0 && idx === currentIdx && !sceneLabel) b.classList.add("active");
+      if (idx < 0) b.disabled = true;
+      const label = (isLong ? k.longLabel : k.label) || (isLong ? "—" : "未刻字");
+      const model = p.productId ? PANEL_MODELS.find(m => m.id === p.productId) : null;
+      const longNote = isLong ? (model && model.engraveLong ? "长按·下方刻字" : "长按·不刻字") : "短按";
+      b.innerHTML = '<span class="no">' + longNote + '</span><b>' + label + '</b>';
+      b.addEventListener("click", () => { if (idx >= 0) select(idx); });
+      return b;
+    };
+    const mkSubKey = (i) => {
+      const box = document.createElement("div");
+      box.className = "pn-subkey";
+      const cap = document.createElement("span");
+      cap.className = "pn-subkey-label";
+      cap.textContent = "第 " + (i + 1) + " 键";
+      box.appendChild(cap);
+      box.appendChild(mkKey(i, false));
+      box.appendChild(mkKey(i, true));
+      return box;
+    };
+    groups.forEach((grp, gi) => {
+      if (!grouped) { grp.forEach(i => grid.appendChild(mkSubKey(i))); return; }
+      const wrap = document.createElement("div");
+      wrap.className = "pn-bigkey";
+      const lab = document.createElement("span");
+      lab.className = "pn-bigkey-label";
+      lab.textContent = "大按键 " + (gi + 1);
+      wrap.appendChild(lab);
+      grp.forEach(i => wrap.appendChild(mkSubKey(i)));
+      grid.appendChild(wrap);
+    });
+    card.appendChild(grid);
+    panelListEl.appendChild(card);
+  });
+}
+
+/* ── 感应漫游：小人走过传感器 → 联动灯亮；离开 → 延时关闭 ───────── */
+const SENSORS = DATA.sensors || [];
+const DEVICES = DATA.devices || [];
+let sensorLayer = null;
+let deviceLayer = null;
+let lampLayer = null;
+let personNode = null;
+let lampOn = true;
+let deviceOn = true;
+let roamOn = false;
+let person = {x: 410, y: 345};
+let overlay = {};
+let offTimer = null;
+const sensorToggleBtn = document.getElementById("sensorToggle");
+const lampToggleBtn = document.getElementById("lampToggle");
+const deviceToggleBtn = document.getElementById("deviceToggle");
+
+lampToggleBtn.classList.add("active");
+deviceToggleBtn.classList.add("active");
+
+lampToggleBtn.addEventListener("click", () => {
+  lampOn = !lampOn;
+  lampToggleBtn.classList.toggle("active", lampOn);
+  if (lampLayer) lampLayer.style.display = lampOn ? "" : "none";
+  hud();
+});
+
+deviceToggleBtn.addEventListener("click", () => {
+  deviceOn = !deviceOn;
+  deviceToggleBtn.classList.toggle("active", deviceOn);
+  if (deviceLayer) deviceLayer.style.display = deviceOn ? "" : "none";
+  if (sensorLayer) sensorLayer.style.display = deviceOn ? "" : "none";
+  renderDevices();
+  hud();
+});
+
+/* 设备层：面板画成圆角方章（标按键数），其余设备画成圆点，各自带编号标签；
+   与灯具叠在同一个点上时往右上错开并拉一条引线，业主一眼能分清哪个是面板、哪个是灯。 */
+function renderDevices() {
+  if (!deviceLayer) return;
+  while (deviceLayer.firstChild) deviceLayer.removeChild(deviceLayer.firstChild);
+  if (!deviceOn) return;
+  const floorNo = activePlan().floor || 1;
+  const lamps = activeFixtures()
+    .filter(f => Number(f.x) === Number(f.x) && Number(f.y) === Number(f.y))
+    .map(f => ({x: Number(f.x), y: Number(f.y)}));
+  DEVICES.filter(d => (Number(d.floor) || 1) === floorNo).forEach(d => {
+    const dx = Number(d.x);
+    const dy = Number(d.y);
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    const clash = lamps.some(p => Math.hypot(p.x - dx, p.y - dy) < 18);
+    const ox = clash ? 16 : 0;
+    const oy = clash ? -16 : 0;
+    const isPanel = d.type === "面板";
+    const color = isPanel ? "#8fb8e8" : d.type === "传感器" ? "#7fd2a3"
+      : d.type === "窗帘" ? "#c8a97a" : "#c9b98f";
+    const host = el("g", {transform: "translate(" + dx + " " + dy + ")"});
+    if (clash) {
+      host.appendChild(el("line", {x1: 0, y1: 0, x2: ox, y2: oy, stroke: color,
+        "stroke-width": 1, "stroke-dasharray": "3 2", opacity: 0.8}));
+    }
+    const g = el("g", {transform: "translate(" + ox + " " + oy + ")"});
+    if (isPanel) {
+      g.appendChild(el("rect", {x: -9, y: -9, width: 18, height: 18, rx: 5,
+        fill: "#ffffff", opacity: 0.94}));
+      g.appendChild(el("rect", {x: -9, y: -9, width: 18, height: 18, rx: 5,
+        fill: "none", stroke: color, "stroke-width": 2.4}));
+      const t = el("text", {x: 0, y: 3.4, "text-anchor": "middle", "font-size": 9,
+        "font-weight": 700, fill: "#2c4a63"});
+      t.textContent = Number(d.keys) > 0 ? Number(d.keys) + "键" : "面";
+      g.appendChild(t);
+    } else {
+      g.appendChild(el("circle", {cx: 0, cy: 0, r: 8.5, fill: color, opacity: 0.94}));
+      const t = el("text", {x: 0, y: 3.2, "text-anchor": "middle", "font-size": 8.5,
+        fill: "#12261c", "font-weight": 700});
+      t.textContent = (d.type || "设备").slice(0, 1);
+      g.appendChild(t);
+    }
+    const label = el("text", {x: 0, y: isPanel ? 21 : 20, "text-anchor": "middle",
+      class: "dev-label"});
+    label.textContent = d.code || d.name || "";
+    g.appendChild(label);
+    host.appendChild(g);
+    deviceLayer.appendChild(host);
+  });
+}
+
+sensorToggleBtn.addEventListener("click", () => {
+  roamOn = !roamOn;
+  sensorToggleBtn.classList.toggle("active", roamOn);
+  if (personNode) personNode.style.display = roamOn ? "" : "none";
+  renderSensorRanges();
+  if (roamOn) { refreshOverlay(); } else { clearOverlay(); applyOverlay(0.25); }
+  hud();
+  renderPanels();
+});
+
+function sensorsOfFloor() {
+  const floorNo = activePlan().floor || 1;
+  return SENSORS.filter(s => (Number(s.floor) || 1) === floorNo && Number(s.range) > 0);
+}
+
+/* 探测范围：默认整圆（360°），设了视场角就是扇形——和工作台、漫游判定同一套几何，
+   贴墙装、只朝一侧的传感器不会把隔壁房间的人也算进来。 */
+function sensorShape(s) {
+  const range = Number(s.range) > 0 ? Number(s.range) : 80;
+  const fovRaw = Number(s.fov);
+  const fov = Number.isFinite(fovRaw) && fovRaw > 0 ? Math.min(360, Math.max(5, fovRaw)) : 360;
+  const headingRaw = Number(s.heading);
+  const heading = Number.isFinite(headingRaw) ? ((headingRaw % 360) + 360) % 360 : 0;
+  return {range, fov, heading, sector: fov < 359.5};
+}
+
+function sensorCovers(s, x, y) {
+  if (manualCoverageOf(s)) return manualCovers(s, x, y);
+  const {range, fov, heading, sector} = sensorShape(s);
+  if (!(range > 0)) return false;
+  const dx = x - (Number(s.x) || 0), dy = y - (Number(s.y) || 0);
+  const d = Math.hypot(dx, dy);
+  if (d > range) return false;
+  if (!sector || d < 0.5) return true;
+  const deg = Math.atan2(dy, dx) * 180 / Math.PI;
+  const diff = (((deg - heading + 540) % 360) + 360) % 360 - 180;
+  if (Math.abs(diff) > fov / 2) return false;
+  // 空间边界/墙体遮挡：隔墙的人不算走进来（②③）
+  const segs = obstacleSegs(s);
+  if (segs.length && d > 0.5) {
+    const hit = rayHit(Number(s.x) || 0, Number(s.y) || 0, dx / d, dy / d, segs, range);
+    if (hit < d - 0.5) return false;
+  }
+  return true;
+}
+
+/* 手动调整过的探测范围优先：与工作台同一套（相对传感器坐标的多边形）。 */
+function manualCoverageOf(s) {
+  const raw = Array.isArray(s.coveragePoints) ? s.coveragePoints : [];
+  const pts = raw.map(p => ({x: Number(p && p.x), y: Number(p && p.y)}))
+    .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
+  return pts.length >= 3 ? pts : null;
+}
+
+function manualPathOf(s) {
+  const pts = manualCoverageOf(s);
+  if (!pts) return null;
+  return "M " + pts.map(p => p.x.toFixed(2) + " " + p.y.toFixed(2)).join(" L ") + " Z";
+}
+
+function manualCovers(s, x, y) {
+  const pts = manualCoverageOf(s);
+  if (!pts) return false;
+  return pointInPoly(pts, x - (Number(s.x) || 0), y - (Number(s.y) || 0));
+}
+
+function sensorSectorD(s) {
+  const {range, fov, heading, sector} = sensorShape(s);
+  if (!sector || !(range > 0)) return null;
+  const a0 = (heading - fov / 2) * Math.PI / 180;
+  const a1 = (heading + fov / 2) * Math.PI / 180;
+  const steps = Math.max(6, Math.round(fov / 6));
+  const pts = ["M 0 0"];
+  for (let i = 0; i <= steps; i += 1) {
+    const a = a0 + (a1 - a0) * i / steps;
+    pts.push("L " + (Math.cos(a) * range).toFixed(2) + " " + (Math.sin(a) * range).toFixed(2));
+  }
+  pts.push("Z");
+  return pts.join(" ");
+}
+
+/* ── 按「空间边界 + 墙体」裁剪探测范围（与工作台 frontend/src/sensors.ts 同一套） ──
+   有几何时范围不越出本空间、不穿墙；没有几何时退回整圆/扇形。 */
+function roomPolygonOf(roomId) {
+  const geo = (activePlan() || {}).geometry || {};
+  const r = (geo.rooms || []).find(x => x.id === roomId);
+  if (!r) return null;
+  const pts = (r.points || [])
+    .map(p => ({x: Number(p && p.x), y: Number(p && p.y)}))
+    .filter(p => Number.isFinite(p.x) && Number.isFinite(p.y));
+  if (pts.length >= 3) return pts;
+  const x = Number(r.x), y = Number(r.y), w = Number(r.width), h = Number(r.height);
+  if (!(w > 1 && h > 1) || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return [{x: x, y: y}, {x: x + w, y: y}, {x: x + w, y: y + h}, {x: x, y: y + h}];
+}
+
+function pointInPoly(poly, x, y) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i, i += 1) {
+    const xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function obstacleSegs(s) {
+  const segs = [];
+  const poly = roomPolygonOf(s.roomId);
+  if (poly && poly.length >= 3 && pointInPoly(poly, Number(s.x) || 0, Number(s.y) || 0)) {
+    for (let i = 0; i < poly.length; i += 1) {
+      const a = poly[i], b = poly[(i + 1) % poly.length];
+      segs.push({x1: a.x, y1: a.y, x2: b.x, y2: b.y});
+    }
+  }
+  const geo = (activePlan() || {}).geometry || {};
+  (geo.walls || []).forEach(w => {
+    const x1 = Number(w.x), y1 = Number(w.y), x2 = Number(w.x2), y2 = Number(w.y2);
+    if (![x1, y1, x2, y2].every(Number.isFinite)) return;
+    if (Math.hypot(x2 - x1, y2 - y1) < 0.5) return;
+    segs.push({x1: x1, y1: y1, x2: x2, y2: y2});
+  });
+  return segs;
+}
+
+function rayHit(ox, oy, dx, dy, segs, max) {
+  let best = max;
+  for (let k = 0; k < segs.length; k += 1) {
+    const s = segs[k];
+    const sx = s.x2 - s.x1, sy = s.y2 - s.y1;
+    const den = dx * sy - dy * sx;
+    if (Math.abs(den) < 1e-9) continue;
+    const ax = s.x1 - ox, ay = s.y1 - oy;
+    const t = (ax * sy - ay * sx) / den;
+    const u = (ax * dy - ay * dx) / den;
+    if (t > 0.001 && t < best && u >= -0.001 && u <= 1.001) best = t;
+  }
+  return best;
+}
+
+function normalizeInto(value, start, span) {
+  const v = (((value - start) % 360) + 360) % 360;
+  if (span >= 359.9) return v;
+  return v <= span ? v : null;
+}
+
+/* 光斑裁剪：灯所在空间的边界（闭口，门洞同样挡）＋ 本层墙体，从灯位打 96 条射线取一圈。
+   与工作台 frontend/src/lightOcclusion.ts 同一口径 —— 业主版交付页的光斑也不能穿墙。 */
+function poolObstacles(f) {
+  const segs = [];
+  const poly = roomPolygonOf(f.roomId);
+  if (poly && poly.length >= 3) {
+    for (let i = 0; i < poly.length; i += 1) {
+      const a = poly[i], b = poly[(i + 1) % poly.length];
+      segs.push({x1: a.x, y1: a.y, x2: b.x, y2: b.y});
+    }
+  }
+  const geo = (activePlan() || {}).geometry || {};
+  (geo.walls || []).forEach(w => {
+    const x1 = Number(w.x), y1 = Number(w.y), x2 = Number(w.x2), y2 = Number(w.y2);
+    if (![x1, y1, x2, y2].every(Number.isFinite)) return;
+    if (Math.hypot(x2 - x1, y2 - y1) < 0.5) return;
+    segs.push({x1: x1, y1: y1, x2: x2, y2: y2});
+  });
+  return segs;
+}
+
+function poolClipPathOf(f, radius) {
+  const segs = poolObstacles(f);
+  if (!segs.length || !(radius > 0)) return null;
+  const ox = Number(f.x) || 0, oy = Number(f.y) || 0;
+  const N = 96, pts = [];
+  let clipped = false;
+  for (let i = 0; i < N; i += 1) {
+    const a = i / N * Math.PI * 2, dx = Math.cos(a), dy = Math.sin(a);
+    const r = rayHit(ox, oy, dx, dy, segs, radius);
+    if (r < radius - 0.5) clipped = true;
+    pts.push([ox + dx * r, oy + dy * r]);
+  }
+  if (!clipped) return null;
+  return "M " + pts.map(p => p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" L ") + " Z";
+}
+
+function coveragePathOf(s) {
+  const manual = manualPathOf(s);
+  if (manual) return manual;
+  const segs = obstacleSegs(s);
+  if (!segs.length) return null;
+  const sh = sensorShape(s);
+  if (!(sh.range > 0)) return null;
+  const ox = Number(s.x) || 0, oy = Number(s.y) || 0;
+  const span = sh.sector ? sh.fov : 360;
+  const a0 = sh.sector ? sh.heading - sh.fov / 2 : sh.heading;
+  const steps = Math.min(180, Math.max(16, Math.round(span / 3)));
+  const offs = [];
+  for (let i = 0; i <= steps; i += 1) offs.push((span * i) / steps);
+  segs.forEach(seg => {
+    [{x: seg.x1, y: seg.y1}, {x: seg.x2, y: seg.y2}].forEach(p => {
+      const d = Math.hypot(p.x - ox, p.y - oy);
+      if (d > sh.range || d < 0.5) return;
+      const ang = Math.atan2(p.y - oy, p.x - ox) * 180 / Math.PI;
+      const off = normalizeInto(ang, a0, span);
+      if (off == null) return;
+      offs.push(Math.max(0, off - 0.08), Math.min(span, off + 0.08));
+    });
+  });
+  offs.sort((a, b) => a - b);
+  const pts = ["M 0 0"];
+  let last = NaN;
+  offs.forEach(off => {
+    if (Number.isFinite(last) && off - last < 0.01) return;
+    last = off;
+    const rad = (a0 + off) * Math.PI / 180;
+    const dx = Math.cos(rad), dy = Math.sin(rad);
+    const r = Math.min(sh.range, rayHit(ox, oy, dx, dy, segs, sh.range));
+    pts.push("L " + (dx * r).toFixed(2) + " " + (dy * r).toFixed(2));
+  });
+  if (pts.length < 4) return null;
+  return pts.join(" ") + " Z";
+}
+
+function renderSensorRanges() {
+  if (!sensorLayer) return;
+  while (sensorLayer.firstChild) sensorLayer.removeChild(sensorLayer.firstChild);
+  if (!roamOn || !deviceOn) return;
+  sensorsOfFloor().forEach(s => {
+    const d = coveragePathOf(s) || sensorSectorD(s);
+    const style = {fill: "#7fd2a3", "fill-opacity": 0.06, stroke: "#7fd2a3", "stroke-opacity": 0.55,
+      "stroke-dasharray": "5 5", "stroke-width": 1.4};
+    if (d) {
+      sensorLayer.appendChild(el("path", Object.assign(
+        {d: d, transform: "translate(" + (Number(s.x) || 0) + " " + (Number(s.y) || 0) + ")"}, style)));
+    } else {
+      sensorLayer.appendChild(el("circle", Object.assign(
+        {cx: Number(s.x) || 0, cy: Number(s.y) || 0, r: Number(s.range) || 0}, style)));
+    }
+    sensorLayer.appendChild(el("circle", {cx: Number(s.x) || 0, cy: Number(s.y) || 0, r: 4,
+      fill: "#7fd2a3", "fill-opacity": 0.9}));
+  });
+}
+
+function svgPoint(e) {
+  if (!svg.getScreenCTM) return null;
+  const m = svg.getScreenCTM();
+  if (!m) return null;
+  const pt = svg.createSVGPoint();
+  pt.x = e.clientX; pt.y = e.clientY;
+  const p = pt.matrixTransform(m.inverse());
+  return {x: p.x, y: p.y};
+}
+
+function movePerson(x, y) {
+  person.x = Math.max(0, Math.min(820, x));
+  person.y = Math.max(0, Math.min(690, y));
+  if (personNode) personNode.setAttribute("transform", "translate(" + person.x + " " + person.y + ")");
+  refreshOverlay();
+}
+
+svg.addEventListener("pointerdown", (e) => {
+  if (!roamOn) return;
+  const p = svgPoint(e);
+  if (p) movePerson(p.x, p.y);
+});
+svg.addEventListener("pointermove", (e) => {
+  if (!roamOn) return;
+  const p = svgPoint(e);
+  if (p) movePerson(p.x, p.y);
+});
+
+function activeSensorIds() {
+  const ids = [];
+  sensorsOfFloor().forEach(s => {
+    if (sensorCovers(s, person.x, person.y)) ids.push(s.id);
+  });
+  return ids;
+}
+
+function clearOverlay() {
+  if (offTimer) { clearTimeout(offTimer); offTimer = null; }
+  overlay = {};
+}
+
+function refreshOverlay() {
+  const active = new Set(activeSensorIds());
+  const wanted = {};
+  SENSORS.forEach(s => {
+    if (!active.has(s.id)) return;
+    (s.lights || []).forEach(fid => {
+      wanted[fid] = {on: 1, brightness: Number(s.brightness ?? 100), cct: Number(s.cct ?? 4000)};
+    });
+  });
+  const leaving = Object.keys(overlay).filter(fid => !wanted[fid]);
+  if (leaving.length) {
+    let delay = 0;
+    SENSORS.forEach(s => {
+      if ((s.lights || []).some(fid => leaving.indexOf(fid) >= 0)) delay = Math.max(delay, Number(s.delay) || 0);
+    });
+    if (delay > 0) {
+      if (!offTimer) {
+        offTimer = setTimeout(() => {
+          offTimer = null;
+          leaving.forEach(fid => { delete overlay[fid]; });
+          applyOverlay(0.4);
+        }, delay * 1000);
+      }
+    } else {
+      leaving.forEach(fid => { delete overlay[fid]; });
+    }
+  }
+  Object.keys(wanted).forEach(fid => { overlay[fid] = wanted[fid]; });
+  applyOverlay(0.25);
+}
+
+function applyOverlay(sec) {
+  const merged = Object.assign({}, targetState());
+  Object.keys(overlay).forEach(fid => {
+    merged[fid] = Object.assign({}, merged[fid] || {}, overlay[fid]);
+  });
+  runTo(merged, Math.max(120, (sec || 0.25) * 1000));
+}
+
+function groupsOfFloor() {
+  const order = [];
+  const index = {};
+  activeFixtures().forEach(f => {
+    const key = (f.group || "").trim() || "未分组";
+    if (!index[key]) { index[key] = []; order.push(key); }
+    index[key].push(f);
+  });
+  order.sort((a, b) => (a === "未分组" ? 1 : b === "未分组" ? -1 : 0));
+  return { order, index };
+}
+
+function renderGroups() {
+  const { order, index } = groupsOfFloor();
+  const plan = activePlan();
+  document.getElementById("groupHead").textContent =
+    "灯具分组（" + plan.floor + "F · 点一组＝只点亮这一组）";
+  listEl.innerHTML = "";
+  const mk = (label, codes, count, onClick, on) => {
+    const b = document.createElement("button");
+    b.className = "gp-item" + (on ? " on" : "");
+    b.innerHTML = '<span>' + label + '<span class="codes">' + codes + '</span></span>' +
+      '<span class="count">' + count + ' 盏</span>';
+    b.addEventListener("click", onClick);
+    listEl.appendChild(b);
+  };
+  mk("全部灯具（回到当前情景）", "", activeFixtures().length, () => {
+    onlyGroup = null;
+    runTo(targetState());
+    hud();
+    renderGroups();
+  }, !onlyGroup);
+  order.forEach(g => {
+    const items = index[g];
+    const codes = items.map(f => f.code || f.name || f.id).join(" · ");
+    mk(g, codes, items.length, () => {
+      onlyGroup = g;
+      runTo(targetState());
+      hud();
+      renderGroups();
+    }, onlyGroup === g);
+  });
+  document.getElementById("groupNote").textContent =
+    order.length
+      ? "这是本项目的灯具分组；点一组就只点亮该组灯具，方便核对分组与回路。分组信息来自设计文件，与是否接入智能无关。"
+      : "当前楼层还没有设置灯组：可在工作台「灯具配置」里给灯具设置灯组后重新导出。";
+}
+
+document.title = (DATA.title || "灯光情景演示") + " · 灯光情景演示";
+buildStage();
+renderFloors();
+current = stateFor(SCENES[0] || { states: {} });
+activeFixtures().forEach(f => apply(f, current[f.id]));
+markActive(0);
+hud();
+renderGroups();
+renderPanels();
+if (!SENSORS.length) sensorToggleBtn.style.display = "none";
+</script>
+<button id="delivery-open" style="position:fixed;bottom:12px;right:12px;z-index:100;padding:9px 14px;background:#273b32;color:white;border:1px solid #adbdab;border-radius:8px;cursor:pointer">灯具及设备清单 / 报价清单</button>
+<section id="delivery-sheet" style="display:none;position:fixed;inset:5%;z-index:101;background:#17231f;color:#fff;overflow:auto;padding:22px;border:1px solid #7f9989;border-radius:12px">
+  <button id="delivery-close" style="float:right">关闭</button>
+  <h2>灯具清单</h2><div id="delivery-items"></div>
+  <h2>外挂设备</h2><p>窗帘、面板、传感器等由集成商配置，不计入灯具数量与功率。</p><div id="delivery-external"></div>
+  <h2>报价清单</h2><p>价格待补；此清单不计价，不构成正式报价。</p><div id="delivery-prices"></div>
+</section>
+<script>
+(() => {
+  const sheet = document.getElementById("delivery-sheet");
+  document.getElementById("delivery-open").onclick = () => sheet.style.display = "block";
+  document.getElementById("delivery-close").onclick = () => sheet.style.display = "none";
+  const draw = (target, heads, rows) => {
+    const table = document.createElement("table");
+    table.style.cssText = "width:100%;border-collapse:collapse;text-align:left";
+    const header = table.insertRow();
+    heads.forEach(h => { const th = document.createElement("th"); th.textContent = h; header.appendChild(th); });
+    rows.forEach(row => {
+      const tr = table.insertRow();
+      row.forEach(value => {
+        const td = tr.insertCell();
+        td.textContent = String(value ?? "");
+        td.style.cssText = "padding:8px;border-bottom:1px solid #50665a";
+      });
+    });
+    document.getElementById(target).appendChild(table);
+  };
+  const all = DATA.deliverables || [];
+  // 刀3·R2：旧导出无 kind 时按灯具处理；外挂设备表不放单价和小计。
+  const list = all.filter(f => (f.kind || "灯具") === "灯具");
+  const external = all.filter(f => f.kind === "外挂设备");
+  draw("delivery-items", ["编号", "类型", "型号", "空间", "回路"],
+    list.map(f => [f.code, f.name, f.model, f.room, f.circuit]));
+  draw("delivery-external", ["编号", "类型", "型号", "空间", "地址"],
+    external.map(f => [f.code, f.name, f.model, f.room, f.circuit]));
+  draw("delivery-prices", ["编号", "产品", "数量", "单价", "小计"],
+    list.map(f => [f.code, f.name, 1, "待补", "待补"]));
+})();
+</script>
+</body>
+</html>
