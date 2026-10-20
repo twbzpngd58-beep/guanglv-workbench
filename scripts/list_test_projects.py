@@ -49,7 +49,7 @@ def main():
     for x in rows:
         print(f"{x['code']:<16}{x['name']:<14}{x['kind']:<6}{x['created']:<18}{x['status']:<8}{x['rooms']:>4}{x['fixtures']:>5}"
               f"{x['attach']/1048576:>8.1f}M{x['snaps']:>6}{x['snapBytes']/1048576:>8.1f}M  {x['advice']}")
-    print(f"\n共 {len(rows)} 个。本脚本只读，归档或删除需老板逐个确认后在工作台里操作。")
+    print(f"\n共 {len(rows)} 个。本脚本只读，归档或删除需作者逐个确认后在工作台里操作。")
 
 
 if __name__ == "__main__":

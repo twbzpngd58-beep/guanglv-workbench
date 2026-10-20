@@ -1,4 +1,4 @@
-"""三维灯光模块（搬自 8890 老工作台，同一套引擎与解析器）
+"""三维灯光模块（引擎与解析器和平面出图共用同一套数据）
 
 一句话：**导图纸 → 自动建三维 → 点场景出讲解词 → 出一套报价**。
 
@@ -59,7 +59,7 @@ router = APIRouter(prefix="/api/lighting3d", tags=["lighting3d"])
 def _furn_poly_geom(row: dict):
     """画过多边形边界的家具件：**轮廓才是真形状**，回 (x, y, 宽m, 深m)；没有轮廓回 None。
 
-    老板 2026-10-16 的 `text` 项目就是这里破的：三维页「语义调整」重建家具行时用图纸里的老 x/z
+    2026-10-16 的 `text` 项目就是这里破的：三维页「语义调整」重建家具行时用图纸里的老 x/z
     覆盖了 x/y，而轮廓 points 还留在新位置——三维那只盒子于是画回老地方、甚至穿出墙体，
     二维看轮廓却是对的，越看越像「形状全错」。
     """
@@ -597,7 +597,7 @@ def _design_rooms_for_engine(project: dict) -> list[dict]:
 def _furn_poly_pts(f: dict) -> list | None:
     """家具轮廓点 → 三维米坐标 [[x, z], ...]（与引擎同口径：x＝设计 x/26，z＝设计 y/26，不镜像）。
 
-    画过轮廓的家具（老板 2026-10-16 的衣帽间柜子）在三维里必须按轮廓挤出，
+    画过轮廓的家具（2026-10-16 的衣帽间柜子）在三维里必须按轮廓挤出，
     只给外接框的话引擎只能画一个方盒子——那就是「轮廓改了没生效」。
     """
     pts = f.get("points")
@@ -651,7 +651,7 @@ def _engine_view(pid: str, st: dict, parsed: dict, opts: dict) -> dict:
                         "h": f["heightM"], "rot": -f.get("rotation", 0), "floor": f.get("floor", 1),
                         "roomId": f.get("roomId", ""), "designFurniture": True,
                         # 画过轮廓的件：轮廓点（三维米坐标 [[x, z], ...]）给引擎挤出成棱柱。
-                        # 老板 2026-10-16「主卧衣帽间的柜子轮廓我改过、没生效」＝引擎只拿到外接框。
+                        # 2026-10-16「主卧衣帽间的柜子轮廓我改过、没生效」＝引擎只拿到外接框。
                         "pts": _furn_poly_pts(f)})
                 engine["furniture"] = engine_rows
             if status == "confirmed":
@@ -703,7 +703,7 @@ def _engine_view(pid: str, st: dict, parsed: dict, opts: dict) -> dict:
         else:
             engine["lights"] = []
             engine["strips"] = []
-    # 老板 2026-10-16：三维里两盏灯一盏都不亮。根因＝情景等级还挂在**解析时的回路 id**
+    # 2026-10-16：三维里两盏灯一盏都不亮。根因＝情景等级还挂在**解析时的回路 id**
     # （circuit-159ebb94…）上，而确认后引擎的回路已经换成设计里的（C01…）→ 一条都对不上 →
     # 连「全开」也是 0。这里改成：确认过的项目优先用**设计里的情景**（按灯具状态折成回路等级），
     # 设计里没有情景时，把自带预设按「整屋强度」折到当前回路上（全开 1.0 / 全关 0 / 会客 0.3…）。

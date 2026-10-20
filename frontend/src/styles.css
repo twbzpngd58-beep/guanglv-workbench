@@ -6084,7 +6084,7 @@ table.owner-clients td small { white-space:normal; }
 .space-preview-panel footer [role="alert"] { flex:1 0 100%; margin:0; }
 @media(max-width:850px) { .task-furniture-layout { grid-template-columns:1fr; } }
 
-/* 选中对象后，边栏里对应的那块拉进视野并闪一下（老板 2026-10-16：「要能被明显的看到」） */
+/* 选中对象后，边栏里对应的那块拉进视野并闪一下（2026-10-16：「要能被明显的看到」） */
 .flash-target { animation: ekko-flash 1.5s ease-out; scroll-margin: 24px; border-radius: 6px; }
 @keyframes ekko-flash {
   0%   { box-shadow: 0 0 0 3px rgba(173, 108, 37, .85); background-color: rgba(231, 200, 159, .38); }
@@ -6093,3 +6093,74 @@ table.owner-clients td small { white-space:normal; }
 }
 /* 家具列表里当前那件：左侧一道实心色条，扫一眼就知道选中的是哪个 */
 .space-furniture-list button.on { box-shadow: inset 3px 0 0 #ad6c25; font-weight: 600; }
+
+/* ── 联系与帮助：使用指南底部 / 设置页「关于与联系」 ── */
+.guide-contact {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.guide-contact h3 {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.guide-contact > p {
+  font-size: 12px;
+  color: #9b968e;
+  line-height: 1.9;
+  margin-bottom: 18px;
+}
+.contact-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.contact-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+  background: #fff;
+  transition: border-color 0.18s, transform 0.18s;
+}
+.contact-card:hover {
+  border-color: #c9c2b7;
+  transform: translateY(-1px);
+}
+.contact-card img {
+  width: 132px;
+  height: auto;
+  border-radius: 6px;
+  display: block;
+}
+.contact-card b {
+  font-size: 12px;
+  font-weight: 500;
+}
+.contact-card span {
+  font-size: 11px;
+  color: #9b968e;
+  text-align: center;
+  line-height: 1.6;
+}
+.contact-cards.compact {
+  margin-top: 18px;
+  gap: 12px;
+}
+.contact-cards.compact .contact-card {
+  padding: 12px 10px;
+}
+.contact-cards.compact .contact-card img {
+  width: 108px;
+}
+@media (max-width: 560px) {
+  .contact-cards {
+    grid-template-columns: 1fr;
+  }
+}

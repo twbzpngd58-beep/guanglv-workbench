@@ -102,7 +102,7 @@ export function SpacePreviewLayer({
   // 绘制画布的滚轮缩放：显示当前倍数，「适应画布」把它还原。
   const [viewZoom, setViewZoom] = useState(1);
   const [viewReset, setViewReset] = useState(0);
-  // 家具（老板 2026-10-16）：家具调整也在这个界面里做，和空间确认同一处；画布上只动家具，
+  // 家具（2026-10-16）：家具调整也在这个界面里做，和空间确认同一处；画布上只动家具，
   // 空间操作一律不在这层（空间走「修改空间」，editableRooms 关掉）。
   const [furnSel, setFurnSel] = useState("");
   const [placingFurn, setPlacingFurn] = useState("");
@@ -270,7 +270,7 @@ export function SpacePreviewLayer({
       workflowStep: "spaces", editingFloor: floor, roomsConfirmedAt: "", openingsConfirmedAt: "" } });
     setPhase("spaces"); setTab("edit"); setTool("select"); setSelection(null);
   };
-  /** 门窗核对完 → 进「修改家具」这一步（老板 2026-10-16：确认门窗之后是修改家具，改完点确认才进画布）。 */
+  /** 门窗核对完 → 进「修改家具」这一步（2026-10-16：确认门窗之后是修改家具，改完点确认才进画布）。 */
   const editFurniture = (note = "这一步核对家具，确认后进入画布") => {
     onChange({ ...editorDesign, spaceDefinition: { ...design.spaceDefinition, status: "previewing",
       workflowStep: "furniture", editingFloor: floor } });
@@ -478,7 +478,7 @@ export function SpacePreviewLayer({
                 selection={selection}
                 onSelect={setSelection}
                 onChange={(v: Obj, h?: boolean) => {
-                  // 上一级固化（老板 2026-10-17）：门窗阶段锁定空间与墙；家具阶段再锁门窗。
+                  // 上一级固化（2026-10-17）：门窗阶段锁定空间与墙；家具阶段再锁门窗。
                   // 画布上固化层已不接收指针，这里再兜一层：保存时一律还原成进入本级时的样子。
                   const locked = tab === "furniture" || phase === "furniture"
                     ? { rooms: design.rooms, walls: design.walls, openings: design.openings }

@@ -352,7 +352,7 @@ def get(c, pid):
     # 智能方案：旧项目没有这个字段，默认按「无线智能」处理，保持逐灯情景不变。
     if p.get("smart") not in ("无线", "KNX", "无"):
         p["smart"] = "无线"
-    # 已确认空间的老项目（老板 2026-10-17 text）：首次导入时留下的另一套缩放的 CAD 线 / 文字不再显示，
+    # 已确认空间的老项目（2026-10-17 text）：首次导入时留下的另一套缩放的 CAD 线 / 文字不再显示，
     # 只在读取时剔除；下次保存时随之落库（不单独改库）。
     d = p.get("design") or {}
     if (d.get("spaceDefinition") or {}).get("status") == "confirmed":
@@ -487,7 +487,7 @@ def validate_design(d, p):
                 raise HTTPException(422, "家具所属空间不存在")
             if room and f.get("floor", 1) != room.get("floor", 1):
                 raise HTTPException(422, "家具楼层与所属空间不一致")
-            # 家具边界多边形（老板 2026-10-16）：口径与空间边界点一致，坏数据不许落库。
+            # 家具边界多边形（2026-10-16）：口径与空间边界点一致，坏数据不许落库。
             if f.get("points"):
                 pts = f["points"]
                 if not isinstance(pts, list) or len(pts) < 3:
@@ -2306,7 +2306,7 @@ def validate_reviewed_spaces(d) -> int:
 
 
 # 首次导入 DXF 时 ezdxf 基础解析写进来的线段 / 文字（source="cad"）是**铺满画布的另一套缩放**，
-# 和确认后的空间（米 × 26）不在一个坐标系。老板 2026-10-17 的 text 项目：底图上叠了两套大小不一的
+# 和确认后的空间（米 × 26）不在一个坐标系。2026-10-17 的 text 项目：底图上叠了两套大小不一的
 # 户型，没法布灯。空间确认后墙以空间边界生成的为准，这层旧线一律清掉（文字一并清：乱码也在里面）。
 STALE_DRAWING_SOURCES = {"cad"}
 
@@ -2984,9 +2984,13 @@ if DIST.exists():
     def spa(full_path: str):
         if full_path.startswith("api/"):
             raise HTTPException(404, "接口不存在")
-        if full_path == "favicon.svg":
-            return FileResponse(DIST / "favicon.svg")
-        # 老板 2026-10-16「8010 工作台并没有调整」：SPA 外壳曾经被浏览器缓存住，
+        # dist 里的真实文件直接给（favicon、联系二维码、robots 这类），
+        # 其余路径才落到 SPA 外壳。必须限定在 DIST 之内，防目录穿越。
+        if full_path:
+            target = (DIST / full_path).resolve()
+            if target.is_file() and (target == DIST or DIST in target.parents):
+                return FileResponse(target)
+        # SPA 外壳一旦被浏览器缓存住，
         # 于是新构建（hash 变了的 assets）根本不会被取——这里明确不许缓存 index.html。
         return FileResponse(DIST / "index.html", headers={
             "Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"})

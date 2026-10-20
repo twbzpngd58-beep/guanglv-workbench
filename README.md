@@ -134,7 +134,7 @@ docker logs guanglv-workbench      # 首次启动在这里看初始密码
 ## 常用参数
 
 ```bash
-python3 start.py --port 8010        # 换端口（也可改 .env 里的 PORT）
+python3 start.py --port 8080        # 换端口（也可改 .env 里的 PORT）
 python3 start.py --host 0.0.0.0     # 允许局域网访问（默认只监听本机）
 python3 start.py --rebuild          # 改了前端源码后重建
 ```

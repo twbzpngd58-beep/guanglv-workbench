@@ -40,7 +40,7 @@ export function FurniturePanel({ design, floor, selected, onSelect, onChange, on
   onChange: (design: Obj) => void; onPlace: (kind: string) => void; placing?: string; readonly?: boolean;
   onMove?: () => void; moving?: boolean;
 }) {
-  // 面板里一律看「规范形态」：有轮廓的件 x/y＝轮廓外接框中心（老板 2026-10-16 那件到顶柜，
+  // 面板里一律看「规范形态」：有轮廓的件 x/y＝轮廓外接框中心（2026-10-16 那件到顶柜，
   // 存的是被覆盖过的老 x/y，面板照着它显示、三维照着它画，才会「形状全错、穿墙」）。
   const rows: Obj[] = (design.furniture || []).filter((f: Obj) => +(f.floor || 1) === floor)
     .map((f: Obj) => normalizeFurniture(f));
@@ -50,7 +50,7 @@ export function FurniturePanel({ design, floor, selected, onSelect, onChange, on
   const patch = (fields: Obj) => {
     if (!item || readonly) return;
     let next = { ...item, ...fields };
-    // 画过多边形的家具（老板 2026-10-16）：宽深/朝向/坐标都得一并作用到多边形上，
+    // 画过多边形的家具（2026-10-16）：宽深/朝向/坐标都得一并作用到多边形上，
     // 否则面板里填数字、转 90° 对画布上的形状不生效（只有外接框在动）。
     if (hasFurniturePolygon(item)) {
       const sizeChanged = ("widthM" in fields && +next.widthM !== +item.widthM)
@@ -71,7 +71,7 @@ export function FurniturePanel({ design, floor, selected, onSelect, onChange, on
   const editBoundary = (fn: () => void) => {
     try { fn(); } catch (e: any) { setBoundaryError(e.message); }
   };
-  // 选中一件家具（画布点选或列表点选）→ 这块字段拉进视野并闪一下（老板 2026-10-16 口径②）。
+  // 选中一件家具（画布点选或列表点选）→ 这块字段拉进视野并闪一下（2026-10-16 口径②）。
   const fieldsRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!item) return;
@@ -105,7 +105,7 @@ export function FurniturePanel({ design, floor, selected, onSelect, onChange, on
       <label>所属空间<select aria-label="家具所属空间" disabled={readonly} value={item.roomId}
         onChange={e => {
           const room=rooms.find(r=>r.id===e.target.value);
-          // 老板 2026-10-16：改「所属空间」**只改归属，位置不动**。
+          // 2026-10-16：改「所属空间」**只改归属，位置不动**。
           // 原来这里还会把家具挪到该空间的内部点（...interiorPoint(room)）——多边形件被挪走后
           // 与轮廓脱钩，正是「改了归属形状就错」的另一半。
           patch(room ? {roomId:room.id} : {roomId:""});
@@ -124,7 +124,7 @@ export function FurniturePanel({ design, floor, selected, onSelect, onChange, on
           const value = +e.target.value;
           if (Number.isFinite(value)) patch({ rotation: (value % 360 + 360) % 360 });
         }} /></label>
-      {/* 边界＝多边形（老板 2026-10-16：家具要像空间一样改边界、加/删点） */}
+      {/* 边界＝多边形（2026-10-16：家具要像空间一样改边界、加/删点） */}
       <p className="subtle" data-furn-vertices={vertices}>
         {polygon ? `边界：多边形 · ${vertices} 个顶点（改宽深＝按轮廓等比缩放）`
           : "边界：矩形（5 个点起就是多边形，画布上可直接拖角点）"}

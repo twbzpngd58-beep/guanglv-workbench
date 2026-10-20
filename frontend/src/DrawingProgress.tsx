@@ -26,7 +26,7 @@ export function DrawingProgress({ project, design, job, phase, confirmed, onStep
   project: Obj; design: Obj; job?: Obj | null; phase?: DrawingStep;
   /** 项目已经确认过空间/门窗/家具：进度条按「已进入画布」算。
    *  否则在已确认的项目里打开空间预览（改空间/改家具）时，进度条会跟着编辑相位退回
-   *  「三维预览 29%」「修改家具 71%」，跟项目实际所在的环节对不上（老板 2026-10-16 报）。 */
+   *  「三维预览 29%」「修改家具 71%」，跟项目实际所在的环节对不上（2026-10-16 报）。 */
   confirmed?: boolean;
   onStep?: (step: DrawingStep) => void;
 }) {

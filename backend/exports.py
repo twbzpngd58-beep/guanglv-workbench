@@ -360,8 +360,8 @@ def render_plan(p, scene_id=None, floor=None):
         draw.text(pt(item["x"]-w/2, item["y"]), item["kind"], font=font(12), fill="#594f43")
     if night:
         # 灯光分布示意：每盏亮灯一块柔光光斑，**按空间边界 + 墙 + 高柜裁剪**
-        # （老板 2026-10-17：「光斑不能穿过墙体、门、家具表面」）。
-        # 原来是一个整圆再整体高斯模糊 —— 光斑铺过墙、铺到户型外面，是老板看到的那张图。
+        # （2026-10-17：「光斑不能穿过墙体、门、家具表面」）。
+        # 原来是一个整圆再整体高斯模糊 —— 光斑铺过墙、铺到户型外面，是当时看到的那张图。
         px_design = _pixel_design(d, floor, pt)
         glow = Image.new("RGBA", im.size, (0, 0, 0, 0))
         for f in d["fixtures"]:

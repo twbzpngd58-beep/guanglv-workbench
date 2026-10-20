@@ -1011,6 +1011,23 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
                   </Button>
                 </section>
                 <section className="white-panel">
+                  <h3>关于与联系</h3>
+                  <p className="body-copy">
+                    光律 Guanglv Workbench · MIT 开源。图纸解析、三维渲染与情景规则来自真实照明项目的打磨；
+                    数据全部留在你自己的机器上。
+                  </p>
+                  <div className="contact-cards compact">
+                    <a className="contact-card" href="/wechat-support.jpg" target="_blank" rel="noreferrer">
+                      <img src="/wechat-support.jpg" alt="技术咨询微信二维码" />
+                      <b>技术咨询</b>
+                    </a>
+                    <a className="contact-card" href="/wechat-business.jpg" target="_blank" rel="noreferrer">
+                      <img src="/wechat-business.jpg" alt="商务合作微信二维码" />
+                      <b>商务合作</b>
+                    </a>
+                  </div>
+                </section>
+                <section className="white-panel">
                   <h3>工作台版本</h3>
                   <div className="setting-row">
                     <span>当前版本</span>
@@ -1021,7 +1038,8 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
                     <b>v{__APP_VERSION__}</b>
                   </div>
                   <p className="body-copy">
-                    设定版本号时会为当前代码存一份档；「切换到此版本」会把整个工作台（后端 + 前端）还原到该版本的代码存档，并重建重启；项目数据不受影响。
+                    源码发行版不生成代码存档，所以这里只记录版本号与改动说明；要换回旧版本，用 git 切分支或
+                    `git checkout 标签名` 后重新构建。项目数据（`data/`）不受影响。
                   </p>
                   <div className="version-set">
                     <input
@@ -1144,6 +1162,22 @@ function App({ user, onLogout }: { user: Account; onLogout: () => void }) {
                 </section>
               </div>
             ))}
+          </div>
+          <div className="guide-contact">
+            <h3>需要帮助？</h3>
+            <p>用起来有问题，或者要把它接进真实项目，都可以直接找我们。</p>
+            <div className="contact-cards">
+              <a className="contact-card" href="/wechat-support.jpg" target="_blank" rel="noreferrer">
+                <img src="/wechat-support.jpg" alt="技术咨询微信二维码" />
+                <b>技术咨询</b>
+                <span>出图、三维、情景规则怎么用</span>
+              </a>
+              <a className="contact-card" href="/wechat-business.jpg" target="_blank" rel="noreferrer">
+                <img src="/wechat-business.jpg" alt="商务合作微信二维码" />
+                <b>商务合作</b>
+                <span>设计、智能、产品与落地交付</span>
+              </a>
+            </div>
           </div>
           <div className="modal-foot">
             <Button variant="primary" onClick={() => setModal("")}>

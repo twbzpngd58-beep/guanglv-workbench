@@ -10,7 +10,7 @@
 已删除项目残留的快照只列出，不在本脚本里删除。
 
   .venv/bin/python scripts/prune_versions.py              # 只出报告
-  .venv/bin/python scripts/prune_versions.py --apply      # 老板确认后才执行删除
+  .venv/bin/python scripts/prune_versions.py --apply      # 作者确认后才执行删除
   .venv/bin/python scripts/prune_versions.py --apply --vacuum   # 删除后回收磁盘空间（会锁库数十秒）
 """
 from __future__ import annotations
@@ -127,7 +127,7 @@ def mb(n: int) -> str:
 
 def main():
     ap = argparse.ArgumentParser(description="versions 表瘦身（默认 dry-run）")
-    ap.add_argument("--apply", action="store_true", help="真正删除（需老板确认后再加）")
+    ap.add_argument("--apply", action="store_true", help="真正删除（需作者确认后再加）")
     ap.add_argument("--vacuum", action="store_true", help="删除后 VACUUM 回收空间（需 --apply）")
     ap.add_argument("--db", default=None, help="数据库路径，默认 DATA_DIR/studio.sqlite3")
     args = ap.parse_args()

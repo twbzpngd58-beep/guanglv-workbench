@@ -160,7 +160,7 @@ export function Lighting3DView({
     return () => clearInterval(t);
   }, [running, id, refresh]);
 
-  /** 三维里拖完一盏灯（老板 2026-10-16「俯视图里能选中灯具但不能拖动」）：
+  /** 三维里拖完一盏灯（2026-10-16「俯视图里能选中灯具但不能拖动」）：
    *  先试写三维自己的灯位（未确认的项目）；空间确认后三维写接口是 409（三维只读），
    *  灯位以**设计**为准，那条路由 onLightMove 回外层写。 */
   const applyLightMove = async (lid: string, x: number, z: number) => {
@@ -188,8 +188,8 @@ export function Lighting3DView({
         const w = window as any;
         if (!w.__initLighting3D) throw new Error("三维引擎没就绪");
         w.__initLighting3D(d);
-        // 三维里拖完一盏灯 → 交回 React 写数据（老板 2026-10-16：三维俯视图里灯具要能挪）。
-        // 老板 2026-10-17 改口径：布灯与挪灯都在 2D 平面上做，三维只看——外层不给 onLightMove 就不挂（引擎随之不拖灯）。
+        // 三维里拖完一盏灯 → 交回 React 写数据（2026-10-16：三维俯视图里灯具要能挪）。
+        // 2026-10-17 改口径：布灯与挪灯都在 2D 平面上做，三维只看——外层不给 onLightMove 就不挂（引擎随之不拖灯）。
         if (w.__api) w.__api.onLightMove = onLightMove ? (lid: string, x: number, z: number) => { void applyLightMove(lid, x, z); } : null;
         window.dispatchEvent(new Event("resize"));
       } catch (e: any) {
