@@ -421,7 +421,7 @@ def render_plan(p, scene_id=None, floor=None):
 
 
 def is_light(f):
-    """刀3·R2：窗帘存放在 fixtures 里但不是灯，不进灯具清单 / 回路 / 参数表，改列入「智能设备」。"""
+    """注：窗帘存放在 fixtures 里但不是灯，不进灯具清单 / 回路 / 参数表，改列入「智能设备」。"""
     return f.get("type") != "窗帘"
 
 
@@ -430,7 +430,7 @@ def lights(p):
 
 
 def cct_reason(f):
-    """刀2·R1/R3「原因」列：待核灯标「色温待核」；偏离单色 3000K 的写设计师原因（未填标出）。"""
+    """「原因」列：待核灯标「色温待核」；偏离单色 3000K 的写设计师原因（未填标出）。"""
     if not is_light(f):
         return ""
     if f.get("cctPending"):
@@ -464,7 +464,7 @@ def rows(p):
     ]
 
 
-# 刀4·R4 地址口径（智能工程师定）：总线协议必须编址；硬接线/模拟调光靠「模块＋通道」定位；
+# 地址口径（智能工程师定）：总线协议必须编址；硬接线/模拟调光靠「模块＋通道」定位；
 # 无线协议地址在配网时由网关分配，设计阶段不编数。DALI/KNX 及其它一律要填地址。
 WIRED_CONTROLS = ("开关控制", "0–10V", "0-10V", "PWM")
 WIRELESS_CONTROLS = ("Zigbee", "Wi-Fi", "蓝牙 Mesh")
@@ -514,7 +514,7 @@ def circuit_row(p, key, members):
         address = _join((f.get("address") or "").strip() for f in members)
         if any(not (f.get("address") or "").strip() for f in members):
             missing.append("地址")
-    # R5：超 D3 默认上限、无线跨空间，接在刀4 缺项文字后面。
+    # 超出 D3 默认上限、无线跨空间，接在缺项文字后面。
     missing += circuit_rules.flags(members, room_names, circuit_rules.circuit_key({"circuit": key}))
     return [key, len(members), sum(f.get("power", 0) for f in members),
             space, control, module, channel, address, "、".join(missing)]
@@ -680,7 +680,7 @@ def spreadsheet(p):
                 dev.get("notes", ""),
             ]
         )
-    # 刀3·R2：窗帘按外挂设备列在设备之后，不带色温、不计功率。
+    # 注：窗帘按外挂设备列在设备之后，不带色温、不计功率。
     for f in p["design"]["fixtures"]:
         if is_light(f):
             continue
@@ -1274,7 +1274,7 @@ def scene_html(p):
         }
         for f in design.get("fixtures", [])
     ]
-    # 刀3·R2：交付清单拆「灯具」与「外挂设备」（窗帘 + 智能设备，不计价）。
+    # 注：交付清单拆「灯具」与「外挂设备」（窗帘 + 智能设备，不计价）。
     deliverables = [
         {"code": f.get("code", ""), "name": f.get("name") or f.get("type") or "灯具",
          "model": f.get("model") or "", "room": f.get("space") or room_names.get(f.get("roomId"), ""),

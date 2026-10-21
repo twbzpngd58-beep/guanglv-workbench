@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""product_library — 工作台自己的产品库（把知识库 15-产品库 写进工作台）
+"""product_library — 工作台自己的产品库（把产品资料写进工作台）
 
-用户口径（2026-09-26）：「把知识库中的产品库写入工作台」。
-知识库永远是**只读真源**：这里只读它，把产品写进工作台自己的库（`data/studio.sqlite3` 的 `products` 表）。
+用户口径（2026-09-26）：「把产品资料写入工作台」。
+产品资料永远是**只读真源**：这里只读它，把产品写进工作台自己的库（`data/studio.sqlite3` 的 `products` 表）。
+
+## 说明
+随源码分发的版本不带外部产品资料目录，启动时直接读 `backend/local_data/products.json`（见 `load_seed`）。
+下面的"外部产品资料"路径只在你自己准备了同结构目录时才生效，属于可选的高级同步路径。
 
 ## 来源（白名单，一条一条列出来，不搞"扫到什么算什么"）
-1. `15-产品库/摇光灯具/统一灯具报价表.xlsx` —— 报价表，**带图纸编号 + 方案类型（缓亮缓灭/无线/总线/开闭）+ 零售价**，
+1. 灯具报价表（xlsx）—— **带图纸编号 + 方案类型（缓亮缓灭/无线/总线/开闭）+ 零售价**，
    项目报价与三维空间取价都以它为准。
-2. `15-产品库/_产品库全量整合.md` —— 各品牌全量产品表（摇光 / 世聪 / JOCO / CLOWIRE / 睿易 / 大华），
-   品牌按文档一级标题（`# 一、摇光灯具` 这种）认出来。
-3. 各品牌目录下的产品清单 markdown：`摇光灯具/`、`CITRON世聪智能/`、`JOCO集控/`、`JOCO集控智能/`、`睿易网络/`。
+2. 产品库全量整合（md）—— 各品牌全量产品表，品牌按文档一级标题认出来。
+3. 各品牌目录下的产品清单 markdown。
 
 模板 / 规则 / 说明 / 目录 / 附录 / 总览 / 选型指南 / 方案这类小节不当产品（见 SKIP_SECTION_KW）。
 
@@ -274,7 +277,7 @@ def rows_from_markdown(path: Path, source: str, default_brand: str, synced_at: s
     两种写法都认：
       · 产品表 —— `| 产品名称 | 型号 | 零售价 |`（价格只取零售价/市场价，出厂价不读）
       · 标题＋规格表 —— `### 五孔插座 `SC-SW1-01`` 这种，标题带型号就算一件产品（价格没有就留空，报价按待补）
-    品牌按一级标题认（`# 一、摇光灯具` → 摇光）；模板 / 目录 / 附录 / 总览这类小节整段跳过。
+    品牌按一级标题认；模板 / 目录 / 附录 / 总览这类小节整段跳过。
     """
     body = KB.text(path)
     if not body:
@@ -545,7 +548,7 @@ def sync(db_path: Path | str | None = None, root: Path | str = KB.DEFAULT_ROOT) 
 def _to_api(r) -> dict:
     d = dict(r)
     d["power"] = d.get("watt") or 0
-    # 刀2·R3：库里没色温 = 待核（None + cctPending），不再补 2700/6500 冒充可调。
+    # 注：库里没色温 = 待核（None + cctPending），不再补 2700/6500 冒充可调。
     d["cctMin"] = d.get("cct_min") or None
     d["cctMax"] = d.get("cct_max") or None
     d["cctPending"] = not (d["cctMin"] and d["cctMax"])

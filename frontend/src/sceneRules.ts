@@ -91,7 +91,7 @@ export function ruleMatches(rule: SceneRule, spaceCode: string, role: string, po
   return true;
 }
 
-/** 功能补光 F / 安防 X 统一 3000K 高显色（刀2·第9项 A），覆盖场景包里的 4000–5000K。 */
+/** 功能补光 F / 安防 X 统一 3000K 高显色，覆盖场景包里的 4000–5000K。 */
 export const FIXED_CCT_ROLES = ["F", "X"];
 export const FIXED_ROLE_CCT = 3000;
 /** RGBW 彩色律动只在电竞房生效；空间库没有单列电竞房，暂按 go 游戏室（别名 娱乐室/电玩室）算。 */

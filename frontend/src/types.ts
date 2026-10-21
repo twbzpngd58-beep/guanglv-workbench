@@ -6,7 +6,7 @@ export interface Design {
   walls: Obj[];
   openings: Obj[];
   texts: Obj[];
-  /** 灯具。刀4·R4 回路表字段：controller 模块/网关、channel 通道、address 地址（DALI 短地址 / KNX 组地址），老数据缺省按空。 */
+  /** 灯具。回路表字段：controller 模块/网关、channel 通道、address 地址（DALI 短地址 / KNX 组地址），老数据缺省按空。 */
   fixtures: Obj[];
   devices: Obj[];
   scenes: Obj[];

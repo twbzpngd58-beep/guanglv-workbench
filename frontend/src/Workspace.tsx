@@ -473,7 +473,7 @@ function normalizeSensor(dev: Obj) {
   if (dev.heading == null) dev.heading = 0;
   if (dev.offDelaySeconds == null) dev.offDelaySeconds = 5;
   if (dev.sensorBrightness == null) dev.sensorBrightness = 100;
-  // 刀2·第9项：联动色温默认跟随所联灯具（无联灯回落 3000K）；已存的值不迁移、不改写。
+  // 联动色温默认跟随所联灯具（无联灯回落 3000K）；已存的值不迁移、不改写。
   if (dev.sensorCct == null) {
     dev.sensorCctAuto = true;
     dev.sensorCct = 3000;
@@ -1032,7 +1032,7 @@ export function Workspace({
     resumedPreview.current = true;
     const savedStep = d?.spaceDefinition?.workflowStep;
     // 家具这一步也要能续接：在「修改家具」中途关掉界面再回来，必须还回到家具核对，
-    // 不能把人丢在画布里（老板 2026-10-16 报「进度条与所在环节不匹配」）。
+    // 不能把人丢在画布里（2026-10-16 反馈「进度条与所在环节不匹配」）。
     const resume = ["spaces", "openings", "furniture"].includes(savedStep);
     if (!previewFlag.current && !resume) return;
     previewFlag.current = false;
@@ -1087,7 +1087,7 @@ export function Workspace({
     [focus, setFocus] = useState<{ x: number; y: number; token: number } | null>(null),
     [recognitionFile, setRecognitionFile] = useState("");
 
-  // 老板 2026-10-16：画布上选中家具/空间后，检视面板必须「明显可见」——滚到眼前并闪一下。
+  // 2026-10-16：画布上选中家具/空间后，检视面板必须「明显可见」——滚到眼前并闪一下。
   const inspectorBody = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     revealFlash(inspectorBody.current);
@@ -1103,7 +1103,7 @@ export function Workspace({
   // 布灯落点（画布上点选的位置）：非空时新灯就放在这里，而不是空间中心。
   const [placePoint, setPlacePoint] = useState<{ x: number; y: number } | null>(null);
   // 光源类型：单色 / 双色 / 彩色（灯带同样适用）；单色默认 3000K。
-  // 刀2·R1：手动布灯默认单色 3000K；改双色 / 彩色 / 非 3000K 必须写原因（进导出「原因」列）。
+  // 手动布灯默认单色 3000K；改双色 / 彩色 / 非 3000K 必须写原因（进导出「原因」列）。
   const [lampColorMode, setLampColorMode] = useState<ColorMode>("单色");
   const [lampSingleCct, setLampSingleCct] = useState<number>(SINGLE_CCT_DEFAULT);
   const [lampCctReason, setLampCctReason] = useState("");
@@ -1158,7 +1158,7 @@ export function Workspace({
     try { localStorage.setItem("gv.layer.devices", deviceLayer ? "1" : "0"); } catch { /* 隐私模式下忽略 */ }
   }, [deviceLayer]);
 
-  // 小人漫游只在 2D 平面图上有意义（老板 2026-10-18）：一旦回到 3D 视图就自动退出漫游，
+  // 小人漫游只在 2D 平面图上有意义（2026-10-18 定）：一旦回到 3D 视图就自动退出漫游，
   // 免得「3D 里没有小人，灯却还按漫游亮着」（右上角「返回主画布 3D 模型」等入口都走这条兜底）。
   useEffect(() => {
     if (roamOn && p?.mode === "3D" && view3d) {
@@ -1228,8 +1228,8 @@ export function Workspace({
     .map((f) => ({ fixture: f, reasons: cctIssuesOf(f, d?.scenes || []) }))
     .filter((x) => x.reasons.length);
   const cctIssueMap = new Map(cctIssues.map((x) => [x.fixture.id, x.reasons] as const));
-  // 刀2：色温待核（导入 / 知识库缺色温）与「偏离 3000K 单色却没写原因」两张清单，导出前列出。
-  // 刀3·R2：窗帘不是灯，不进两张色温清单。
+  // 色温待核（导入 / 知识库缺色温）与「偏离 3000K 单色却没写原因」两张清单，导出前列出。
+  // 窗帘不是灯，不进两张色温清单。
   const cctPendingList = (d?.fixtures || []).filter((f) => isSceneLight(f) && isCctPending(f));
   const cctReasonMissing = (d?.fixtures || []).filter(
     (f) => isSceneLight(f) && cctNeedsReason(f) && !String(f.cctReason || "").trim(),
@@ -1336,7 +1336,7 @@ export function Workspace({
   const planMaskShown = !spacePreview && !!canvasBackgroundUrl && d?.planMasked !== false;
   // 逐层底图：智能情景页会把每一层同时画出来，每张画布必须用「自己那一层」的图纸。
   // 以前这里统一传当前楼层的底图，多层项目就会所有楼层显示同一张图
-  // （老板反馈的「楼层数量对、六层楼都是同一层的图纸」）。
+  // （反馈的「楼层数量对、六层楼都是同一层的图纸」）。
   const backgroundUrlFor = (floorNo: number) => {
     if (background === "__none__") return "";
     // 手动指定底图只作用于当前楼层，其他楼层仍按各自的图纸走。
@@ -1369,7 +1369,7 @@ export function Workspace({
         .filter(Boolean),
     ),
   ).sort() as string[];
-  // 刀3·R2：窗帘不进灯具清单，列在「智能设备」区。
+  // 窗帘不进灯具清单，列在「智能设备」区。
   const lightFixtures = (d?.fixtures || []).filter(isSceneLight);
   const curtainFixtures = (d?.fixtures || []).filter((f) => !isSceneLight(f));
   const fixtureRows = lightFixtures.filter((f) => {
@@ -1655,7 +1655,7 @@ export function Workspace({
     setPlacePoint({ x, y });
   }
 
-  /** 布灯 / 放设备一律在二维平面上做（老板 2026-10-17）：三维只用来看。
+  /** 布灯 / 放设备一律在二维平面上做（2026-10-17 定）：三维只用来看。
    *  在三维视图里点了放置，先切到平面图。返回 true＝刚切过去。 */
   const toPlanForPlacing = () => {
     // 「灯具配置」等页签上没有画布：先回到「底图与空间」的平面图，否则进了布灯模式也没处点。
@@ -2431,7 +2431,7 @@ export function Workspace({
       // 挑空空间默认按贯通高度安装（层高 − 0.6），否则沿用 2.8m
       installHeight: voidInstallHeight(r) ?? 2.8,
       beamAngle: defaultBeamAngle(lampType),
-      // 筒射灯默认 12W（老板规定），其他灯具类型保持 7W 默认。
+      // 筒射灯默认 12W（默认口径），其他灯具类型保持 7W 默认。
       // 拍板 2026-10-12：线条灯默认 10W；吊灯**不给默认**——功率与光通量必须手填。
       power:
         lampType === "吊灯" ? 0
@@ -2509,7 +2509,7 @@ export function Workspace({
         const snap = walls.length ? snapToWall(walls, { x: +dev.x, y: +dev.y }, +dev.floor, Infinity) : null;
         if (snap) { dev.x = Math.round(snap.x * 100) / 100; dev.y = Math.round(snap.y * 100) / 100; }
       }
-      // 面板 / 温控器贴墙安装：先给一个可改的默认高度（老板 2026-10-16「添加面板时可以设置其高度」）。
+      // 面板 / 温控器贴墙安装：先给一个可改的默认高度（2026-10-16「添加面板时可以设置其高度」）。
       // 「时光之轮」一类遥控器不走墙装，按家具顶面/地面落位，不用这个高度。
       if (!isTabletopDevice(dev) && (dev.type === "面板" || dev.type === "温控器")) {
         dev.installHeight = Math.round(mountHeight(+(room?.heightM || 3)) * 100) / 100;
@@ -3233,7 +3233,7 @@ export function Workspace({
   /** 生成完先把「预览里那套空间」落成**可编辑**的设计空间，再开预览层（就地改名 / 拖边界）。 */
   async function openSpacePreview(initialPhase?: EditingPhase) {
     const editorKey = uid();
-    // 已确认的项目点进来就是「回来改东西」：落在修改空间，进度条才不会退回三维预览（老板 2026-10-16）。
+    // 已确认的项目点进来就是「回来改东西」：落在修改空间，进度条才不会退回三维预览（2026-10-16）。
     const phase = initialPhase
       || (d?.spaceDefinition?.status === "confirmed" ? "spaces" : "review");
     setSpacePreview({ state: "running", recognizing: false, pct: 0, stage: "正在准备空间与底图…", initialPhase: phase, editorKey });
@@ -3269,7 +3269,7 @@ export function Workspace({
     setBackground(""); setCanvasReset(v => v + 1);
   }
 
-  /** 画布上画完一圈家具轮廓（老板 2026-10-16：家具也要能像空间那样多边形绘制）。 */
+  /** 画布上画完一圈家具轮廓（2026-10-16：家具也要能像空间那样多边形绘制）。 */
   function onFurnPolygonCanvas(pts: { x: number; y: number }[]) {
     if (!d || pts.length < 3) return;
     const rows = (d.furniture || []) as Obj[];
@@ -3294,7 +3294,7 @@ export function Workspace({
     setPlacingFurniture(""); setMovingFurniture(false); setTool("select");
   }
 
-  // 老板 2026-10-16：画布上家具一律锁定——只有灯具与设备可挪动。原来点一下家具就
+  // 2026-10-16：画布上家具一律锁定——只有灯具与设备可挪动。原来点一下家具就
   // 自动进「调整家具」并允许拖动，而俯视图里灯具正压在家具上，随手一点一拖就把家具拖跑了。
   // 现在点一下只高亮 + 提示；要改家具就点「调整家具」，或去「导入图纸 → 家具」。
   function selectCanvasFurniture(fid: string) {
@@ -3686,7 +3686,7 @@ export function Workspace({
           onConfirmed={enterConfirmedCanvas}
           notify={notify}
           // 关掉这一层之前，先把没落盘的改动写完（await）：不然「改到一半点关闭」再刷新，
-          // 服务端还停在上一步（老板 2026-10-16 报「进度条与所在环节不匹配」的另一半原因）。
+          // 服务端还停在上一步（2026-10-16 反馈「进度条与所在环节不匹配」的另一半原因）。
           onClose={async () => { await flush().catch(() => {}); setSpacePreview(null); }}
           job={spacePreview}
         />
@@ -4167,7 +4167,7 @@ export function Workspace({
                   <span className="canvas-lamp-code">{spotFixture.code}</span>
                   <span className="canvas-lamp-type">{spotFixture.type}</span>
                   <b className="canvas-lamp-power">{spotFixture.power} W</b>
-                  {/* 老板 2026-10-16：编号与灯具基本信息放在这里（点灯即见），画布上不再挂成一堆标签。 */}
+                  {/* 2026-10-16：编号与灯具基本信息放在这里（点灯即见），画布上不再挂成一堆标签。 */}
                   <small>
                     {d.rooms.find((r) => r.id === spotFixture.roomId)?.name || "未归属"} · 安装{" "}
                     {spotFixture.installHeight ?? 2.8} m · 色温 {spotFixture.cct ?? 3000} K
@@ -4199,12 +4199,12 @@ export function Workspace({
                   )}
                 </div>
               )}
-              {/* 底图与空间＝纯绘图面（老板 2026-10-19）：这一页只有平面图，不放任何三维。
+              {/* 底图与空间＝纯绘图面（2026-10-19 定）：这一页只有平面图，不放任何三维。
                   三维是「演示」，只出现在「智能情景」页；交付文件同理。 */}
               {spacePreview ? <div className="subtle">正在预览空间，确认后进入画布</div> : <Plan
                 key={"plan" + floor + "-" + canvasReset}
                 // 家具调整模式下，画布要用与右侧面板同一批家具行——图纸刚导入、还没写进设计时
-                // 设计里没有 furniture，否则画布上只有装饰性占位、抓不到边界把手（老板 2026-10-16）。
+                // 设计里没有 furniture，否则画布上只有装饰性占位、抓不到边界把手（2026-10-16）。
                 design={furnitureEditing && !Array.isArray(d.furniture) ? { ...d, furniture: legacyFurniture } : d}
                 floor={floor}
                 selection={selection}
@@ -4216,7 +4216,7 @@ export function Workspace({
                     const r = v.rooms.find((r) => r.id === selection.id);
                     if (r) r.source = "manual";
                   }
-                  // 拖面板 / 温控器：沿最近的墙线滑动，不离开墙（老板 2026-10-17：三维里不能悬浮）。
+                  // 拖面板 / 温控器：沿最近的墙线滑动，不离开墙（2026-10-17：三维里不能悬浮）。
                   if (selection?.kind === "devices") {
                     const dev = v.devices.find((x) => x.id === selection.id);
                     if (dev && (dev.type === "面板" || dev.type === "温控器") && !isTabletopDevice(dev)) {
@@ -4230,7 +4230,7 @@ export function Workspace({
                 tool={tool}
                 onPlacePoint={beginPlaceAt}
                 zoom={zoom}
-                // 布灯主画布同样滚轮缩放、空白处按住拖动平移（老板 2026-10-17）；「适应画布」一并还原。
+                // 布灯主画布同样滚轮缩放、空白处按住拖动平移（2026-10-17）；「适应画布」一并还原。
                 wheelZoom
                 viewReset={canvasReset}
                 showFurniture={furniture}
@@ -5979,7 +5979,7 @@ export function Workspace({
                     disabled={locked || !d.rooms.length}
                     title="小人漫游（只在 2D 平面图上演示）：点一下切到 2D 平面图并放下小人，按住小人走进传感器范围，关联灯具亮、离开则按延时关闭；再点一下退出并回到 3D"
                     onClick={() => {
-                      // 老板 2026-10-18：小人漫游只在 2D 平面图上有效——
+                      // 2026-10-18：小人漫游只在 2D 平面图上有效——
                       // 点一下：切到 2D 平面图并放下小人；再点一下：退出漫游、回到 3D 界面。
                       if (roamOn) {
                         setRoamOn(false);
@@ -6006,7 +6006,7 @@ export function Workspace({
                           });
                       }
                       setRoamOn(true);
-                      // 漫游在 2D 平面图上演示：三维项目先切到 2D（老板 2026-10-18）。
+                      // 漫游在 2D 平面图上演示：三维项目先切到 2D（2026-10-18 定）。
                       const toPlan = p?.mode === "3D";
                       if (toPlan) setView3d(false);
                       notify(
@@ -6136,7 +6136,7 @@ export function Workspace({
             </>
           ) : scene ? (
             <>
-              {/* 2026-10-19 改版（老板拍板）：整页不滚。
+              {/* 2026-10-19 改版（定稿）：整页不滚。
                   左栏＝情景竖排（14 个一屏排完，可搜、可 ↑↓ 切）；中间＝画布；右栏＝检查器
                   （情景 / 回路 / 灯具 / 面板 四页，点谁就是谁）。
                   改之前情景是 175px 横向滚动窗，回路和单灯在画布下方铺 5 行，整页 2000px，
@@ -8832,7 +8832,7 @@ function FixtureFields({
               : "不做智能：灯具按回路开闭。"}
         </p>
       </Field>
-      {/* 刀4·R4：回路表按这三项定位到模块的第几路 / 总线地址；灯带的「模块/网关」后端必填。 */}
+      {/* 回路表按这三项定位到模块的第几路 / 总线地址；灯带的「模块/网关」后端必填。 */}
       <Field label={f.type === "灯带" ? "模块/网关 *" : "模块/网关"}>
         <input
           required={f.type === "灯带"}

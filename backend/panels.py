@@ -11,7 +11,7 @@
     keyLongLabels   每键「长按」功能说明（不刻字）
     keyLongScenes   每键「长按」绑定情景 id
 
-型号目录与刻字口径在 `frontend/src/data/citron-panels.json`（出处：知识库 15-产品库/CITRON世聪智能
+型号目录与刻字口径在 `frontend/src/data/citron-panels.json`（出处：世聪官网
 + 02-智能家居/场景联动/刻字与面板触发源.md）。前端 `frontend/src/Workspace.tsx` 的
 `normalizePanel` / `fillPanelKeys` / `panelIssues` 是同一套规则的另一份实现；两侧必须同步。
 """

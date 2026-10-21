@@ -11,7 +11,7 @@
 - 生成：`POST /api/lighting3d/<pid>/generate` 后台跑，`GET /api/lighting3d/<pid>/job`
   轮询进度（含成功/失败/失败原因），前端据此画进度条。
 - 项目数据：`<DATA>/lighting3d/<pid>.json`（解析结果 + 房间名 + 讲解词 + 两个层高），旁挂 `<pid>.source.dxf`
-- 产品参数：`lighting3d_products` 表（studio.sqlite3 里的新表），数据源=知识库「统一灯具报价表」，
+- 产品参数：`lighting3d_products` 表（studio.sqlite3 里的新表），数据源=随源码分发的产品资料，
   **只同步市场零售价**（出厂价/运费/备注按白名单挡掉）
 
 口径（用户 2026-09 拍板，别改）：
@@ -101,7 +101,7 @@ def save_store(pid: str, st: dict) -> None:
         temp.unlink(missing_ok=True)
 
 
-# 刀1：以下仅冻结 store 字段契约；现有读写、接口与引擎行为暂不接入。
+# 注：以下仅冻结 store 字段契约；现有读写、接口与引擎行为暂不接入。
 class StoreLight(TypedDict, total=False):
     id: str                  # 落库时生成一次并持久化；引用不使用 code 或下标
     code: str                # 2D 编号规则，显示用、可重算
@@ -117,7 +117,7 @@ class StoreLight(TypedDict, total=False):
 class StoreScene(TypedDict, total=False):
     id: str
     name: str
-    levels: dict[str, float]  # 回路 id -> 0..1；转灯 id 的 states 留给刀9
+    levels: dict[str, float]  # 回路 id -> 0..1；转灯 id 的 states 留待后续
     script: str
 
 
@@ -159,7 +159,7 @@ def schema_lights_for_read(st: dict) -> list:
     return (st.get("parsed") or {}).get("lamps") or []
 
 
-# 刀3：仅新 lights 接口接线；既有解析、摘要、引擎和报价接口不改读写行为。
+# 注：仅新 lights 接口接线；既有解析、摘要、引擎和报价接口不改读写行为。
 _LIGHTS_LOCK = threading.RLock()
 _LIGHT_FIELDS = frozenset({"code", "x", "z", "room", "type", "product_id",
                            "cct", "cct_source"})
@@ -193,7 +193,7 @@ def _light_fields(payload: dict) -> dict:
     if "cct_source" in payload and payload["cct_source"] not in _LIGHT_SOURCES:
         raise HTTPException(400, "cct_source 来源无效")
     if payload.get("cct_source") == "默认补值":
-        raise HTTPException(400, "本刀不允许未确认的默认补值")
+        raise HTTPException(400, "本轮不允许未确认的默认补值")
     if "cct" in payload and payload["cct"] is None and \
             payload.get("cct_source", "待补") != "待补":
         raise HTTPException(400, "缺色温只能标记待补")
@@ -1087,7 +1087,7 @@ def products_list(scheme: str = ""):
 
 @router.post("/products/sync")
 def products_sync():
-    """产品库同步：源=知识库 15-产品库/摇光灯具/统一灯具报价表.xlsx，只进零售价"""
+    """产品库同步：源=随源码分发的产品资料，只进零售价"""
     try:
         return PR.sync(str(DB))
     except Exception as e:

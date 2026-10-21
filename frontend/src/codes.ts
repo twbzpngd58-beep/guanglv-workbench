@@ -591,7 +591,7 @@ export function applyColorMode(f: Obj, mode: ColorMode): void {
   f.colored = true;
 }
 
-/* 色温口径（刀2）：手动布灯默认单色 3000K；偏离（双色 / 彩色 / 非 3000K）必须写原因。
+/* 色温口径：手动布灯默认单色 3000K；偏离（双色 / 彩色 / 非 3000K）必须写原因。
  * 导入或知识库没给色温的灯 = 「待核」：内部先用 3000K 占位（后端要求上下限是数字），
  * 界面与导出一律显示「待核」，不再猜 2700/6500；人工改过光源类型或色温即解除待核。 */
 export const CCT_PENDING_LABEL = "待核";

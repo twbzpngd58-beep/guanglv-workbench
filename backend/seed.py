@@ -74,7 +74,7 @@ def sample_design(variant=0):
                     installHeight=2.8,
                     power=7,
                     brightnessMax=100,
-                    # 刀2·R1：示例灯与手动布灯同口径，单色 3000K。
+                    # 示例灯与手动布灯同口径，单色 3000K。
                     cct=3000,
                     cctMin=3000,
                     cctMax=3000,

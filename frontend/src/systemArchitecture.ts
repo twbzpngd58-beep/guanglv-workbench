@@ -5,7 +5,7 @@
  * 灯带控制器去重）不看项目数据、不从产品库选型、无智能也照生成，交付导出直接读这份 devices，
  * 于是「设备清单不准确、缺东西」。口径与型号一律从这里出，UI 只负责展示与调用。
  *
- * 型号来源：世聪 KNX 体系产品清单（知识库 15-产品库/CITRON世聪智能）+ 光律 products 表。
+ * 型号来源：世聪 KNX 体系产品清单 + 光律 products 表。
  * 规则来源：knx-quotation-audit / smart-lighting-architecture-audit（KNX 必检项）。
  */
 
