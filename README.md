@@ -217,11 +217,11 @@ python3 scripts/apply_update.py --check
 规则见 [docs/版本号规则.md](docs/版本号规则.md)：三段 `X.Y.Z`，新功能进 minor，修复进 patch，不兼容才进 major；tag 一次性、annotated、不可移动。发版前必须过版本守卫：
 
 ```bash
-python3 scripts/version_guard.py --bump patch      # 或 minor / major；同步 VERSION、README、package.json
+python3 scripts/version_guard.py --bump patch      # 或 minor / major；同步 VERSION、README、package.json、package-lock.json
 # 手工补 backend/app_versions.py 的 RELEASE_NOTES（从 1.3.4 起每条带 category）和 GitHub Release 说明
 cd frontend && npm run build && cd ..
 python3 scripts/version_guard.py --baseline        # 前端构建后刷新 build-baseline.json
-python3 scripts/version_guard.py --check --strict  # VERSION/README/package.json/baseline/RELEASE_NOTES 一致
+python3 scripts/version_guard.py --check --strict  # VERSION/README/package.json/lock/baseline/RELEASE_NOTES 一致
 python3 scripts/version_guard.py --check-bump --base v1.3.3   # 非 git 目录；发版仓库里可省 --base
 python3 scripts/build_release.py                   # 生成 dist-release/（内部再跑一次版本校验）
 git status                                          # 发版仓工作区必须是干净的，别把旧文件带回来

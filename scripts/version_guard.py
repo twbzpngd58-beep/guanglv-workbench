@@ -36,6 +36,7 @@ RELEASE_NOTES_FILE = "backend/app_versions.py"
 README_FILE = "README.md"
 VERSION_FILE = "VERSION"
 PACKAGE_FILE = "frontend/package.json"
+PACKAGE_LOCK_FILE = "frontend/package-lock.json"
 BASELINE_FILE = "build-baseline.json"
 DIST_INDEX = "frontend/dist/index.html"
 CATEGORIES = {"fix", "feat", "breaking"}
@@ -191,6 +192,23 @@ def check_release_files(root: Path = ROOT, strict_build: bool = False) -> tuple:
             )
     except VersionError as exc:
         problems.append(str(exc))
+
+    lock_path = root / PACKAGE_LOCK_FILE
+    if lock_path.is_file():
+        try:
+            lock = json.loads(lock_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            problems.append(f"读不了 {PACKAGE_LOCK_FILE}：{exc}")
+        else:
+            lock_versions = [str(lock.get("version") or "")]
+            packages = lock.get("packages")
+            if isinstance(packages, dict) and isinstance(packages.get(""), dict):
+                lock_versions.append(str(packages[""].get("version") or ""))
+            for lock_version in lock_versions:
+                if lock_version and lock_version != version_text:
+                    problems.append(
+                        f"{PACKAGE_LOCK_FILE} 的根版本 {lock_version} 与 VERSION {version_text} 不一致。"
+                    )
 
     try:
         notes = read_release_notes(root)
@@ -460,6 +478,13 @@ def bump(root: Path, part: str) -> None:
         data = json.loads(package.read_text(encoding="utf-8"))
         data["version"] = new_text
         package.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    lock = root / PACKAGE_LOCK_FILE
+    if lock.is_file():
+        text = lock.read_text(encoding="utf-8")
+        # 只改根对象和 packages[""] 的版本，依赖自身的 1.3.3 不能碰。
+        text = text.replace(f'"version": "{old_text}"', f'"version": "{new_text}"', 2)
+        lock.write_text(text, encoding="utf-8")
 
     print(f"VERSION：{old_text} → {new_text}（{part}）")
     print("README「当前版本」与 frontend/package.json 已同步。")
