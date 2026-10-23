@@ -1,3 +1,5 @@
+import "./workspaceV2.css";
+import { readCapabilities } from "./capabilities";
 import { WallEvidenceReview } from "./WallEvidenceReview";
 import { RecognitionCompare } from "./RecognitionCompare";
 import { Lighting3DView } from "./Lighting3DView";
@@ -147,6 +149,7 @@ import {
   cctText,
   isCctPending,
   applyProductCct,
+  applyProductToFixture,
   CCT_PENDING_LABEL,
   colorModeOf,
   isColorful,
@@ -190,7 +193,7 @@ const DEVICE_TYPE_LETTER: Record<string, string> = {
   "电源": "Y",
   "其他": "X",
 };
-/** 面板按键数档位 / 刻字口径见 ./panelRules（世聪型号目录 + 知识库刻字口径），默认 4 键。
+/** 面板按键数档位 / 刻字口径见 ./panelRules（世聪型号目录 + 产品资料刻字口径），默认 4 键。
  *  「4 键」即世聪面板标注的「4键8功能」：4 个物理键 ×（短按 / 长按）= 8 个功能；
  *  一个物理键只刻一次：keyLabels ＝ 刻字（短按），keyLongLabels ＝ 长按功能说明（不刻字）；
  *  例外：官网 TK3 / ST3 为上下双刻，长按文字刻在按键下方（model.engraveLong）。 */
@@ -216,14 +219,18 @@ const isSceneLight = (f: Obj) => !!f && f.type !== "窗帘";
 /** 回路编号：空＝未分配回路。 */
 const circuitOf = (f: Obj) =>
   (f && f.circuit ? String(f.circuit).trim() : "") || "未分配回路";
-/** 智能方案：无线（飞利浦，2026-10-11 起；原 JOCO 方案停用）/ KNX 总线 / 不做智能（灯具按回路开闭）。 */
+/** 智能方案取值：无线（飞利浦，2026-10-11 起；原 JOCO 方案停用）/ KNX 总线 / 无（不做智能 · 按回路开闭）。
+ *  2026-10-23 老板拍板方案 C：数据不动（smart="无" 保留），界面统一称「不做智能（按回路开闭）」。 */
 const SMART_OPTIONS: { value: string; label: string }[] = [
   { value: "无线", label: "做智能 · 无线（飞利浦）" },
   { value: "KNX", label: "做智能 · KNX 总线" },
-  { value: "无", label: "不做智能 · 仅彩平图" },
+  { value: "无", label: "无（不做智能 · 按回路开闭）" },
 ];
+/** 顶栏/项目头这类「有就显示」的位置：未设置时返回空串，由调用方省略整段。 */
 const smartLabelOf = (v?: string) =>
-  v === "无" ? "不做智能 · 仅彩平图" : v === "KNX" ? "智能 · KNX 总线" : "智能 · 无线（飞利浦）";
+  v === "无" ? "" : v === "KNX" ? "智能 · KNX 总线" : "智能 · 无线（飞利浦）";
+/** 需要成句/必须带方案名的地方（提示语、设备架构说明）：不做智能时给统一口径。 */
+const smartLabelOrNone = (v?: string) => smartLabelOf(v) || "不做智能（按回路开闭）";
 /**
  * 灯具控制方式：按项目智能方案收敛（实测 2026-10-11 口径）。
  * 总线（KNX/DALI）只给「开闭 / DALI」——JOCO 与 mesh 类无线协议在总线方案里没有意义；
@@ -345,7 +352,7 @@ function pruneDeviceRefs(design: Obj) {
     }
   });
 }
-/** 世聪按知识库产品库目录选型；其他品牌仍按产品库表，但剔除 AP / 温控 / 语音 / 连框 / 空白面板。 */
+/** 世聪按产品资料目录选型；其他品牌仍按产品库表，但剔除 AP / 温控 / 语音 / 连框 / 空白面板。 */
 const isCitron = (brand?: string) => !!brand && (brand === PANEL_BRAND || /世聪|CITRON/i.test(brand));
 // 非面板 / 非标件一律不进面板选型：底座这类没有型号的异形件（充电底座等）也在内。
 const NOT_A_PANEL = /AP|无线接入|温控|语音|连框|空白|底盒|底座/;
@@ -607,7 +614,7 @@ function buildDeviceCode(room: Obj | undefined, type: string, devices: Obj[]): s
   return `${prefix}${String(max + 1).padStart(3, "0")}`;
 }
 
-/** 面板刻字预填（知识库键位预算）：见 ./panelRules fillPanelKeys。
+/** 面板刻字预填（产品资料键位预算）：见 ./panelRules fillPanelKeys。
  *  只改整排空白 / 旧版「情景全名」预填的面板，设计师改过的刻字一律不动。 */
 function fillPanelKeys(n: Obj, dev: Obj, r: Obj | undefined | null, force = false) {
   fillPanelKeysFor(n.scenes || [], dev, r, force);
@@ -939,7 +946,7 @@ function PanelKeyEditor({
           type="button"
           className="secondary"
           disabled={disabled}
-          title="按知识库键位预算重排本面板刻字（会覆盖本面板现有刻字）"
+          title="按产品资料键位预算重排本面板刻字（会覆盖本面板现有刻字）"
           onClick={() => onEdit((d) => fillPanelKeysFor(scenes, d, room, true))}
         >
           按口径重排刻字
@@ -982,6 +989,7 @@ export function Workspace({
   products,
   sceneTemplates,
   health,
+  shellV2 = false,
 }: {
   id: string;
   onClose: () => void;
@@ -989,6 +997,7 @@ export function Workspace({
   products: Obj[];
   sceneTemplates: Obj[];
   health: Obj;
+  shellV2?: boolean;
 }) {
   const w = useProject(id, notify);
   const [view3d, setView3d] = useState(true);
@@ -1043,6 +1052,18 @@ export function Workspace({
     void openSpacePreview(resume ? savedStep : undefined);
   }, [p?.id]);
   const [tab, setTab] = useState("plan"),
+    [v2Section, setV2Section] = useState("plan"),
+    [v2Tree, setV2Tree] = useState(!!shellV2),
+    [v2Insp, setV2Insp] = useState("属性"),
+    [v2Delivery, setV2Delivery] = useState<"review"|"export">("review"),
+    // D-10 C9：导出对象。默认「给业主」；2026-10-23 老板拍板取消去价红线 → owner 恢复保留零售价；
+    // 只有「给施工（不含价）」由后端 audience=site 清 0，内部版保留参考价。
+    [exportAudience, setExportAudience] = useState<"owner"|"site"|"internal">("owner"),
+    // D-09：价格复核 422 的就地提示（后端 detail 原文）+「去批量核实」入口；D-10 B9 导出抽屉共用。
+    [reviewError, setReviewError] = useState(""),
+    [reviewErrorKey, setReviewErrorKey] = useState(""),
+    [v2Preview, setV2Preview] = useState(""),
+    [v2SecOpen, setV2SecOpen] = useState<Obj>(() => { try { return JSON.parse(localStorage.getItem("gv.tree.sections") || "{}") || {}; } catch { return {}; } }),
     [selection, setSelection] = useState<Selection>(null),
     [modal, setModal] = useState(""),
     [lampClipboard, setLampClipboard] = useState<Obj | null>(null),
@@ -1166,6 +1187,41 @@ export function Workspace({
       notify("小人漫游只在 2D 平面图上演示，已退出漫游并回到 3D 模型");
     }
   }, [roamOn, view3d, p?.mode]);
+  // batch4 C8：危险操作统一确认弹窗（替代各处 window.confirm；同一套标题/正文/按钮样式）。
+  const [dangerAsk, setDangerAsk] = useState<{ title: string; detail?: string; run: () => void } | null>(null);
+  const askDanger = (title: string, run: () => void, detail?: string) => setDangerAsk({ title, detail, run });
+  // batch4 B7：旧壳 5 个页签在 390 下横向滚动，左右渐隐提示由滚动位置驱动。
+  const tabbarScrollRef = useRef<HTMLDivElement>(null);
+  const [tabFade, setTabFade] = useState({ l: false, r: false });
+  function syncTabFade() {
+    const el = tabbarScrollRef.current;
+    if (!el) return;
+    const l = el.scrollLeft > 4;
+    const r = el.scrollLeft + el.clientWidth < el.scrollWidth - 4;
+    setTabFade((prev) => (prev.l === l && prev.r === r ? prev : { l, r }));
+  }
+  useEffect(() => {
+    syncTabFade();
+    const onResize = () => syncTabFade();
+    window.addEventListener("resize", onResize);
+    const timer = setTimeout(syncTabFade, 350);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      clearTimeout(timer);
+    };
+  }, [tab, shellV2]);
+  useEffect(() => {
+    const el = tabbarScrollRef.current;
+    if (!el) return;
+    const btn = el.querySelector<HTMLButtonElement>(`[data-tab="${tab}"]`);
+    if (btn) btn.scrollIntoView({ block: "nearest", inline: "nearest" });
+    syncTabFade();
+  }, [tab]);
+  // 慢加载兜底：项目数据晚到时页签条才挂载，首次 effect 可能早于它；每次渲染后重算一次渐隐状态
+  // （syncTabFade 内部同值不 setState，不会循环）。
+  useEffect(() => {
+    syncTabFade();
+  });
   const uploadRef = useRef<HTMLInputElement>(null);
   const iesRef = useRef<HTMLInputElement>(null);
   const effectUploadRef = useRef<HTMLInputElement>(null);
@@ -1228,7 +1284,7 @@ export function Workspace({
     .map((f) => ({ fixture: f, reasons: cctIssuesOf(f, d?.scenes || []) }))
     .filter((x) => x.reasons.length);
   const cctIssueMap = new Map(cctIssues.map((x) => [x.fixture.id, x.reasons] as const));
-  // 色温待核（导入 / 知识库缺色温）与「偏离 3000K 单色却没写原因」两张清单，导出前列出。
+  // 色温待核（导入 / 产品资料缺色温）与「偏离 3000K 单色却没写原因」两张清单，导出前列出。
   // 窗帘不是灯，不进两张色温清单。
   const cctPendingList = (d?.fixtures || []).filter((f) => isSceneLight(f) && isCctPending(f));
   const cctReasonMissing = (d?.fixtures || []).filter(
@@ -1242,7 +1298,7 @@ export function Workspace({
           {cctPendingList.length > 0 && (
             <>
               <b>色温{CCT_PENDING_LABEL} {cctPendingList.length} 盏</b>
-              <span>导入 / 知识库没给色温，暂按 3000K 占位，导出清单标「{CCT_PENDING_LABEL}」。</span>
+              <span>导入 / 产品资料没给色温，暂按 3000K 占位，导出清单标「{CCT_PENDING_LABEL}」。</span>
               <ul className="cct-warn-list">
                 {cctPendingList.slice(0, 12).map((f) => (
                   <li key={f.id}>
@@ -1473,18 +1529,19 @@ export function Workspace({
       notify(`「${name}」还有灯具，先移走灯具再删除空间`);
       return;
     }
-    if (!confirm(`删除空间「${name}」？该空间的设备会一并解除归属。`)) return;
-    const summary = { removed: 0, added: 0 };
-    update((n) => {
-      n.devices.filter((v) => v.roomId === roomId).forEach((v) => (v.roomId = ""));
-      n.rooms = n.rooms.filter((r) => r.id !== roomId);
-      Object.assign(summary, syncScenesToSpaces(n));
-    });
-    setSelection(null);
-    notify(
-      `已删除空间「${name}」；智能情景层同步：清理 ${summary.removed} 个不再适用的情景` +
-        (summary.added ? `，+${summary.added} 个可用情景` : ""),
-    );
+    askDanger(`删除空间「${name}」？`, () => {
+      const summary = { removed: 0, added: 0 };
+      update((n) => {
+        n.devices.filter((v) => v.roomId === roomId).forEach((v) => (v.roomId = ""));
+        n.rooms = n.rooms.filter((r) => r.id !== roomId);
+        Object.assign(summary, syncScenesToSpaces(n));
+      });
+      setSelection(null);
+      notify(
+        `已删除空间「${name}」；智能情景层同步：清理 ${summary.removed} 个不再适用的情景` +
+          (summary.added ? `，+${summary.added} 个可用情景` : ""),
+      );
+    }, "该空间的设备会一并解除归属。");
   }
   // 同类空间「－」：移除该类型的最后一个（保留前面几个不动）。
   function removeLastSpaceOfCode(code: string) {
@@ -1798,6 +1855,26 @@ export function Workspace({
       setBusy(false);
     }
   };
+  // D-09：复核签名把后端 422 的 detail 原文留在弹窗里（不吞错、不换泛泛提示）；
+  // 价格门被拦时由弹窗给出「去批量核实」入口。
+  const submitReview = async (key: string) => {
+    if (busy) return;
+    setBusy(true);
+    setReviewError("");
+    setReviewErrorKey(key);
+    try {
+      await operation("/reviews", { key, reviewer, acknowledged: ack });
+      setModal("");
+      setReviewError("");
+      notify("复核签名已记录");
+    } catch (e: any) {
+      const msg = String(e?.message || "复核签名失败");
+      setReviewError(msg);
+      notify(msg);
+    } finally {
+      setBusy(false);
+    }
+  };
   const update = (fn: (d: Design) => void, record = true) => {
     if (!d || locked || busy) return;
     const next = clone(d);
@@ -2038,7 +2115,7 @@ export function Workspace({
       });
       await flush();
       await operation("/smart", { smart: v }, "PATCH");
-    }, `智能方案已改为：${smartLabelOf(v)}`);
+    }, `智能方案已改为：${smartLabelOrNone(v)}`);
   }
   function addRoom() {
     const rid = uid();
@@ -2628,32 +2705,28 @@ export function Workspace({
     if (placedAt.pos) focusPlaced(placedAt.pos.x, placedAt.pos.y);
   }
   function removeSelected() {
-    if (
-      !selection ||
-      !selected ||
-      !confirm(
-        `删除 ${selected.name || selected.code || "此对象"}？删除房间也将删除其中灯具及场景引用。`,
-      )
-    )
-      return;
-    update((n) => {
-      const removed =
-        selection.kind === "rooms"
-          ? n.fixtures.filter((f) => f.roomId === selection.id).map((f) => f.id)
-          : selection.kind === "fixtures"
-            ? [selection.id]
-            : [];
-      n[selection.kind] = n[selection.kind].filter(
-        (o) => o.id !== selection.id,
-      );
-      n.fixtures = n.fixtures.filter((f) => !removed.includes(f.id));
-      n.scenes.forEach((s) => removed.forEach((id) => delete s.states[id]));
-      if (selection.kind === "rooms")
-        n.devices
-          .filter((v) => v.roomId === selection.id)
-          .forEach((v) => (v.roomId = ""));
-    });
-    setSelection(null);
+    if (!selection || !selected) return;
+    const sel = selection;
+    askDanger(`删除 ${selected.name || selected.code || "此对象"}？`, () => {
+      update((n) => {
+        const removed =
+          sel.kind === "rooms"
+            ? n.fixtures.filter((f) => f.roomId === sel.id).map((f) => f.id)
+            : sel.kind === "fixtures"
+              ? [sel.id]
+              : [];
+        n[sel.kind] = n[sel.kind].filter(
+          (o) => o.id !== sel.id,
+        );
+        n.fixtures = n.fixtures.filter((f) => !removed.includes(f.id));
+        n.scenes.forEach((s) => removed.forEach((id) => delete s.states[id]));
+        if (sel.kind === "rooms")
+          n.devices
+            .filter((v) => v.roomId === sel.id)
+            .forEach((v) => (v.roomId = ""));
+      });
+      setSelection(null);
+    }, "删除房间也将删除其中灯具及场景引用。");
   }
   // 复制：把选中对象放进应用内剪贴板（灯具含光斑/灯带几何，设备含面板刻字/键位情景、传感器参数），
   // 同时把编号写进系统剪贴板。剪贴板记住类型，粘贴时按类型还原，复制面板不会再粘出灯具。
@@ -3017,7 +3090,7 @@ export function Workspace({
     const firstWarn = (plan?.warnings || [])[0];
     notify(
       plan
-        ? `已按「${smartLabelOf(String(p?.smart || ""))}」建立 ${(plan?.devices || []).length} 类设备${bad ? `；${bad} 项要对一下` : "；核对表全部通过"}${firstWarn ? `（${firstWarn}）` : ""}`
+        ? `已按「${smartLabelOrNone(String(p?.smart || ""))}」建立 ${(plan?.devices || []).length} 类设备${bad ? `；${bad} 项要对一下` : "；核对表全部通过"}${firstWarn ? `（${firstWarn}）` : ""}`
         : "已建立基础智能架构",
     );
   }
@@ -3393,14 +3466,37 @@ export function Workspace({
         body: fd,
       });
       w.accept(next);
-      notify(`IES 已上传：${file.name}（光斑仍按光束角理论值，接入解析后自动切换）`);
+      notify(`IES 已上传：${file.name}（已解析配光参考；光斑仍按光束角理论值，不做正式照度计算）`);
     }, "");
   }
-  async function download(format: string) {
+  // 现场照片 / 签字 PDF：只存档，不改画布真源。
+  async function uploadSiteEvidence(file?: File) {
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("kind", file.type === "application/pdf" ? "signature" : "photo");
+    await run(async () => {
+      const next = await api(`/projects/${id}/site-evidence`, { method: "POST", body: fd });
+      w.accept(next);
+      notify(`现场资料已存档：${file.name}`);
+    }, "");
+  }
+  async function deleteSiteEvidence(eid: string) {
+    await run(async () => {
+      const next = await api(`/projects/${id}/site-evidence/${eid}`, { method: "DELETE" });
+      w.accept(next);
+      notify("现场资料已删除");
+    }, "");
+  }
+  // D-10 C9：导出对象。owner=给业主（含参考价）、site=给施工（不含价）、internal=内部版（保留参考价）。
+  // 金额清零由后端 audience 参数执行；前端负责选对象、不重复传价格。
+  async function download(format: string, audience: "owner" | "site" | "internal" = exportAudience) {
     await run(async () => {
       await flush();
+      const qs = new URLSearchParams({ floor: String(floor) });
+      qs.set("audience", audience);
       const r = await fetch(
-        `/api/projects/${id}/export/${format}?floor=${floor}`,
+        `/api/projects/${id}/export/${format}?${qs.toString()}`,
       );
       if (!r.ok) {
         // R5：被拦时 422 正文就是红色提示原文，原样显示，不换成泛泛的「导出失败」。
@@ -3423,7 +3519,18 @@ export function Workspace({
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       // 提示档（业主 HTML、图片）照出，带上回路问题原文。
-      notify("导出文件已生成" + (warn ? "；回路问题：" + decodeURIComponent(warn) : ""));
+      const pricingMode = r.headers.get("X-Pricing-Mode");
+      const audienceNote =
+        audience === "site"
+          ? "（施工版 · 不含参考价）"
+          : audience === "owner"
+            ? "（业主版 · 含参考价）"
+            : "（内部版 · 含参考价）";
+      notify(
+        "导出文件已生成" + audienceNote +
+        (pricingMode ? `；价格：${pricingMode === "excluded" ? "已去价" : "保留"}` : "") +
+        (warn ? "；回路问题：" + decodeURIComponent(warn) : ""),
+      );
     }, "");
   }
   const historyOpen = () =>
@@ -3566,10 +3673,194 @@ export function Workspace({
       icon: Layers3,
     },
   ];
+  // D-09：价格复核门禁就地提示用——纳价灯具与待核实清单（阈值与后端一致：未核实 >30% 或 >10 行会被拦）。
+  const pricedFixtures = (d.fixtures || []).filter((f: Obj) => f.quote);
+  const unverifiedFixtures = pricedFixtures.filter((f: Obj) => !f.priceVerified);
+  const pricingRiskRatio = pricedFixtures.length ? unverifiedFixtures.length / pricedFixtures.length : 0;
+  // 导出按所选「交付对象」走；拦截档（施工包/厂家包）仍按 R5 先跳回路问题。
+  const exportWithAudience = (aud: "owner" | "site" | "internal", fmt: string) => {
+    const blocked = BLOCKED_EXPORTS.includes(fmt) ? circuitIssues(d) : [];
+    const f = blocked.length && d.fixtures.find((x: Obj) => x.id === blocked[0].fixtureIds[0]);
+    if (f) locateFixture(f);
+    else void download(fmt, aud);
+  };
+  const markAllPricesVerified = async () => {
+    update((n) => {
+      (n.fixtures || []).filter((f: Obj) => f.quote).forEach((f: Obj) => (f.priceVerified = true));
+    });
+    await flush();
+    notify(`已把 ${pricedFixtures.length} 盏纳入报价的灯具标为「价格已人工核实」；请回到价格复核重新签名`);
+  };
   const hasDxfDrawing = (p.files || []).some((f: Obj) =>
     f.type === "DXF" || /\.dxf$/i.test(String(f.name || "")));
+  const capsSnapshot = readCapabilities();
+  const capsEdition = String(capsSnapshot?.edition || "");
+  const enabledSlots = new Set<string>(((capsSnapshot?.modules || []) as Obj[])
+    .filter((m: Obj) => m.enabled)
+    .flatMap((m: Obj) => (m.slots || []) as string[]));
+  const hasSlot = (slot: string) => enabledSlots.has(slot);
+  const demoEdition = (() => { try { return localStorage.getItem("gv.demo.edition") || ""; } catch { return ""; } })();
+  const editionMode = capsEdition || demoEdition;
+  const knxMode = p.smart === "KNX" || (capsSnapshot ? hasSlot("panel:knx-mapping") : (editionMode === "knx" || editionMode === "enterprise"));
+  const entMode = capsSnapshot ? hasSlot("deliver:quote") : editionMode === "enterprise";
+  const iesMode = capsSnapshot ? hasSlot("panel:ies") : true;
+  const capModules = ((capsSnapshot?.modules || []) as Obj[]).filter((m: Obj) => m.enabled && m.pack !== "kernel");
+  const capModuleRows = capModules.slice().sort((a: Obj, b: Obj) =>
+    (b.pack === "pack.enterprise" ? 1 : 0) - (a.pack === "pack.enterprise" ? 1 : 0)).slice(0, 6);
+  const planMode = capsSnapshot ? hasSlot("dock:plan") : true;
+  const spaceMode = planMode;
+  const siteCount = (p.siteEvidence || []).length;
+  const siteMB = ((p.siteEvidence || []).reduce((n: number, e: Obj) => n + Number(e.bytes || 0), 0) / 1048576).toFixed(1);
+  const v2SelFix = selection?.kind === "fixtures" ? (d.fixtures || []).find((f: Obj) => f.id === selection.id) : null;
+  const v2SelRoom = v2SelFix ? (d.rooms || []).find((r: Obj) => r.id === v2SelFix.roomId) : (selection?.kind === "rooms" ? (d.rooms || []).find((r: Obj) => r.id === selection.id) : null);
+  const v2Site = ((d as Obj).siteCheck || {}) as Obj;
+  const v2QuoteCount = (d.fixtures || []).filter((f: Obj) => f.quote).length;
+  const v2InspTabs = ["属性", ...(knxMode ? ["组地址", "现场核对"] : []), ...(iesMode ? ["IES"] : []), ...(entMode ? ["报价"] : [])];
+  const treeSec = (key: string) => ({ open: v2SecOpen[key] !== false });
+  const treeToggle = (key: string) => (e: any) => {
+    e.preventDefault();
+    setV2SecOpen(prev => {
+      const open = prev[key] !== false;
+      const next = { ...prev, [key]: !open };
+      try { localStorage.setItem("gv.tree.sections", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+  const railMain = [
+    { id: "plan", label: "图纸", icon: Layers3, tab: "plan" },
+    { id: "fixtures", label: "布灯", icon: Lightbulb, tab: "fixtures" },
+    { id: "review", label: "复核", icon: ShieldCheck, tab: "deliver" },
+    { id: "export", label: "交付", icon: Download, tab: "deliver" },
+  ];
+  const railPlugins = [
+    ...((!capsSnapshot || hasSlot("dock:scenes")) ? [{ id: "scenes", label: "情景", icon: Sun, tab: "scenes" }] : []),
+    ...((!capsSnapshot || hasSlot("canvas:render")) ? [{ id: "renders", label: "示意", icon: Image, tab: "renders" }] : []),
+  ];
+  const dockKnx = capsSnapshot ? hasSlot("dock:knx") : knxMode;
+  const goV2 = (section: string, t: string) => {
+    setV2Section(section);
+    setV2Tree(true);
+    if (section === "review") setV2Delivery("review");
+    if (section === "export") setV2Delivery("export");
+    setTab(t);
+  };
   return (
-    <div className="studio-shell">
+    <div className={"studio-shell" + (shellV2 ? " wsv2" : "") + (shellV2 && tab === "plan" ? " wsv2-plan" : "") + (v2Tree ? " wsv2-treeopen" : "") + (shellV2 && tab === "deliver" ? (" wsv2-d" + v2Delivery) : "") + (shellV2 && tab === "scenes" && p.mode === "3D" && view3d ? " scene3d-full" : "")}>
+      {shellV2 ? (
+        <>
+          <header className="wsv2-top">
+            <button className="wsv2-back" onClick={leave} aria-label="返回工作台"><ArrowLeft size={18} /></button>
+            <div className="wsv2-brand"><span className="wsv2-mark" /><span><b>光律</b><small>GUANGLV</small></span></div>
+            <span className="wsv2-div" />
+            <div className="wsv2-pname">
+              <b>{p.name}</b>
+              <span className="wsv2-status">{p.status}</span>
+              <small>{p.code} · {p.city || "城市未填"} · {p.area} ㎡ · V{String(p.version).padStart(2, "0")}{smartLabelOf(p.smart) ? ` · ${smartLabelOf(p.smart)}` : ""}</small>
+            </div>
+            <span className="wsv2-sp" />
+            <span className="wsv2-save">
+              {w.saving ? <Loader2 className="spin" size={13} /> : w.saveError ? <AlertCircle size={13} /> : w.dirty ? <Clock3 size={13} /> : <CheckCircle2 size={13} />}
+              {w.saving ? "保存中" : w.saveError ? "保存失败" : w.dirty ? "等待保存" : "已保存至本地"}
+            </span>
+            <button className="wsv2-btn" onClick={historyOpen}><History size={14} /> 版本</button>
+            <button className="wsv2-btn" disabled={busy || locked} onClick={save} title="编辑会自动保存；这里立即保存一次"><Save size={14} /> 立即保存</button>
+            <button className="wsv2-btn gold" onClick={() => goV2("export", "deliver")} title="打开「复核与交付」页"><Download size={14} /> 复核与交付</button>
+          </header>
+          <nav className="wsv2-rail">
+            <span className="wsv2-rgroup">主流程</span>
+            {railMain.map((t) => (
+              <button key={t.id} className={"wsv2-railbtn" + (v2Section === t.id ? " on" : "")} title={t.label} onClick={() => goV2(t.id, t.tab)}>
+                <t.icon size={17} /><span>{t.label}</span>
+              </button>
+            ))}
+            <span className="wsv2-rgroup">插件</span>
+            {railPlugins.map((t) => (
+              <button key={t.id} className={"wsv2-railbtn" + (v2Section === t.id ? " on" : "")} title={t.label} onClick={() => goV2(t.id, t.tab)}>
+                <t.icon size={17} /><span>{t.label}</span>
+              </button>
+            ))}
+            {dockKnx && <button className="wsv2-railbtn" title="KNX 工程" onClick={() => notify("KNX 工程：S0 接入；当前先走旧版交付页")}><Grid2X2 size={17} /><span>KNX</span></button>}
+            <span className="wsv2-sp" />
+            <button className={"wsv2-railbtn" + (v2Tree ? " on" : "")} title="项目结构" onClick={() => setV2Tree(v => !v)}><Grid2X2 size={17} /><span>结构</span></button>
+            <button className="wsv2-railbtn" title="能力与插件" onClick={() => notify("能力与插件：首页能力抽屉已可用，项目内接口下一批接入")}><PanelRightClose size={17} /><span>能力</span></button>
+            <button className="wsv2-railbtn" title="返回工作台" onClick={leave}><ArrowLeft size={17} /><span>返回</span></button>
+          </nav>
+          <aside className={"wsv2-tree" + (v2Tree ? " on" : "")}>
+            <div className="wsv2-treeh"><b>项目结构</b><span>对象层</span><span className="wsv2-sp" /><button title="管理空间" onClick={() => setModal("spaces")}><Plus size={14} /></button><button onClick={() => setV2Tree(false)}><X size={14} /></button></div>
+            <div className="wsv2-treeb">
+              {spaceMode && <details className="wsv2-dsec" {...treeSec("空间")}>
+                <summary onClick={treeToggle("空间")}>空间</summary>
+                {(d.rooms || []).filter((r: Obj) => Number(r.floor || 1) === floor).map((r: Obj) => (
+                  <button key={r.id} className={"wsv2-trow" + (selection?.kind === "rooms" && selection.id === r.id ? " on" : "")}
+                    onClick={() => { setSelection({ kind: "rooms", id: r.id }); goV2("plan", "plan"); }}>
+                    <span className="wsv2-tdot" />{r.name}<span className="wsv2-tcnt">{(d.fixtures || []).filter((f: Obj) => f.roomId === r.id).length}</span>
+                  </button>
+                ))}
+                {!(d.rooms || []).filter((r: Obj) => Number(r.floor || 1) === floor).length && <div className="wsv2-tempty">本层暂无空间</div>}
+              </details>}
+              <details className="wsv2-dsec" {...treeSec("对象")}>
+                <summary onClick={treeToggle("对象")}>对象</summary>
+                {[
+                  ["回路", Array.from(new Set((d.fixtures || []).map((f: Obj) => f.circuit).filter(Boolean))).length],
+                  ["灯位", (d.fixtures || []).length],
+                  ["设备", (d.devices || []).length],
+                  ...((!capsSnapshot || hasSlot("dock:scenes")) ? [["情景", (d.scenes || []).length]] : []),
+                  ...(knxMode ? [["KNX 组地址", (d.fixtures || []).filter((f: Obj) => f.address).length]] : []),
+                  ...(iesMode ? [["IES 绑定", (d.fixtures || []).filter((f: Obj) => f.ies).length]] : []),
+                ].map(([k, n]) => (
+                  <div className="wsv2-trow" key={String(k)}><span className="wsv2-tdot" />{k}<span className="wsv2-tcnt">{n}</span></div>
+                ))}
+              </details>
+              <details className="wsv2-dsec" {...treeSec("交付")}>
+                <summary onClick={treeToggle("交付")}>交付</summary>
+                <div className="wsv2-trow"><span className="wsv2-tdot red" />缺件单<span className="wsv2-tcnt">{circuitIssues(d).length}</span></div>
+                <div className="wsv2-trow"><span className="wsv2-tdot" />导出格式<span className="wsv2-tcnt">10</span></div>
+                {entMode && <div className="wsv2-trow"><span className="wsv2-tdot" />报价<span className="wsv2-tcnt">{v2QuoteCount} / {(d.fixtures || []).length}</span></div>}
+                {knxMode && <div className="wsv2-trow"><span className="wsv2-tdot" />KNX 刻字/调试<span className="wsv2-tcnt">本机</span></div>}
+                {iesMode && <div className="wsv2-trow"><span className="wsv2-tdot" />IES 绑定<span className="wsv2-tcnt">{(d.fixtures || []).filter((f: Obj) => f.ies).length}</span></div>}
+              </details>
+              {planMode && <details className="wsv2-dsec" {...treeSec("图层")}>
+                <summary onClick={treeToggle("图层")}>图层</summary>
+                {([
+                  ["家具占位", furniture, setFurniture],
+                  ["灯具位置", lights, setLights],
+                  ["灯具编号", labels, setLabels],
+                  ["网格参考", grid, setGrid],
+                ] as any[]).map(([k, v, set]: any) => (
+                  <label className="wsv2-tcheck" key={k}><span className="wsv2-tbox" style={{ background: v ? "#c79a4f" : "transparent" }} />{k}
+                    <input type="checkbox" checked={!!v} onChange={(e) => set(e.target.checked)} style={{ display: "none" }} /></label>
+                ))}
+              </details>}
+              <details className="wsv2-dsec" {...treeSec("能力")}>
+                <summary onClick={treeToggle("能力")}>能力</summary>
+                {capModuleRows.map((m: Obj) => (
+                  <div className="wsv2-trow" key={m.id}><span className="wsv2-tdot" />{m.id}<span className="wsv2-tcnt">{String(m.pack || "").replace("pack.", "")}</span></div>
+                ))}
+                {capModules.length === 0 && <div className="wsv2-tempty">个人版 · 仅内核</div>}
+                {capModules.length > 0 && <div className="wsv2-trow"><span className="wsv2-tdot" />启用模块<span className="wsv2-tcnt">{capModules.length}</span></div>}
+              </details>
+              {(knxMode || entMode) && <details className="wsv2-dsec" {...treeSec("现场基准 L1")}>
+                <summary onClick={treeToggle("现场基准 L1")}>现场基准 L1</summary>
+                <div className="wsv2-trow wsv2-tmuted">客厅 · 4 角照 + 三尺寸</div>
+                <div className="wsv2-trow wsv2-tmuted">主卧 · 4 角照 + 三尺寸</div>
+                <div className="wsv2-trow wsv2-tmuted">待补：次卧 3 尺寸</div>
+              </details>}
+            </div>
+          </aside>
+          {v2Preview && (
+            <div className="wsv2-lightbox" onClick={() => setV2Preview("")}>
+              <img src={v2Preview} alt="现场资料预览" />
+              <button title="关闭" onClick={() => setV2Preview("")}><X size={18} /></button>
+            </div>
+          )}
+          <div className="wsv2-statusbar">
+            <span>本地 · SQLite</span><span>数据版本 V{String(p.version).padStart(2, "0")}</span>
+            <span className="wsv2-sp" />
+            <span>空间 {(d.rooms || []).length} · 灯位 {(d.fixtures || []).length} · 设备 {(d.devices || []).length}</span>
+            <span>1F</span><span className="wsv2-gold">外壳 v2</span>
+          </div>
+        </>
+      ) : (
       <header className="studio-header">
         <button className="studio-back" onClick={leave} aria-label="返回工作台">
           <ArrowLeft size={20} />
@@ -3588,7 +3879,8 @@ export function Workspace({
           </h2>
           <small>
             {p.code} <i /> {p.city || "城市未填写"} · {p.area} m² · V
-            {String(p.version).padStart(2, "0")} <i /> {smartLabelOf(p.smart)}
+            {String(p.version).padStart(2, "0")}
+            {smartLabelOf(p.smart) ? <><i /> {smartLabelOf(p.smart)}</> : null}
           </small>
         </div>
         <div className="studio-header-actions">
@@ -3619,18 +3911,20 @@ export function Workspace({
             <History size={16} />
             <span>版本记录</span>
           </Button>
-          <Button disabled={busy || locked} onClick={save}>
+          <Button disabled={busy || locked} onClick={save} title="编辑会自动保存；这里立即保存一次">
             <Save size={16} />
-            <span>保存</span>
+            <span>立即保存</span>
           </Button>
           <Button variant="primary" onClick={() => setTab("deliver")}>
             <Download size={16} />
-            项目交付
+            复核与交付
           </Button>
         </div>
       </header>
-      <div className="studio-tabbar">
-        <div>
+      )}
+      {!shellV2 && (
+      <div className={"studio-tabbar" + (tabFade.l ? " tabbar-fade-l" : "") + (tabFade.r ? " tabbar-fade-r" : "")}>
+        <div ref={tabbarScrollRef} onScroll={syncTabFade}>
           {[
             { id: "plan", label: "底图与空间", icon: Layers3 },
             { id: "fixtures", label: "灯具配置", icon: Lightbulb },
@@ -3640,6 +3934,7 @@ export function Workspace({
           ].map((t) => (
             <button
               key={t.id}
+              data-tab={t.id}
               className={tab === t.id ? "active" : ""}
               onClick={() => setTab(t.id)}
             >
@@ -3657,6 +3952,7 @@ export function Workspace({
               : "设计草稿 · 人工复核后交付"}
         </span>
       </div>
+      )}
       {/* 三维模型工作台（换图纸 / 语义调整 / 同步灯位）从绘图页搬出来，做成顶层浮层：
           它本身是三维，不该出现在「底图与空间」的画布位置。入口在「智能情景」页头。 */}
       {showCadWorkbench && p.mode === "3D" && hasDxfDrawing && !spacePreview && (
@@ -3698,11 +3994,12 @@ export function Workspace({
           <Button onClick={save}>重试</Button>
           <Button
             onClick={() => {
-              if (confirm("放弃未保存更改，重新载入本地版本？"))
+              askDanger("放弃未保存更改，重新载入本地版本？", () => {
                 run(
                   async () => w.accept(await api("/projects/" + id)),
                   "已重新载入",
                 );
+              }, "未保存的改动会丢失，本地版本保留上次保存的内容。");
             }}
           >
             重新载入
@@ -3726,14 +4023,14 @@ export function Workspace({
         <div className="notice amber">
           <AlertCircle size={17} />
           当前存在 AI 空间草稿。若边界出现重叠、错位或碎片，请先清除这一轮 AI 草稿；人工绘制空间和灯具不会被删除，再重新识别或手画空间。
-          <Button disabled={busy || locked} onClick={() => run(() => operation("/space-definition/discard-ai-draft"), "已清除错误 AI 空间草稿；人工对象已保留")}>清除错误 AI 草稿</Button>
+          <Button disabled={busy || locked} onClick={() => askDanger("清除错误 AI 草稿？", () => run(() => operation("/space-definition/discard-ai-draft"), "已清除错误 AI 空间草稿；人工对象已保留"), "只清除 AI 生成的空间草稿；人工绘制的空间和灯具不会被删除。")}>清除错误 AI 草稿</Button>
         </div>
       )}
       {tab === "plan" && d.rooms.some((r) => r.semanticSource === "local-geometry-suggestion") && (
         <div className="notice amber">
           <AlertCircle size={17} />
           当前彩平含旧版“轮廓猜测”结果，可能把家具、图例或尺寸碎片当作房间，不能用于设计。
-          <Button disabled={busy || locked} onClick={() => run(() => operation("/recognition/reset-auto-plan"), "已清除错误的旧版自动彩平；请重新导入或接入语义户型接口")}>清除旧版错误彩平</Button>
+          <Button disabled={busy || locked} onClick={() => askDanger("清除旧版错误彩平？", () => run(() => operation("/recognition/reset-auto-plan"), "已清除错误的旧版自动彩平；请重新导入或接入语义户型接口"), "只清除旧版轮廓猜测生成的彩平；人工绘制的空间和灯具不会被删除。")}>清除旧版错误彩平</Button>
         </div>
       )}
       {tab === "plan" && p.recognition && (
@@ -3774,10 +4071,12 @@ export function Workspace({
           <Button
             disabled={busy || locked}
             onClick={() =>
-              run(
-                () => operation("/recognition/clear", {}),
-                "已清除识别草稿；人工绘制的空间与灯具未改动",
-              )
+              askDanger("清除识别草稿？", () => {
+                run(
+                  () => operation("/recognition/clear", {}),
+                  "已清除识别草稿；人工绘制的空间与灯具未改动",
+                );
+              }, "只清除这一轮自动识别结果；人工绘制的空间、灯具与情景不受影响。")
             }
           >
             清除识别草稿
@@ -4317,7 +4616,107 @@ export function Workspace({
                 本层 {floorLights} 盏灯 · {floorDevices} 个设备
               </div>
             </div>
-            <aside className="inspector">
+            <aside className={"inspector" + (shellV2 ? " wsv2-inspector" : "") + (shellV2 && v2Insp !== "属性" ? " wsv2-insp-other" : "")}>
+              {shellV2 && (
+                <div className="wsv2-itabs">
+                  {v2InspTabs.map(t => <button key={t} className={v2Insp === t ? "on" : ""} onClick={() => setV2Insp(t)}>{t}</button>)}
+                </div>
+              )}
+              {shellV2 && v2Insp !== "属性" && (
+                <div className="wsv2-ipanel">
+                  {v2Insp === "组地址" ? (
+                    v2SelFix ? <>
+                      <div className="wsv2-ih">KNX 映射<span>本机 · local-only</span></div>
+                      <div className="wsv2-ikv"><span>灯具</span><b>{v2SelFix.code} · {v2SelFix.name}</b></div>
+                      <div className="wsv2-ikv"><span>回路</span><b>{v2SelFix.circuit || "未分回路"}</b></div>
+                      <div className="wsv2-ikv"><span>模块/网关</span><input className="wsv2-iinput" value={v2SelFix.controller || ""} onChange={(e) => patch("controller", e.target.value)} placeholder="KNX 网关 / 模块" /></div>
+                      <div className="wsv2-ikv"><span>通道</span><input className="wsv2-iinput" value={v2SelFix.channel || ""} onChange={(e) => patch("channel", e.target.value)} placeholder="通道号" /></div>
+                      <div className="wsv2-ikv"><span>地址</span><input className="wsv2-iinput" value={v2SelFix.address || ""} onChange={(e) => patch("address", e.target.value)} placeholder="GA / 物理地址" /></div>
+                      <div className="wsv2-ikv"><span>控制</span><input className="wsv2-iinput" value={v2SelFix.control || ""} onChange={(e) => patch("control", e.target.value)} placeholder="开关 / 调光 / DALI" /></div>
+                      <div className="wsv2-inote">改动自动保存。GA 明细/刻字/调试只留本机；不进业主包/协同包。1 个灯体可绑 N 个 IES，型号必须匹配。</div>
+                    </> : <div className="wsv2-ipanel-empty">在画布上选中一盏灯，查看 KNX 映射。</div>
+                  ) : v2Insp === "IES" ? (
+                    <>
+                      <div className="wsv2-ih">IES 配光<span>{entMode ? "企业版 · 可上传" : "只读 · 合作品牌"}</span></div>
+                      {!v2SelFix ? <div className="wsv2-ipanel-empty">在画布上选中一盏灯，查看/绑定 IES。</div> : <>
+                        <div className="wsv2-ikv"><span>灯具</span><b>{v2SelFix.code} · {v2SelFix.name}</b></div>
+                        <div className="wsv2-ikv"><span>型号</span><b>{v2SelFix.model || "待补"}</b></div>
+                        <div className="wsv2-ikv"><span>已绑 IES</span><b>{v2SelFix.ies?.name || "未绑定"}</b></div>
+                        {v2SelFix.ies && <div className="wsv2-ikv"><span>状态</span><b>{v2SelFix.ies.status === "parsed" ? "已解析 · 配光参考" : v2SelFix.ies.status === "parse-failed" ? "解析失败 · 已留存" : "已留存"}</b></div>}
+                        {v2SelFix.ies?.parsed && <>
+                          <div className="wsv2-ikv"><span>总光通量</span><b>{v2SelFix.ies.parsed.totalLumens ? `${v2SelFix.ies.parsed.totalLumens} lm` : "—"}</b></div>
+                          <div className="wsv2-ikv"><span>峰值光强</span><b>{v2SelFix.ies.parsed.maxCandela ? `${v2SelFix.ies.parsed.maxCandela} cd` : "—"}</b></div>
+                          <div className="wsv2-ikv"><span>近似光束角</span><b>{v2SelFix.ies.parsed.beamAngleApprox ? `${v2SelFix.ies.parsed.beamAngleApprox}°` : "—"}</b></div>
+                          {v2SelFix.ies.parsed.beamAngleMin !== v2SelFix.ies.parsed.beamAngleMax && (
+                            <div className="wsv2-ikv"><span>光束角范围</span><b>{v2SelFix.ies.parsed.beamAngleMin}° – {v2SelFix.ies.parsed.beamAngleMax}°</b></div>
+                          )}
+                          {!!v2SelFix.ies.parsed.beamAngleApprox && (
+                            <button className="wsv2-iupload" onClick={() => { patch("beamAngle", v2SelFix.ies.parsed.beamAngleApprox); notify(`已把光斑参考角切到 ${v2SelFix.ies.parsed.beamAngleApprox}°（仍为理论参考，不做正式照度）`); }}>应用解析配光（仅改光斑参考角）</button>
+                          )}
+                        </>}
+                        {v2SelFix.ies?.parseError && <div className="wsv2-inote">{v2SelFix.ies.parseError}</div>}
+                        {(v2SelFix.ies?.parsed?.warnings || []).map((w: string) => <div className="wsv2-inote" key={w}>{w}</div>)}
+                        {entMode ? (
+                          <label className="wsv2-iupload">
+                            <Upload size={13} /> {v2SelFix.ies ? "替换 IES" : "上传 IES"}
+                            <input type="file" accept=".ies" hidden onChange={(e) => { uploadIes(e.target.files?.[0]); e.target.value = ""; }} />
+                          </label>
+                        ) : (
+                          <div className="wsv2-inote">个人版/KNX 版只读合作品牌 IES；要上传自有 IES 请用企业版。</div>
+                        )}
+                      </>}
+                      <div className="wsv2-inote">1 个灯体可绑 N 个 IES，但必须与产品型号匹配；IES 不给业主；不做正式照度计算，最多给布灯后参考估算。</div>
+                    </>
+                  ) : v2Insp === "报价" ? (
+                    <>
+                      <div className="wsv2-ih">报价<span>企业包 · 草稿</span></div>
+                      <div className="wsv2-ikv"><span>项目</span><b>{p.name}</b></div>
+                      <div className="wsv2-ikv"><span>客户</span><b>{p.client || "未填客户"}</b></div>
+                      <div className="wsv2-ikv"><span>纳价</span><b>{v2QuoteCount} / {(d.fixtures || []).length} 盏</b></div>
+                      <div className="wsv2-ikv"><span>已选灯具</span><b>{v2SelFix ? `${v2SelFix.code} · ${v2SelFix.name}` : "未选灯具"}</b></div>
+                      {v2SelFix && <>
+                        <div className="wsv2-ikv"><span>纳入报价</span><label className="wsv2-icheck"><input type="checkbox" checked={!!v2SelFix.quote} onChange={(e) => patch("quote", e.target.checked)} />{v2SelFix.quote ? "已纳入" : "不纳入"}</label></div>
+                        <div className="wsv2-ikv"><span>零售价 ¥</span><input className="wsv2-iinput" type="number" step="0.01" min="0" value={v2SelFix.price ?? ""} onChange={(e) => patch("price", e.target.value === "" ? undefined : Number(e.target.value))} placeholder="待补价" /></div>
+                      </>}
+                      <div className="wsv2-inote">正式报价单需 biz.quote 加购/企业版；只显示市场零售价，成本价/渠道价永不进工作台。</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="wsv2-ih">现场核对<span>{v2SelRoom?.name || "未选空间"}</span></div>
+                      <div className="wsv2-ikv"><span>空间</span><b>{v2SelRoom?.name || "—"}</b></div>
+                      <div className="wsv2-ikv"><span>灯位</span><b>{(d.fixtures || []).filter((f: Obj) => f.roomId === v2SelRoom?.id).length} 盏</b></div>
+                      {["通电前", "编址", "通道", "情景"].map((k) => (
+                        <div className="wsv2-ikv" key={k}><span>{k}</span>
+                          <label className="wsv2-icheck"><input type="checkbox" checked={!!v2Site[k]}
+                            onChange={() => update((n) => { (n as Obj).siteCheck = { ...((n as Obj).siteCheck || {}), [k]: !v2Site[k] }; })} />
+                            {v2Site[k] ? "已核" : "待核"}</label>
+                        </div>
+                      ))}
+                      <div className="wsv2-ih" style={{ marginTop: 12 }}>现场资料<span>{siteCount} 份 · {siteMB} MB</span></div>
+                      {(p.siteEvidence || []).slice(-4).map((e: Obj) => (
+                        <div className="wsv2-ev" key={e.id}>
+                          <a className="wsv2-eva" href={`/api/projects/${id}/site-evidence/${e.id}`} target="_blank" rel="noreferrer" title="打开原文件"
+                            onClick={(ev) => { if (!String(e.file || "").toLowerCase().endsWith(".pdf")) { ev.preventDefault(); setV2Preview(`/api/projects/${id}/site-evidence/${e.id}`); } }}>
+                            {String(e.file || "").toLowerCase().endsWith(".pdf")
+                              ? <span className="wsv2-evpdf">PDF</span>
+                              : <img src={`/api/projects/${id}/site-evidence/${e.id}`} alt="" />}
+                          </a>
+                          <div><b title={e.name}>{String(e.name).slice(0, 22)}</b><small>{e.kind === "signature" ? "签字" : "照片"} · {Math.max(1, Math.round(Number(e.bytes || 0) / 1024))} KB</small></div>
+                          <button title="删除" onClick={() => deleteSiteEvidence(e.id)}><X size={12} /></button>
+                        </div>
+                      ))}
+                      <label className="wsv2-iupload">
+                        <Upload size={13} /> 上传现场照片 / 签字 PDF
+                        <input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" hidden onChange={(e) => { uploadSiteEvidence(e.target.files?.[0]); e.target.value = ""; }} />
+                      </label>
+                      {(p.siteEvidence || []).length > 0 && (
+                        <a className="wsv2-iupload" href={`/api/projects/${id}/site-evidence.zip`} download>打包下载现场资料（{siteMB} MB）</a>
+                      )}
+                      <div className="wsv2-inote">手机只写调试进度，不改画布真源；照片/签字 PDF 本地存档，不进业主包。{Number(siteMB) > 50 ? " 资料较多，打包可能需要稍等。" : ""}</div>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="panel-title">
                 <h3>
                   {furnitureEditing ? "画布家具调整" : selected
@@ -5113,13 +5512,15 @@ export function Workspace({
                                                     <Button
                             variant="danger"
                             onClick={() => {
-                              if (confirm("删除该设备？"))
+                              const devId = selected.id;
+                              askDanger("删除该设备？", () => {
                                 update((n) => {
                                   n.devices = n.devices.filter(
-                                    (v) => v.id !== selected.id,
+                                    (v) => v.id !== devId,
                                   );
                                   setSelection(null);
                                 });
+                              }, "该设备从本项目中移除；已关联的灯具与空间不受影响。");
                             }}
                           >
                             <Trash2 size={14} />
@@ -5141,12 +5542,7 @@ export function Workspace({
                               const f = n.fixtures.find(
                                 (f) => f.id === selected.id,
                               )!;
-                              const { id: productId, ...rest } = prod;
-                              Object.assign(f, rest, {
-                                productId,
-                                priceVerified: false,
-                              });
-                              applyProductCct(f, prod);
+                              applyProductToFixture(f, prod);
                               if (f.type === "灯带") {
                                 f.powerSupply = f.powerSupply || "PS-" + f.code;
                                 f.controller = f.controller || "CTL-" + f.code;
@@ -5249,7 +5645,7 @@ export function Workspace({
                           title="立即保存当前修改（平时修改也会自动保存）"
                         >
                           <Save size={14} />
-                          保存
+                          立即保存
                         </Button>
                         <Button onClick={copySelected}>
                           <Copy size={14} />
@@ -5508,17 +5904,18 @@ export function Workspace({
                 disabled={!checked.length || locked}
                 variant="danger"
                 onClick={() => {
-                  if (confirm(`删除选中的 ${checked.length} 盏灯具？`)) {
+                  const ids = checked.slice();
+                  askDanger(`删除选中的 ${ids.length} 盏灯具？`, () => {
                     update((n) => {
                       n.fixtures = n.fixtures.filter(
-                        (f) => !checked.includes(f.id),
+                        (f) => !ids.includes(f.id),
                       );
                       n.scenes.forEach((s) =>
-                        checked.forEach((fid) => delete s.states[fid]),
+                        ids.forEach((fid) => delete s.states[fid]),
                       );
                     });
                     setChecked([]);
-                  }
+                  }, "灯具及其情景中的开关状态会一并移除。");
                 }}
               >
                 <Trash2 size={14} />
@@ -5620,7 +6017,11 @@ export function Workspace({
                       {f.circuit || "未分配"}
                       <small>{f.control}</small>
                     </td>
-                    <td>¥ {f.price.toFixed(2)}</td>
+                    <td className="amount">
+                      {f.priceMissing && !(Number(f.price) > 0)
+                        ? "—待补价"
+                        : "¥ " + Number(f.price || 0).toFixed(2)}
+                    </td>
                     <td>
                       <span
                         className={
@@ -5659,7 +6060,7 @@ export function Workspace({
                 <Lightbulb size={32} />
                 <h3>还没有灯具</h3>
                 <p>先在空间编辑器建立房间，再添加灯具。</p>
-                <Button onClick={() => setTab("plan")}>前往空间编辑</Button>
+                <Button onClick={() => setTab("plan")}>前往底图与空间</Button>
               </div>
             )}
           </div>
@@ -5688,7 +6089,7 @@ export function Workspace({
               <span className="subtle">设备在「底图与空间」页添加；此处仅查看与配置。</span>
             </div>
             <p className="subtle">
-              设备可从本地知识库调取并加入项目；当前不连接物理网关。
+              设备可从本地产品资料调取并加入项目；当前不连接物理网关。
               {d.architecture?.topology && <><br />基础架构：{d.architecture.topology}</>}
               {Array.isArray(d.architecture?.checks) && (d.architecture?.checks as Obj[]).length > 0 && (
                 <ul className="arch-checks">
@@ -5721,7 +6122,7 @@ export function Workspace({
                 />
                 <select
                   disabled={locked}
-                  aria-label="从知识库选择设备"
+                  aria-label="从产品资料选择设备"
                   value={dev.productId || ""}
                   onChange={(e) => {
                     const product = products.find((v) => v.id === e.target.value);
@@ -5741,7 +6142,7 @@ export function Workspace({
                       });
                   }}
                 >
-                  <option value="">知识库选型</option>
+                  <option value="">产品资料选型</option>
                   {products.filter((v) => v.category === "device" && v.type !== "窗帘" && !/(电机|轨道)/.test(v.name || "")).map((v) => <option key={v.id} value={v.id}>{v.name} · {v.model}</option>)}
                 </select>
                 <input
@@ -5812,10 +6213,12 @@ export function Workspace({
                   disabled={locked}
                   title="删除设备"
                   onClick={() => {
-                    if (confirm("删除该设备？"))
+                    const devId = dev.id;
+                    askDanger("删除该设备？", () => {
                       update((n) => {
-                        n.devices = n.devices.filter((v) => v.id !== dev.id);
+                        n.devices = n.devices.filter((v) => v.id !== devId);
                       });
+                    }, "该设备从本项目中移除；已关联的灯具与空间不受影响。");
                   }}
                 >
                   <Trash2 size={16} />
@@ -5922,7 +6325,7 @@ export function Workspace({
                     value={smart}
                     disabled={locked || busy}
                     onChange={(e) => changeSmart(e.target.value)}
-                    title="无线＝飞利浦；KNX＝总线；不做智能＝只显示彩平图"
+                    title="无线＝飞利浦；KNX＝总线；未设置＝灯具按回路开闭"
                   >
                     {SMART_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -6049,9 +6452,9 @@ export function Workspace({
               <div className="notice">
                 <Layers3 size={17} />
                 <div>
-                  <b>本项目不做智能</b>
+                  <b>不做智能（按回路开闭）</b>
                   <span>
-                    无需情景，这里只显示彩平图；灯具按回路开闭，回路编号可在「灯具配置」里维护。
+                    无需情景，灯具按回路开闭；回路编号可在「灯具配置」里维护。
                   </span>
                 </div>
               </div>
@@ -6346,7 +6749,7 @@ export function Workspace({
                             </Field>
                             {noSmart ? (
                               <Field label="缓亮缓灭（回路开关）">
-                                <input readOnly value="固定 1 秒" title="不做智能：回路开闭默认缓亮缓灭 1 秒" />
+                                <input readOnly value="固定 1 秒" title="回路开闭默认缓亮缓灭 1 秒" />
                               </Field>
                             ) : (
                               <Num
@@ -6467,12 +6870,14 @@ export function Workspace({
                             <Button
                               variant="danger"
                               onClick={() => {
-                                if (confirm("删除此情景？"))
+                                const sceneId = scene.id;
+                                askDanger("删除此情景？", () => {
                                   update((n) => {
                                     n.scenes = n.scenes.filter(
-                                      (s) => s.id !== scene.id,
+                                      (s) => s.id !== sceneId,
                                     );
                                   });
+                                }, "该情景的灯光状态会被移除，其他情景不受影响。");
                               }}
                             >
                               <Trash2 size={14} />
@@ -6865,36 +7270,65 @@ export function Workspace({
       )}
       {tab === "deliver" && (
         <main className="studio-content">
+          {shellV2 && (
+            <div className="wsv2-dmode">
+              <button className={v2Delivery === "review" ? "on" : ""} onClick={() => { setV2Delivery("review"); setV2Section("review"); }}>复核</button>
+              <button className={v2Delivery === "export" ? "on" : ""} onClick={() => { setV2Delivery("export"); setV2Section("export"); }}>交付</button>
+              <span>{v2Delivery === "review" ? "五道人工复核；签名后进入交付" : "导出交付文件；复核状态另见复核页"}</span>
+            </div>
+          )}
           <div className="page-heading">
-            <div className="eyebrow">REVIEW BEFORE DELIVERY</div>
+            <div className="eyebrow">复核与交付 · 人工签名绑定版本</div>
             <div className="heading-line">
               <div>
                 <h1>交付之前，再认真一点。</h1>
                 <p>
-                  五道人工复核与版本绑定，其中「需求」「价格」「交付」三道要先在「设计师协作」里完成前置确认（见各卡片），否则签名会被拦下；全部五道签完才能冻结。任何设计修改重置复核。业务仍为 NOT_RELEASED。
+                  五道人工复核与版本绑定：先满足各卡片上写的前置条件再签名，否则会被拦下；全部五道签完才能冻结。任何设计修改重置复核。业务状态：未发布（交付前）。
                 </p>
               </div>
-              <Button
-                variant="primary"
-                disabled={!p.approved || locked || busy}
-                onClick={() =>
-                  run(
-                    () => operation("/freeze"),
-                    "版本已冻结，后续编辑须建立新版本",
-                  )
-                }
-              >
-                <Lock size={16} />
-                冻结当前版本
-              </Button>
+              <div className="deliver-head-actions">
+                <Button
+                  variant="primary"
+                  onClick={() => setModal("export")}
+                  title="先选交付对象（给业主 / 给施工 / 内部版）和格式，一次点击打开导出抽屉"
+                >
+                  <Download size={16} />
+                  导出交付文件
+                </Button>
+                <Button
+                  disabled={!p.approved || locked || busy}
+                  title={
+                    locked
+                      ? "版本已冻结或归档，不能再冻结"
+                      : busy
+                        ? "正在保存或导出，稍后再试"
+                        : "五道人工复核全部签完后才能冻结"
+                  }
+                  onClick={() =>
+                    run(
+                      () => operation("/freeze"),
+                      "版本已冻结，后续编辑须建立新版本",
+                    )
+                  }
+                >
+                  <Lock size={16} />
+                  冻结当前版本
+                </Button>
+              </div>
             </div>
+            {!p.approved && (
+              <p className="deliver-freeze-reason">
+                冻结条件：五道人工复核全部签完（当前 {Object.keys(p.reviews).length} / 5）。
+                0 / 5 也能导出草稿：10 种格式都能下载，文件都带「草稿」标识；签完并冻结后才转为「已复核设计数据」。
+              </p>
+            )}
           </div>
-          <div className="notice">
+          <div className="notice wsv2-baseline-notice">
             <FileText size={17} />
-            <div><b>需求复核基线</b><span>冻结客户/渠道关系、图纸版本、空间确认、场景、产品与未决项，供项目负责人或审核人脱离群聊复核。</span><small>当前：{p.requirementsBaseline?.versions?.length || 0} 个版本 · {p.channelNameSnapshot ? `渠道：${p.channelNameSnapshot}` : "2C 直客"} · {p.firstOrder?.show ? "需首单资料" : "无需重复首单资料"}</small></div>
+            <div><b>需求复核基线</b><span>冻结客户/渠道关系、图纸版本、空间确认、场景、产品与未决项，供项目负责人或复核人脱离群聊复核。</span><small>当前：{p.requirementsBaseline?.versions?.length || 0} 个版本 · {p.channelNameSnapshot ? `渠道：${p.channelNameSnapshot}` : "2C 直客"} · {p.firstOrder?.show ? "需首单资料" : "无需重复首单资料"}</small></div>
             <Button disabled={locked || busy} onClick={() => setModal("baseline")}><FileText size={14}/>提交需求基线</Button>
           </div>
-          <div className={"review-summary " + (p.approved ? "approved" : "")}>
+          <div id="wsv2-review" className={"review-summary " + (p.approved ? "approved" : "")}>
             <span className="review-icon">
               <ShieldCheck size={34} />
             </span>
@@ -6905,8 +7339,14 @@ export function Workspace({
               <p>
                 {p.isDemo
                   ? "此项目为内置示例，即使完成复核也不能转为正式数据。请新建真实项目。"
-                  : "所有输出仅为设计交付资料，不能自动成为正式施工图或正式报价。"}
+                  : "所有输出仅为设计交付文件，不能自动成为正式施工图或正式报价。"}
               </p>
+              {!p.approved && (
+                <p className="draft-export-note">
+                  当前 {Object.keys(p.reviews).length} / 5 也可导出草稿：10 种格式都能下载，文件带「草稿」标识；
+                  五道复核签完并冻结后才算「已复核设计数据」。
+                </p>
+              )}
             </div>
             <strong>
               {Object.keys(p.reviews).length}
@@ -6915,17 +7355,17 @@ export function Workspace({
             </strong>
           </div>
           <div className="review-cards">
-            {/* 第 4 列＝前置条件：与后端 cooperation.gate_check 同口径。闸门不改（业务纪律），
-                只把「先去哪里做什么」写在卡片上，免得签名被 422 拦下却不知道出路。 */}
+            {/* 第 4 列＝前置条件：与后端复核门禁同口径。闸门不改（业务纪律），
+                只把「先做什么」写在卡片上，免得签名被 422 拦下却不知道出路。 */}
             {[
               ["requirements", "需求复核", "资料完整、客户保护、范围与责任确认",
-                "前置：在「设计师协作」确认客户保护规则与合作范围、补齐十项责任人与需求资料"],
+                "前置：补齐十项责任人与需求资料，并在上方「需求复核基线」提交一次基线"],
               ["layout", "布置复核", "墙体、门窗、房间名称、尺寸和楼层", ""],
               ["lighting", "灯光复核", "独立灯具、电源回路、智能场景与安装参数", ""],
               ["pricing", "价格复核", "实际采购、工程费用、准备金及增项取证",
-                "前置：在「设计师协作」确认范围、核实成本，并补齐增项 / 付款 / 退款返工规则"],
-              ["delivery", "交付复核", "交付资料、碰撞检查、安装调试与变更闭环",
-                "前置：在「设计师协作」逐个确认四个交付包，且没有待确认的变更"],
+                "前置：勾选纳入报价的灯具并逐项核实价格（待核实 ≤30% 且 ≤10 行，否则签名会被拦下）"],
+              ["delivery", "交付复核", "交付文件、碰撞检查、安装调试与变更闭环",
+                "前置：确认本次交付文件（图纸、清单、场景演示）齐全，且没有待确认的变更"],
             ].map(([key, title, desc, pre]) => (
               <div key={key} className={p.reviews[key] ? "done" : ""}>
                 <div>
@@ -6953,9 +7393,17 @@ export function Workspace({
                 ) : (
                   <Button
                     disabled={locked || busy}
+                    title={
+                      locked
+                        ? "版本已冻结或归档，先新建可编辑版本再复核"
+                        : busy
+                          ? "正在保存或导出，稍后即可复核"
+                          : ""
+                    }
                     onClick={() => {
                       setModal("review:" + key);
                       setAck(false);
+                      setReviewError("");
                     }}
                   >
                     人工复核 <ArrowUpRight size={14} />
@@ -6964,8 +7412,20 @@ export function Workspace({
               </div>
             ))}
           </div>
-          <div className="section-heading export-heading">
-            <h2>项目交付文件</h2>
+          {reviewError && reviewErrorKey === "pricing" && (
+            <div className="notice error-banner pricing-gate" role="alert">
+              <AlertCircle size={17} />
+              <div>
+                <b>价格复核被拦下</b>
+                <span>{reviewError}</span>
+              </div>
+              <Button onClick={() => setModal("price-batch")}>
+                去批量核实 <ChevronRight size={14} />
+              </Button>
+            </div>
+          )}
+          <div id="wsv2-export" className="section-heading export-heading">
+            <h2>交付文件（10 种格式）</h2>
             {p.floors > 1 && (
               <select
                 aria-label="导出图片楼层"
@@ -6983,6 +7443,19 @@ export function Workspace({
               {p.code} · V{String(p.version).padStart(2, "0")} ·{" "}
               {p.approved ? "已复核设计数据" : "所有文件含草稿标识"}
             </span>
+            <button
+              className="export-audience-chip"
+              onClick={() => setModal("export")}
+              title="在「导出交付文件」抽屉里切换交付对象"
+            >
+              交付对象：
+              {exportAudience === "owner"
+                ? "给业主（含参考价）"
+                : exportAudience === "site"
+                  ? "给施工（不含价）"
+                  : "内部版（含参考价）"}
+              <ChevronRight size={13} />
+            </button>
             <Button onClick={() => setModal("scene")}>
               <QrCode size={16} />
               手机打开场景
@@ -7000,7 +7473,7 @@ export function Workspace({
                   const blocked = BLOCKED_EXPORTS.includes(e.fmt) ? circuitIssues(d) : [];
                   const f = blocked.length && d.fixtures.find((x) => x.id === blocked[0].fixtureIds[0]);
                   if (f) locateFixture(f);
-                  else download(e.fmt);
+                  else void download(e.fmt, exportAudience);
                 }}
               >
                 <span className={"export-icon " + e.fmt}>
@@ -7010,6 +7483,13 @@ export function Workspace({
                   <h3>{e.title}</h3>
                   <p>{e.desc}</p>
                   <small>.{e.fmt.toUpperCase()}</small>
+                  <small className="export-audience-note">
+                    {exportAudience === "internal"
+                      ? "内部版 · 含参考价"
+                      : exportAudience === "owner"
+                        ? "业主版 · 含参考价"
+                        : "施工版 · 不含参考价"}
+                  </small>
                   {BLOCKED_EXPORTS.includes(e.fmt) && circuitIssues(d).length > 0 && (
                     <small className="export-blocked">被 {circuitIssues(d).length} 条拦住</small>
                   )}
@@ -7026,10 +7506,11 @@ export function Workspace({
             <AlertCircle size={17} />
             完整资料包包含结构化设计及生成文件，不含原始上传附件。完整迁移或灾备请复制本地
             data 目录。灯带按长度计算参考小计，所有数值仍需人工核验。
+            给施工导出时金额字段一律为 0（价格状态「不含价（交付版）」）；给业主与内部版保留参考价（2026-10-23 老板拍板取消去价红线）。
           </div>
         </main>
       )}
-      <footer className="studio-footer">
+      <footer className={shellV2 ? "studio-footer wsv2-hide" : "studio-footer"}>
         <span>
           <span className="live-dot" />
           本地工作空间 <i /> {d.rooms.length} 个空间 · {d.fixtures.filter(isSceneLight).length}{" "}
@@ -7044,7 +7525,7 @@ export function Workspace({
       {modal === "files" && (
         <Modal
           title="图纸与底图"
-          subtitle="导入图纸后识别空间并显示三维预览；依次核对空间、绘制门窗、修改家具，全部确认后才进入画布。"
+          subtitle="导入图片 / PDF 后自动识别空间，DXF 只解析几何、房间名需人工；识别结果先核对空间、门窗与家具，确认后才进入画布。"
           onClose={() => setModal("")}
           wide
         >
@@ -7273,12 +7754,14 @@ export function Workspace({
                       className="icon-btn danger-text"
                       title="删除文件"
                       onClick={() => {
-                        if (confirm("删除此原始文件？"))
+                        const fileId = f.id;
+                        askDanger("删除此原始文件？", () => {
                           run(
                             () =>
-                              operation(`/files/${f.id}`, undefined, "DELETE"),
+                              operation(`/files/${fileId}`, undefined, "DELETE"),
                             "原图已删除",
                           );
+                        }, "原图与本项目中的引用会被删除，已生成的设计对象保留。");
                       }}
                     >
                       <Trash2 size={15} />
@@ -7479,9 +7962,7 @@ export function Workspace({
               applyProduct={(prod) =>
                 update((n) => {
                   const f = n.fixtures.find((f) => f.id === selected.id)!;
-                  const { id: productId, ...rest } = prod;
-                  Object.assign(f, rest, { productId, priceVerified: false });
-                  applyProductCct(f, prod);
+                  applyProductToFixture(f, prod);
                   if (f.type === "灯带") {
                     f.powerSupply = "PS-" + f.code;
                     f.controller = "CTL-" + f.code;
@@ -7867,6 +8348,174 @@ export function Workspace({
           <div className="modal-foot"><Button onClick={() => setModal("")}>取消</Button><Button variant="primary" disabled={!reviewer.trim() || busy} onClick={() => run(async () => { await operation("/requirements-baselines", {submitter: reviewer, evidence: {notes: baselineNote}}); setBaselineNote(""); setModal(""); }, "需求复核基线已冻结为新版本")}><FileText size={15}/>提交基线</Button></div>
         </Modal>
       )}
+      {modal === "export" && (
+        <Modal
+          title="导出交付文件"
+          subtitle="先选交付对象，再点格式下载。草稿也能导出（文件带「草稿」标识）；给施工的金额字段一律为 0，给业主与内部版保留参考价。"
+          onClose={() => setModal("")}
+          wide
+        >
+          <div className="export-audience-pick" role="radiogroup" aria-label="交付对象">
+            {([
+              ["owner", "给业主", "外发业主：含零售价（2026-10-23 老板拍板取消去价红线）"],
+              ["site", "给施工（不含价）", "给施工 / 电工：点位、回路、数量，金额全部去价"],
+              ["internal", "内部版（含参考价）", "仅内部核对：Excel 等保留参考价，不要外发"],
+            ] as const).map(([value, label, desc]) => (
+              <button
+                key={value}
+                role="radio"
+                aria-checked={exportAudience === value}
+                className={"export-audience-option" + (exportAudience === value ? " on" : "")}
+                onClick={() => setExportAudience(value)}
+              >
+                <b>{label}</b>
+                <small>{desc}</small>
+              </button>
+            ))}
+          </div>
+          <div className="notice">
+            <AlertCircle size={17} />
+            <div>
+              <b>价格口径</b>
+              <span>
+                选「给施工（不含价）」时，导出的单价 / 小计 / 合计等金额字段 = 0，价格状态标「不含价（交付版）」；
+                「给业主」与「内部版」保留参考价（2026-10-23 老板拍板取消零售价去价红线）。完整资料包（ZIP）里的文件跟随同一交付对象。
+              </span>
+            </div>
+          </div>
+          <div className="export-grid export-grid-drawer">
+            {exportItems.map((e) => (
+              <button
+                key={e.fmt}
+                disabled={busy}
+                title={
+                  busy
+                    ? "正在导出上一个文件，完成后即可继续"
+                    : `按「${
+                        exportAudience === "owner"
+                          ? "给业主（含参考价）"
+                          : exportAudience === "site"
+                            ? "给施工（不含价）"
+                            : "内部版（含参考价）"
+                      }」导出 ${e.title}`
+                }
+                onClick={() => exportWithAudience(exportAudience, e.fmt)}
+              >
+                <span className={"export-icon " + e.fmt}>
+                  <e.icon size={24} />
+                </span>
+                <div>
+                  <h3>{e.title}</h3>
+                  <p>{e.desc}</p>
+                  <small>.{e.fmt.toUpperCase()}</small>
+                  {exportAudience === "site" && (
+                    <small className="export-audience-note">施工版 · 金额列=0</small>
+                  )}
+                </div>
+                {busy ? <Loader2 className="spin" size={18} /> : <Download size={18} />}
+              </button>
+            ))}
+          </div>
+          {exportAudience === "internal" && (
+            <p className="export-internal-warn">
+              内部版含零售参考价：只在本机核对用，不要直接转发业主或施工方。
+            </p>
+          )}
+          <div className="modal-foot">
+            <Button onClick={() => setModal("")}>关闭</Button>
+          </div>
+        </Modal>
+      )}
+      {modal === "price-batch" && (
+        <Modal
+          title="批量核实价格"
+          subtitle="标记「价格已人工核实」只记录核实状态，不修改单价；核实后回到价格复核重新签名。"
+          onClose={() => setModal("")}
+          wide
+        >
+          <div className="notice amber">
+            <ShieldCheck size={17} />
+            <div>
+              <b>
+                已纳入报价 {pricedFixtures.length} 项，待核实 {unverifiedFixtures.length} 项
+                （{Math.round(pricingRiskRatio * 100)}%）。
+              </b>
+              <span>
+                后端规则：待核实 &gt;30% 或 &gt;10 行会被拦下；阈值内的签名会记录实名、时间、设计 hash
+                与未核实行清单，事后可核。
+              </span>
+            </div>
+          </div>
+          <div className="price-batch-actions">
+            <span>请对照实物 / 供货价 / 产品资料逐项确认后再勾选，批量标记也一样要真核过。</span>
+            <Button
+              disabled={locked || busy || !unverifiedFixtures.length}
+              title={
+                locked
+                  ? "版本已冻结或归档，先新建可编辑版本"
+                  : !unverifiedFixtures.length
+                    ? "纳价灯具都已标记为已核实"
+                    : "把全部纳入报价的灯具标为「价格已人工核实」"
+              }
+              onClick={markAllPricesVerified}
+            >
+              <CheckCircle2 size={15} />
+              全部标记为已核实
+            </Button>
+          </div>
+          <div className="price-batch-list">
+            {pricedFixtures.length ? (
+              pricedFixtures.map((f: Obj) => (
+                <label key={f.id} className={"price-batch-row" + (f.priceVerified ? " ok" : "")}>
+                  <input
+                    type="checkbox"
+                    checked={!!f.priceVerified}
+                    disabled={locked || busy}
+                    onChange={(e) =>
+                      update((n) => {
+                        const t = (n.fixtures || []).find((x: Obj) => x.id === f.id);
+                        if (t) t.priceVerified = e.target.checked;
+                      })
+                    }
+                  />
+                  <span className="price-batch-code">{f.code || "未编号"}</span>
+                  <span className="price-batch-name">
+                    {f.name || f.model || "灯具"}
+                    <small>
+                      {(d.rooms || []).find((r: Obj) => r.id === f.roomId)?.name || "未分配空间"} ·{" "}
+                      {f.circuit || "未分配回路"}
+                    </small>
+                  </span>
+                  <span className="price-batch-price">
+                    ¥ {Number(f.price || 0).toFixed(2)}
+                    {f.type === "灯带" ? " /m" : ""}
+                  </span>
+                  <span className={"badge " + (f.priceVerified ? "green" : "amber")}>
+                    {f.priceVerified ? "已核实" : "待核实"}
+                  </span>
+                </label>
+              ))
+            ) : (
+              <p className="subtle">还没有纳入报价的灯具：先到灯具清单里勾选「纳入报价」。</p>
+            )}
+          </div>
+          <div className="modal-foot">
+            <Button onClick={() => { setReviewError(""); setModal("review:pricing"); }}>返回价格复核</Button>
+            <Button
+              variant="primary"
+              disabled={busy}
+              onClick={async () => {
+                await flush();
+                setReviewError("");
+                setModal("review:pricing");
+                notify("价格核实状态已保存，可以重新签名价格复核");
+              }}
+            >
+              保存并返回价格复核
+            </Button>
+          </div>
+        </Modal>
+      )}
       {modal.startsWith("review:") && (
         <Modal
           title="人工复核确认"
@@ -7875,8 +8524,22 @@ export function Workspace({
         >
           <div className="notice amber">
             <ShieldCheck size={18} />
-            请实际检查对应项目内容。点击确认不是自动核验，也不替代专业电气与施工审核。
+            请实际检查对应项目内容。点击确认不是自动核验，也不替代专业电气与施工复核。
           </div>
+          {reviewError && reviewErrorKey === modal.split(":")[1] && (
+            <div className="notice error-banner review-gate-error" role="alert">
+              <AlertCircle size={17} />
+              <div>
+                <b>复核被拦下</b>
+                <span>{reviewError}</span>
+              </div>
+              {/核实|报价|价格/.test(reviewError) && (
+                <Button onClick={() => setModal("price-batch")}>
+                  去批量核实 <ChevronRight size={14} />
+                </Button>
+              )}
+            </div>
+          )}
           <Field label="复核人姓名 *">
             <input
               value={reviewer}
@@ -7897,16 +8560,16 @@ export function Workspace({
             <Button
               variant="primary"
               disabled={!ack || !reviewer.trim() || busy}
-              onClick={() =>
-                run(async () => {
-                  await operation("/reviews", {
-                    key: modal.split(":")[1],
-                    reviewer,
-                    acknowledged: ack,
-                  });
-                  setModal("");
-                }, "复核签名已记录")
+              title={
+                !ack
+                  ? "请先勾选「我已人工核对本项内容」"
+                  : !reviewer.trim()
+                    ? "请填写复核人姓名"
+                    : busy
+                      ? "正在保存，稍后即可提交"
+                      : ""
               }
+              onClick={() => submitReview(modal.split(":")[1])}
             >
               <ShieldCheck size={15} />
               确认复核
@@ -8284,15 +8947,13 @@ export function Workspace({
                   <Button
                     disabled={busy}
                     onClick={() => {
-                      if (
-                        confirm(
-                          "以此历史设计创建新版本？当前设计将保留在历史快照中。",
-                        )
-                      )
+                      const versionId = v.id;
+                      askDanger("以此历史设计创建新版本？", () => {
                         run(async () => {
-                          await operation(`/versions/${v.id}/restore`);
+                          await operation(`/versions/${versionId}/restore`);
                           setModal("");
                         }, "历史设计已恢复为新版本");
+                      }, "当前设计会保留在历史快照中，不会被覆盖。");
                     }}
                   >
                     恢复
@@ -8336,6 +8997,31 @@ export function Workspace({
         >
           <img className="full-preview" src={renderPreview} alt="图像预览" />
         </Modal>
+      )}
+      {dangerAsk && (
+        <div className="confirm-modal-mask" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+          <div className="confirm-modal" role="document">
+            <div className="confirm-modal-head">
+              <span className="confirm-modal-icon"><AlertCircle size={18} /></span>
+              <h3 id="confirm-modal-title">{dangerAsk.title}</h3>
+            </div>
+            {dangerAsk.detail && <p className="confirm-modal-detail">{dangerAsk.detail}</p>}
+            <div className="confirm-modal-actions">
+              <button className="btn" onClick={() => setDangerAsk(null)}>取消</button>
+              <button
+                className="btn danger"
+                onClick={() => {
+                  const runIt = dangerAsk.run;
+                  setDangerAsk(null);
+                  runIt();
+                }}
+              >
+                <Trash2 size={14} />
+                确认执行
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -8487,7 +9173,7 @@ function FixtureFields({
 }) {
   return (
     <div className="fixture-fields">
-      <Field label="关联知识库产品">
+      <Field label="关联产品库产品">
         <select
           value={f.productId || ""}
           onChange={(e) => {
@@ -8495,7 +9181,7 @@ function FixtureFields({
             if (p) applyProduct(p);
           }}
         >
-          <option value="">手动配置 / 从知识库选择</option>
+          <option value="">手动配置 / 从产品资料选择</option>
           {products.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name} · {p.model}
@@ -8555,7 +9241,7 @@ function FixtureFields({
       </Field>
       {isCctPending(f) && (
         <p className="field-hint cct-pending" role="note">
-          色温{CCT_PENDING_LABEL}：导入 / 知识库没给色温，暂按 3000K 占位，请按实物确认后选择光源类型或色温。
+          色温{CCT_PENDING_LABEL}：导入 / 产品资料没给色温，暂按 3000K 占位，请按实物确认后选择光源类型或色温。
         </p>
       )}
       <div className="two-fields">
@@ -8829,7 +9515,7 @@ function FixtureFields({
             ? "KNX 总线方案：只有「开闭」（经开关执行器）与「DALI」（经 DALI 网关调光）两种。"
             : String(smart || "") === "无线"
               ? "无线方案（飞利浦）：只有「开闭」与无线调光两种（协议随飞利浦清单确认）。"
-              : "不做智能：灯具按回路开闭。"}
+              : "不做智能（按回路开闭）：不生成智能设备与情景，灯具按回路开闭。"}
         </p>
       </Field>
       {/* 回路表按这三项定位到模块的第几路 / 总线地址；灯带的「模块/网关」后端必填。 */}

@@ -40,7 +40,7 @@ export const panelModel = (id?: string) => (id ? PANEL_MODELS.find((m) => m.id =
 export const pickableModels = (currentId?: string) => PANEL_MODELS.filter((m) => !m.offline || m.id === currentId);
 export const panelTextMax = (m?: Obj | null): number => m?.textMax ?? PANEL_RULES.textMax;
 
-/** 官网配图缩略图（知识库 图片/ 2026-10-06 本地化，裁切压缩后随构建打包）。 */
+/** 官网配图缩略图（产品资料 图片/ 2026-10-06 本地化，裁切压缩后随构建打包）。 */
 const PANEL_IMAGES = import.meta.glob("./data/citron-img/*.webp", { eager: true, import: "default" }) as Record<string, string>;
 export const panelImage = (m?: Obj | null): string | undefined =>
   m?.image ? PANEL_IMAGES[`./data/citron-img/${m.image}.webp`] : undefined;
@@ -94,7 +94,7 @@ export function isLegacyFill(dev: Obj, scenes: Obj[]): boolean {
   return used.length > 0 && used.every((x) => names.has(x) && x !== sceneWord(x));
 }
 
-/** 按知识库键位预算预填：短按刻字＝空间模板词，长按＝不刻字的辅助功能（全关↔全开、回路键长按调光）。
+/** 按产品资料键位预算预填：短按刻字＝空间模板词，长按＝不刻字的辅助功能（全关↔全开、回路键长按调光）。
  *  只改整排空白 / 旧版情景全名预填的面板；force 用于新建与「按口径重排」。 */
 export function fillPanelKeys(scenesAll: Obj[], dev: Obj, room: Obj | undefined | null, force = false) {
   normalizePanel(dev);

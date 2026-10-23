@@ -109,9 +109,11 @@ def _centroid(poly: list[list[float]]) -> tuple[float, float]:
         ys = [p[1] for p in poly]
         return sum(xs) / len(xs), sum(ys) / len(ys)
     a = cx = cy = 0.0
-    for i in range(len(poly) - 1):
+    # 多边形是闭合的：最后一点到第一点这条边不能漏（2026-10-23 修）。
+    # 漏掉它时，电梯厅/玄关/公卫/儿童房/次卧的“质心”会落到房间外，标签就贴到隔壁去了。
+    for i in range(len(poly)):
         x0, y0 = poly[i]
-        x1, y1 = poly[i + 1]
+        x1, y1 = poly[(i + 1) % len(poly)]
         cross = x0 * y1 - x1 * y0
         a += cross
         cx += (x0 + x1) * cross
@@ -122,6 +124,46 @@ def _centroid(poly: list[list[float]]) -> tuple[float, float]:
         return sum(xs) / len(xs), sum(ys) / len(ys)
     a *= 0.5
     return round(cx / (6 * a), 3), round(cy / (6 * a), 3)
+
+
+
+def _label_anchor(poly: list[list[float]]) -> tuple[float, float]:
+    """空间名标签的落点：优先面积质心；质心落在多边形外时，退化到扫描线最宽区间中点。
+
+    2026-10-23：`_centroid` 漏了闭合边，5 个房间的标签被贴到房间外；这里再兜一层，
+    以后遇到 L 形/凹形房间也不会把名字标到隔壁。
+    """
+    cx, cy = _centroid(poly)
+    if _point_in_poly(cx, cy, poly):
+        return cx, cy
+    if len(poly) < 3:
+        return cx, cy
+    ys = [pt[1] for pt in poly]
+    y = min(max(cy, min(ys) + 0.001), max(ys) - 0.001)
+    xs: list[float] = []
+    n = len(poly)
+    for i in range(n):
+        x0, y0 = poly[i]
+        x1, y1 = poly[(i + 1) % n]
+        if (y0 > y) != (y1 > y):
+            xs.append(x0 + (y - y0) * (x1 - x0) / (y1 - y0))
+    xs.sort()
+    best = None
+    for i in range(0, len(xs) - 1, 2):
+        a, b = xs[i], xs[i + 1]
+        if b > a and (best is None or (b - a) > (best[1] - best[0])):
+            best = (a, b)
+    if best:
+        mx = (best[0] + best[1]) / 2
+        if _point_in_poly(mx, y, poly):
+            return round(mx, 3), round(y, 3)
+    # 最后退到外接框中心（能落在里面的情况）
+    minx, maxx = min(pt[0] for pt in poly), max(pt[0] for pt in poly)
+    miny, maxy = min(pt[1] for pt in poly), max(pt[1] for pt in poly)
+    mx, my = (minx + maxx) / 2, (miny + maxy) / 2
+    if _point_in_poly(mx, my, poly):
+        return round(mx, 3), round(my, 3)
+    return cx, cy
 
 
 def _ceil_lines(rooms: list[dict]) -> list[list[list[float]]]:
@@ -180,7 +222,7 @@ def build(view: dict, floor: int = 1) -> dict:
         if len(poly) < 3:
             continue
         area = round(_area(poly), 2)
-        cx, cy = _centroid(poly)
+        cx, cy = _label_anchor(poly)
         total += area
         floor_slabs.append({"outer": poly, "holes": []})
         rooms.append({"poly": poly, "area_m2": area, "cx": cx, "cy": cy,
@@ -247,13 +289,30 @@ def build(view: dict, floor: int = 1) -> dict:
             continue
         (windows if str(o.get("type") or "").startswith("窗") else doors).append(item)
 
+    # 家具：内核（app.js）只画墙/地/灯，不画家具；外壳（shell.html）拿这份清单后用内核
+    # 暴露的 three 工厂补一层体块，挂到 viewer.groups.furniture，让「图层 → 家具」开关生效。
+    # 坐标口径与内核一致：x/z 为设计米坐标（= 设计坐标 / 26），外壳里 z 取负。
     furniture = []
     for f in view.get("furniture") or []:
         if int(f.get("floor") or 1) != floor:
             continue
         try:
-            furniture.append([round(float(f["x"]), 4), round(float(f["z"]), 4)])
-        except (KeyError, TypeError, ValueError):
+            item = {
+                "id": str(f.get("id") or ""),
+                "kind": str(f.get("kind") or ""),
+                "x": round(float(f["x"]), 4),
+                "z": round(float(f["z"]), 4),
+                "w": round(float(f.get("w") or 0.6), 3),
+                "d": round(float(f.get("d") or 0.6), 3),
+                "h": round(float(f.get("h") or 0.75), 3),
+                "rot": round(float(f.get("rot") or 0), 2),
+                "roomId": str(f.get("roomId") or ""),
+            }
+            pts = f.get("pts")
+            if isinstance(pts, list) and len(pts) >= 3:
+                item["pts"] = [[round(float(p[0]), 4), round(float(p[1]), 4)] for p in pts]
+            furniture.append(item)
+        except (KeyError, TypeError, ValueError, IndexError):
             continue
 
     return {

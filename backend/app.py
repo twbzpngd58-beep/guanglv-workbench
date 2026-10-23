@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, json, re, sqlite3, uuid, shutil, math, copy, threading, base64, subprocess, hashlib, unicodedata, logging, zlib, secrets, asyncio
+import os, sys, json, re, sqlite3, time, uuid, shutil, math, copy, threading, base64, subprocess, hashlib, unicodedata, logging, zlib, secrets, asyncio
 from urllib.request import Request as UrlRequest, urlopen
 from urllib.error import URLError, HTTPError
 from pathlib import Path
@@ -14,6 +14,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 from fastapi import FastAPI, HTTPException, UploadFile, File, Body, Form, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.responses import FileResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
@@ -23,7 +24,7 @@ from PIL import Image, ImageOps
 from .providers import recognition_provider, image_provider, DxfRecognitionProvider
 from .seed import empty_design, sample_design
 from .recognition import raster_image, semantic_plan_configured, semantic_plan_from_external, semantic_labels_from_external, should_use_semantic_vision, polygon_overlap_violations, _resolve_overlapping_rooms
-from .exports import export_bytes, scene_html
+from .exports import EXPORT_AUDIENCES, export_bytes, scene_html
 from .floors import (
     above_floors,
     floor_choice_label,
@@ -115,6 +116,18 @@ def now():
 
 def ident():
     return uuid.uuid4().hex[:16]
+
+
+def require_revision(payload: dict, p: dict, conflict_detail: str) -> None:
+    """C12：缺 revision 是请求不完整（422），与并发冲突（409）分开报。
+
+    历史实现把 None != revision 直接判成「项目已更新」，前端只能显示误导性的
+    「刷新后再试」，实际是 body 少了 revision。这里先单独判缺参。
+    """
+    if not isinstance(payload, dict) or payload.get("revision") is None:
+        raise HTTPException(422, "缺少 revision")
+    if payload["revision"] != p["revision"]:
+        raise HTTPException(409, conflict_detail)
 
 
 def connect():
@@ -729,12 +742,42 @@ async def _log_http_exception(request: Request, exc: HTTPException):
     return await http_exception_handler(request, exc)
 
 
+# C12：框架自带的英文 detail（405 Method Not Allowed / 404 Not Found）统一译中文。
+_HTTP_DETAIL_ZH = {
+    "Not Found": "接口或资源不存在",
+    "Method Not Allowed": "请求方式不被支持（405）",
+}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _translate_starlette_http_exception(
+    request: Request, exc: StarletteHTTPException
+):
+    if isinstance(exc.detail, str) and exc.detail in _HTTP_DETAIL_ZH:
+        exc.detail = _HTTP_DETAIL_ZH[exc.detail]
+    _record_rejection(request, exc.status_code, exc.detail)
+    return await http_exception_handler(request, exc)
+
+
 @app.exception_handler(RequestValidationError)
 async def _log_validation_exception(request: Request, exc: RequestValidationError):
     # Pydantic's errors() also contains "input"; log only location and error type.
-    detail = [{"loc": error.get("loc"), "type": error.get("type")} for error in exc.errors()]
+    errors = exc.errors()
+    detail = [{"loc": error.get("loc"), "type": error.get("type")} for error in errors]
     _record_rejection(request, 422, detail)
-    return await request_validation_exception_handler(request, exc)
+    # C12：缺 revision → 422「缺少 revision」；其余参数错误给中文可读提示，
+    # 不再把 pydantic 的英文原始 errors 直接甩给界面。
+    for error in errors:
+        loc = list(error.get("loc") or [])
+        if error.get("type") == "missing" and loc and loc[-1] == "revision":
+            return JSONResponse({"detail": "缺少 revision"}, status_code=422)
+    fields = []
+    for error in errors:
+        loc = [str(x) for x in (error.get("loc") or []) if x not in ("body", "query", "path")]
+        fields.append(loc[-1] if loc else "请求参数")
+    text = "请求参数不正确：" + "、".join(dict.fromkeys(fields)) if fields else "请求参数不正确"
+    return JSONResponse({"detail": text}, status_code=422)
+
 
 
 # ==================== 认证路由 ====================
@@ -828,11 +871,18 @@ def health():
     )
 
 
-# ==================== 检查更新 ====================
+# ==================== 检查更新 / 一键更新 ====================
 
 # 发布仓库；换成你自己的 fork 时改这里或设 UPDATE_REPO 环境变量。
 UPDATE_REPO = os.getenv("UPDATE_REPO", "twbzpngd58-beep/guanglv-workbench").strip()
 UPDATE_WEB = f"https://github.com/{UPDATE_REPO}"
+
+# 一键更新交给 scripts/apply_update.py：下载 → SHA256 校验 → 快照 → 停服 → 覆盖 → 重启 → 自检。
+# 后端只负责起进程和读进度，绝不在 HTTP 请求里自己做重活（停服会把请求掐断）。
+UPDATE_HELPER = ROOT / "scripts" / "apply_update.py"
+UPDATE_STATE_FILE = DATA / "update-state.json"
+UPDATE_CACHE_SECONDS = 60
+_update_cache: dict = {"at": 0.0, "release": {}}
 
 
 def version_key(value: str) -> tuple:
@@ -851,6 +901,18 @@ def _github_json(path: str):
         return json.loads(resp.read().decode("utf-8", "replace"))
 
 
+def _github_release() -> dict:
+    """最新发行版（含 assets）。缓存 60 秒：设置页连点也不会吃光匿名 API 配额。"""
+    if _update_cache["release"] and time.time() - _update_cache["at"] < UPDATE_CACHE_SECONDS:
+        return dict(_update_cache["release"])
+    release = _github_json("/releases/latest")
+    if not isinstance(release, dict):
+        raise ValueError("发行版信息格式不对")
+    _update_cache["at"] = time.time()
+    _update_cache["release"] = release
+    return dict(release)
+
+
 def _latest_tag() -> str:
     """取仓库里最大的版本号 tag；没打过 tag 时读 main 分支的 VERSION 文件。"""
     try:
@@ -866,6 +928,84 @@ def _latest_tag() -> str:
     return raw.strip().lstrip("vV")
 
 
+def _read_text_url(url: str) -> str:
+    request = UrlRequest(url, headers={"User-Agent": f"guanglv-workbench/{APP_VERSION}"})
+    with urlopen(request, timeout=8) as resp:
+        return resp.read().decode("utf-8", "replace")
+
+
+def update_package(release: dict) -> dict | None:
+    """从发行版资产里挑出发行包和校验值。没有 SHA256SUMS.txt 就当不能一键更新。"""
+    assets = [a for a in (release or {}).get("assets") or [] if isinstance(a, dict)]
+    tarballs = [
+        a
+        for a in assets
+        if str(a.get("name") or "").startswith("guanglv-workbench-")
+        and str(a.get("name") or "").endswith(".tar.gz")
+    ]
+    if not tarballs:
+        return None
+    package = tarballs[0]
+    name = str(package.get("name") or "")
+    sums = next((a for a in assets if str(a.get("name") or "") == "SHA256SUMS.txt"), None)
+    digest = ""
+    if sums:
+        try:
+            for line in _read_text_url(str(sums.get("browser_download_url") or "")).splitlines():
+                bits = line.split()
+                if len(bits) >= 2 and bits[-1].lstrip("*") == name:
+                    digest = bits[0].lower()
+                    break
+        except (HTTPError, URLError, OSError, ValueError):
+            digest = ""
+    return {
+        "name": name,
+        "url": str(package.get("browser_download_url") or ""),
+        "size": int(package.get("size") or 0),
+        "sha256": digest,
+    }
+
+
+def update_supported() -> tuple[bool, str]:
+    """一键更新只在「源码部署 + 有 .venv + 目录可写」的机器上开放。"""
+    if Path("/.dockerenv").exists():
+        return False, "Docker 部署：请拉取新镜像"
+    if sys.platform not in ("darwin", "linux"):
+        return False, "当前系统请手动下载覆盖"
+    if not UPDATE_HELPER.is_file():
+        return False, "缺少 scripts/apply_update.py"
+    if not (ROOT / ".venv" / "bin" / "python").exists():
+        return False, "缺少 .venv；先运行一次 start.py"
+    if not os.access(ROOT, os.W_OK):
+        return False, "安装目录不可写"
+    return True, ""
+
+
+def update_state() -> dict:
+    try:
+        data = json.loads(UPDATE_STATE_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _update_running(state: dict) -> bool:
+    """上一次更新是不是还活着：按 pid 判断，进程没了就不算，免得卡住后续更新。"""
+    if str(state.get("phase") or "") in ("", "idle", "done", "failed", "uptodate"):
+        return False
+    try:
+        pid = int(state.get("pid") or 0)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
 @app.get("/api/update/check")
 def update_check():
     """问 GitHub 上有没有比本机更新的发行版。
@@ -874,6 +1014,7 @@ def update_check():
     网络不通不是错误状态：把原因放进 error 字段，界面照常能用。
     """
     current = APP_VERSION
+    supported, reason = update_supported()
     out = {
         "current": current,
         "latest": "",
@@ -885,19 +1026,25 @@ def update_check():
         "checkedAt": now(),
         "repo": UPDATE_REPO,
         "error": "",
+        "asset": None,
+        "canAutoUpdate": supported,
+        "autoUpdateReason": reason,
+        "installRoot": str(ROOT),
+        "applying": _update_running(update_state()),
     }
     if not UPDATE_REPO:
         out["error"] = "未配置更新源（UPDATE_REPO）"
         return out
     try:
-        release = _github_json("/releases/latest")
+        release = _github_release()
         out.update(
             latest=str(release.get("tag_name") or "").strip().lstrip("vV"),
-            notes=(release.get("body") or "")[:2000],
+            notes=(release.get("body") or "")[:4000],
             publishedAt=release.get("published_at") or "",
             url=release.get("html_url") or out["url"],
             source="release",
         )
+        out["asset"] = update_package(release)
     except HTTPError as exc:
         if exc.code != 404:
             out["error"] = f"GitHub 返回 {exc.code}"
@@ -912,7 +1059,117 @@ def update_check():
         return out
     if out["latest"]:
         out["hasUpdate"] = version_key(out["latest"]) > version_key(current)
+    # 有安装包 + 有校验值 + 本机支持，才算「能一键更新」；否则退回下载页。
+    out["canAutoUpdate"] = bool(supported and out.get("asset") and (out["asset"] or {}).get("sha256"))
     return out
+
+
+@app.post("/api/update/apply")
+def update_apply(payload: dict = Body(default={})):
+    """一键更新：下载 → 校验 → 快照 → 停服 → 覆盖 → 重启。
+
+    helper 用独立会话跑，先把 HTTP 响应发出去，再让 helper 自己停服务；
+    否则请求会断在半路，界面拿不到「已开始」。
+    """
+    if not isinstance(payload, dict) or payload.get("confirm") is not True:
+        raise HTTPException(400, "更新需要二次确认（confirm=true）")
+    supported, reason = update_supported()
+    if not supported:
+        raise HTTPException(400, f"本机不支持一键更新：{reason}")
+    if _update_running(update_state()):
+        raise HTTPException(409, "已经有一次更新在进行中")
+    try:
+        release = _github_release()
+        latest = str(release.get("tag_name") or "").strip().lstrip("vV")
+    except (HTTPError, URLError, OSError, ValueError) as exc:
+        raise HTTPException(502, f"查不到线上版本：{exc}") from exc
+    if not latest or version_key(latest) <= version_key(APP_VERSION):
+        return {"ok": False, "message": "已经是最新版本", "current": APP_VERSION, "latest": latest or APP_VERSION}
+    package = update_package(release)
+    if not package or not package.get("sha256"):
+        raise HTTPException(409, "发行版缺少安装包或校验单，请到 Releases 手动下载")
+    work = DATA / ".update"
+    work.mkdir(parents=True, exist_ok=True)
+    helper = work / "apply_update.py"
+    try:
+        shutil.copy2(UPDATE_HELPER, helper)
+    except OSError as exc:
+        raise HTTPException(500, f"无法准备更新脚本：{exc}") from exc
+    log_path = DATA / "update.log"
+    UPDATE_STATE_FILE.write_text(
+        json.dumps(
+            {
+                "phase": "start",
+                "message": f"正在准备更新到 v{latest}…",
+                "from": APP_VERSION,
+                "to": latest,
+                "root": str(ROOT),
+                "pid": 0,
+                "ok": None,
+                "startedAt": now(),
+                "updatedAt": now(),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    try:
+        with open(log_path, "ab") as log:
+            proc = subprocess.Popen(
+                [
+                    sys.executable,
+                    str(helper),
+                    "--root",
+                    str(ROOT),
+                    "--version",
+                    latest,
+                    "--delay",
+                    "2",
+                    "--json",
+                ],
+                cwd=str(ROOT),
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+                close_fds=True,
+            )
+    except OSError as exc:
+        raise HTTPException(500, f"更新进程启动失败：{exc}") from exc
+    return {
+        "ok": True,
+        "current": APP_VERSION,
+        "latest": latest,
+        "package": package["name"],
+        "size": package["size"],
+        "pid": proc.pid,
+        "log": str(log_path),
+        "message": f"正在更新到 v{latest}，下载完成后服务会重启",
+    }
+
+
+@app.get("/api/update/status")
+def update_status():
+    """设置页轮询这次更新的进度；没有更新记录时 phase=idle。"""
+    state = update_state()
+    phase = str(state.get("phase") or "idle")
+    return {
+        "current": APP_VERSION,
+        "phase": phase,
+        "message": state.get("message") or "",
+        "ok": state.get("ok"),
+        "from": state.get("from") or "",
+        "to": state.get("to") or "",
+        "percent": state.get("percent"),
+        "backup": state.get("backup") or "",
+        "hint": state.get("hint") or "",
+        "startedAt": state.get("startedAt") or "",
+        "finishedAt": state.get("finishedAt") or "",
+        "updatedAt": state.get("updatedAt") or "",
+        "running": _update_running(state),
+        "supported": update_supported()[0],
+    }
 
 
 DIST_INDEX = ROOT / "frontend" / "dist" / "index.html"
@@ -1140,6 +1397,20 @@ def archive(pid: str):
     return p
 
 
+@app.post("/api/projects/{pid}/unarchive")
+def unarchive(pid: str):
+    """取消归档：清 frozen/归档状态，项目回到可编辑；历史与复核记录保留。"""
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        p = get(c, pid)
+        if p.get("status") != "已归档" and not p.get("frozen"):
+            raise HTTPException(409, "项目未归档")
+        p["status"] = "已确认" if p.get("approved") else "设计中"
+        p["frozen"] = False
+        commit(c, p, "取消归档", "恢复为可编辑；历史与复核记录保留")
+    return p
+
+
 @app.put("/api/projects/{pid}/design")
 def save_design(request: Request, pid: str, payload: DesignInput):
     user = request.state.user
@@ -1191,15 +1462,109 @@ async def upload_fixture_ies(pid: str, fid: str, file: UploadFile = File(...)):
                 if size > 4 * 1024 * 1024:
                     raise HTTPException(413, "IES 文件过大")
                 out.write(chunk)
+        from . import ies as ies_mod
+        parsed = ies_mod.parse(target.read_bytes())
         fixture["ies"] = {
             "file": stored,
             "name": name,
             "bytes": size,
             "uploadedAt": now(),
-            "status": "reserved-not-parsed",
-            "note": "已留存；未接入解析，光斑仍按半角光束角理论值计算",
+            "status": "parsed" if parsed.get("ok") else "parse-failed",
+            "parsed": parsed.get("data") if parsed.get("ok") else None,
+            "parseError": "" if parsed.get("ok") else parsed.get("error", ""),
+            "note": "已解析配光参考；光斑仍按光束角理论值，不做正式照度计算",
         }
         commit(c, p, "上传 IES 光度文件", f"{fixture.get('code') or fixture['id']}：{name}")
+    return p
+
+
+@app.post("/api/projects/{pid}/site-evidence")
+async def upload_site_evidence(pid: str, file: UploadFile = File(...), kind: str = Form("photo")):
+    """现场照片/签字 PDF：只存档，不改画布真源；手机端调试记录也走这里。"""
+    name = Path((file.filename or "site-evidence").replace(chr(92), "/")).name
+    ext = Path(name).suffix.lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".webp", ".pdf"):
+        raise HTTPException(422, "只接受 jpg/png/webp/pdf")
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        p = get(c, pid)
+        editable(p)
+        folder = UPLOADS / pid
+        folder.mkdir(parents=True, exist_ok=True)
+        stored = ident() + ext
+        target = folder / stored
+        size = 0
+        with target.open("wb") as out:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > 20 * 1024 * 1024:
+                    target.unlink(missing_ok=True)
+                    raise HTTPException(413, "文件过大（上限 20MB）")
+                out.write(chunk)
+        item = {"id": stored.split(".")[0], "name": name, "file": stored, "kind": kind or "photo",
+                "bytes": size, "uploadedAt": now()}
+        p.setdefault("siteEvidence", []).append(item)
+        commit(c, p, "现场照片/签字", f"{item['kind']}：{name}")
+    return p
+
+
+@app.get("/api/projects/{pid}/site-evidence.zip")
+def site_evidence_zip(pid: str):
+    """现场资料打包：照片 + 签字 PDF + manifest；不替代正式交付包。"""
+    import zipfile
+    with connect() as c:
+        p = get(c, pid)
+    rows = p.get("siteEvidence") or []
+    if not rows:
+        raise HTTPException(422, "还没有现场资料")
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        manifest = []
+        for row in rows:
+            path = UPLOADS / pid / row.get("file", "")
+            if not path.is_file():
+                continue
+            z.write(path, arcname=row.get("name") or row["file"])
+            manifest.append({k: row.get(k) for k in ("id", "name", "kind", "bytes", "uploadedAt")})
+        z.writestr("manifest.json", json.dumps({"project": p.get("code"), "items": manifest},
+                                               ensure_ascii=False, indent=2))
+        z.writestr("README.txt", "现场照片/签字 PDF 打包；仅现场核对用，不替代正式交付包，不进业主包。\n")
+    stem = re.sub(r"[^\w\-]", "_", p.get("code") or p["id"])
+    name = stem + "_现场资料.zip"
+    return Response(buf.getvalue(), media_type="application/zip",
+                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}"})
+
+
+@app.get("/api/projects/{pid}/site-evidence/{eid}")
+def site_evidence_file(pid: str, eid: str):
+    with connect() as c:
+        p = get(c, pid)
+    row = next((x for x in (p.get("siteEvidence") or []) if x.get("id") == eid), None)
+    if not row:
+        raise HTTPException(404, "现场资料不存在")
+    path = UPLOADS / pid / row["file"]
+    if not path.is_file():
+        raise HTTPException(404, "现场资料文件不存在")
+    media = "application/pdf" if row["file"].lower().endswith(".pdf") else "image/" + row["file"].rsplit(".", 1)[-1].lower()
+    return FileResponse(path, media_type=media, filename=row.get("name") or row["file"])
+
+
+@app.delete("/api/projects/{pid}/site-evidence/{eid}")
+def delete_site_evidence(pid: str, eid: str):
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        p = get(c, pid)
+        editable(p)
+        rows = p.get("siteEvidence") or []
+        row = next((x for x in rows if x.get("id") == eid), None)
+        if not row:
+            raise HTTPException(404, "现场资料不存在")
+        p["siteEvidence"] = [x for x in rows if x.get("id") != eid]
+        try:
+            (UPLOADS / pid / row["file"]).unlink(missing_ok=True)
+        except Exception:
+            pass
+        commit(c, p, "删除现场资料", row.get("name") or eid)
     return p
 
 
@@ -1234,14 +1599,22 @@ def new_version(pid: str):
     with connect() as c:
         c.execute("BEGIN IMMEDIATE")
         p = get(c, pid)
-        coop.assert_design_edit(p)
+        if p.get("status") == "已归档":
+            raise HTTPException(409, "已归档项目请先取消归档，再新建版本")
+        was_frozen = bool(p.get("frozen")) or p.get("status") == "已冻结"
+        # A3：冻结后允许“从冻结版本新建版本”，旧版本继续留在历史里只读；
+        # 不再要求先解冻（1.3.1 没有解冻入口，会死锁）。
+        if not was_frozen:
+            coop.assert_design_edit(p)
+        old_version = p["version"]
         p["version"] += 1
         p["frozen"] = False
         p["reviews"] = {}
         p.pop("invalidatedReviews", None)
         p["approved"] = False
         p["status"] = "设计中"
-        commit(c, p, "新建设计版本", f"V{p['version']:02}")
+        detail = f"V{p['version']:02}" + (f"（自冻结 V{old_version:02} 解冻）" if was_frozen else "")
+        commit(c, p, "新建设计版本", detail)
     return p
 
 
@@ -1284,19 +1657,20 @@ def review(request: Request, pid: str, payload: dict = Body(...)):
         c.execute("BEGIN IMMEDIATE")
         p = get(c, pid)
         editable(p)
-        if payload.get("revision") != p["revision"]:
-            raise HTTPException(409, "版本已改变，请刷新后复核")
+        require_revision(payload, p, "版本已改变，请刷新后复核")
         coop.gate_check(p,key)
         if not p["design"]["rooms"]:
             raise HTTPException(422, "请先建立并校正房间")
-        if key == "layout" and any(
-            r.get("source") in ("simulation", "example", "image-analysis")
-            for r in p["design"]["rooms"]
-        ):
-            raise HTTPException(
-                422,
-                "存在尚未人工确认的自动识别或示例区域，请逐项校正 / 确认后再复核空间",
+        if key == "layout":
+            sf = p["design"].get("spaceDefinition") or {}
+            confirmed = sf.get("status") == "confirmed" or (
+                bool(p["design"].get("rooms"))
+                and all(r.get("semanticConfidence") == "confirmed" for r in p["design"]["rooms"])
             )
+            if not confirmed:
+                raise HTTPException(422, "请先确认空间与门窗（人工确认后再复核布置）")
+            if any(r.get("source") in ("simulation", "example") for r in p["design"]["rooms"]):
+                raise HTTPException(422, "存在示例或模拟空间，不能作为正式布置复核")
         if key == "lighting" and (
             not p["design"]["fixtures"]
             or any(not f.get("circuit") for f in p["design"]["fixtures"])
@@ -1304,17 +1678,56 @@ def review(request: Request, pid: str, payload: dict = Body(...)):
             raise HTTPException(422, "请先配置灯具及所属回路")
         if key == "scenes" and not p["design"]["scenes"]:
             raise HTTPException(422, "请先创建场景")
-        if key == "pricing" and any(
-            f.get("quote") and not f.get("priceVerified")
-            for f in p["design"]["fixtures"]
-        ):
-            raise HTTPException(
-                422, "存在模拟或待核实价格，请在灯具表逐项核实后再复核报价"
-            )
+        pricing_risk = None
+        if key == "pricing":
+            priced = [f for f in p["design"]["fixtures"] if f.get("quote")]
+            if not priced:
+                raise HTTPException(
+                    422,
+                    "没有纳入报价的灯具，不能空签价格复核；请先在灯具清单里勾选要报价的灯具，"
+                    "再回来复核报价",
+                )
+            unverified = [f for f in priced if not f.get("priceVerified")]
+            ratio = len(unverified) / len(priced)
+            if len(unverified) > 10 or ratio > 0.30:
+                raise HTTPException(
+                    422,
+                    f"待核实价 {len(unverified)}/{len(priced)}（{ratio:.0%}）超过阈值（>30% 或 >10 行），"
+                    "请先去批量核实价格再复核报价",
+                )
+            # 阈值内的未核实价：风险签名，写进复核记录，不静默放行。
+            # 签名绑定 实名 + 时间 + 设计内容 hash + 未核实行清单，事后可验证是谁在什么内容上签的字。
+            signed_at = now()
+            design_digest = coop.design_hash(p)
+            unverified_codes = [f.get("code", "") for f in unverified]
+            signature = hashlib.sha256(
+                json.dumps(
+                    {
+                        "reviewer": reviewer,
+                        "at": signed_at,
+                        "designHash": design_digest,
+                        "unverified": unverified_codes,
+                    },
+                    sort_keys=True,
+                    ensure_ascii=False,
+                ).encode("utf-8")
+            ).hexdigest()
+            pricing_risk = {
+                "unverified": len(unverified),
+                "priced": len(priced),
+                "ratio": round(ratio, 4),
+                "accepted": bool(unverified),
+                "at": signed_at,
+                "reviewer": reviewer,
+                "designHash": design_digest,
+                "unverifiedCodes": unverified_codes[:200],
+                "signature": signature,
+            }
         p["reviews"][key] = {
             "reviewer": reviewer,
             "at": now(),
             "revision": p["revision"],
+            **({"pricingRisk": pricing_risk} if key == "pricing" else {}),
         }
         (p.get("invalidatedReviews") or {}).pop(key, None)
         if not p.get("invalidatedReviews"):
@@ -2243,8 +2656,7 @@ def recognize(pid: str, fid: str, payload: dict = Body(default={})):
         f = next((x for x in p["files"] if x["id"] == fid), None)
     start_revision = p["revision"]
     if "exclusions" in payload:
-        if payload.get("revision") != start_revision:
-            raise HTTPException(409, "项目已更新，请刷新后再保存家具排除区")
+        require_revision(payload, p, "项目已更新，请刷新后再保存家具排除区")
         if f["type"] == "DXF":
             raise HTTPException(422, "家具排除区仅支持图像/PDF/SVG，不修改CAD原始几何")
         boxes = payload["exclusions"]
@@ -2361,8 +2773,7 @@ def confirm_space_definition(pid: str, payload: dict = Body(default={})):
         c.execute("BEGIN IMMEDIATE")
         p = get(c, pid)
         editable(p)
-        if payload.get("revision") != p["revision"]:
-            raise HTTPException(409, "项目已更新，请刷新后再确认空间")
+        require_revision(payload, p, "项目已更新，请刷新后再确认空间")
         if payload.get("stage") == "rooms":
             n = validate_reviewed_spaces(p["design"])
             editing_floor = payload.get("floor", 1)
@@ -2387,8 +2798,7 @@ def discard_ai_space_draft(pid: str, payload: dict = Body(default={})):
     with connect() as c:
         c.execute("BEGIN IMMEDIATE")
         p=get(c,pid); editable(p)
-        if payload.get("revision") != p["revision"]:
-            raise HTTPException(409,"项目已更新，请刷新后再处理")
+        require_revision(payload, p, "项目已更新，请刷新后再处理")
         d=p["design"]
         auto_sources={"semantic-vision","image-analysis"}
         removed=[r for r in d["rooms"] if r.get("source") in auto_sources]
@@ -2509,8 +2919,7 @@ def replace_recognition_room(pid: str, payload: dict = Body(...)):
         c.execute("BEGIN IMMEDIATE")
         p = get(c, pid)
         editable(p)
-        if payload.get("revision") != p["revision"]:
-            raise HTTPException(409, "项目已变更，请刷新前后对比后再确认替换")
+        require_revision(payload, p, "项目已变更，请刷新前后对比后再确认替换")
         if payload.get("acknowledged") is not True:
             raise HTTPException(422, "请确认已查看前后对比，替换后需要重新校核")
         file = next((f for f in p["files"] if f["id"] == payload.get("fileId")), None)
@@ -2693,7 +3102,15 @@ def render_file(pid: str, rid: str):
 
 
 @app.get("/api/projects/{pid}/export/{fmt}")
-def export(pid: str, fmt: str, floor: int | None = None):
+def export(pid: str, fmt: str, floor: int | None = None, audience: str = "internal"):
+    # C9 交付对象开关（2026-10-23 老板拍板取消业主版去价红线）：
+    # owner=给业主（保留零售价）/ site=给施工（不含价）/ internal=内部版（保留参考价，默认）。
+    audience = (audience or "internal").strip().lower()
+    if audience not in EXPORT_AUDIENCES:
+        raise HTTPException(
+            422,
+            "导出对象只能是 owner（给业主）/ site（给施工·不含价）/ internal（内部）",
+        )
     with connect() as c:
         p = get(c, pid)
     if floor is not None and not 1 <= floor <= p["floors"]:
@@ -2703,7 +3120,7 @@ def export(pid: str, fmt: str, floor: int | None = None):
     if gate == "block":
         raise HTTPException(422, circuit_rules.block_message(issues))
     try:
-        content, media, name = export_bytes(p, fmt, floor)
+        content, media, name = export_bytes(p, fmt, floor, audience)
     except ValueError as e:
         raise HTTPException(422, str(e))
     with connect() as c:
@@ -2722,6 +3139,10 @@ def export(pid: str, fmt: str, floor: int | None = None):
             "Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}",
             "X-Document-Status": "reviewed-design" if p["approved"] else "draft",
             "X-Business-Status": "NOT_RELEASED",
+            # C9：交付对象与去价状态（frontend/验收脚本可直接断言）。
+            # 2026-10-23 老板拍板：owner（给业主）保留零售价，只有 site（给施工）excluded。
+            "X-Audience": audience,
+            "X-Pricing-Mode": "excluded" if audience == "site" else "kept",
             # 提示档放行时带上问题原文（UTF-8 百分号编码，前端 decodeURIComponent）。
             **({"X-Export-Warnings": quote(circuit_rules.TEXT["issueSep"].join(issues))} if gate == "warn" else {}),
         },
@@ -2778,6 +3199,144 @@ def products(category: str = "", brand: str = "", q: str = "", scheme: str = "",
     return [x for x in items if not category or x.get("category") == category]
 
 
+@app.get("/api/products/status")
+def product_library_status():
+    """B6：产品库状态（数量/品牌/分类/待补价），前端设备库页直接读。"""
+    return PL.status(DB)
+
+
+@app.post("/api/products/sync")
+def product_library_sync():
+    """B6：从随源码分发的产品资料补灌工作台产品库（本地品牌库保留）。"""
+    result = PL.load_seed(DB)
+    if result.get("total", 0):
+        result.update(PL.status(DB))
+    return result
+
+
+def _room_rect(room: dict):
+    """只对轴对齐矩形空间做合并/拆分；不规则多边形返回 None。"""
+    try:
+        if float(room.get("width") or 0) > 1 and float(room.get("height") or 0) > 1:
+            return (float(room["x"]), float(room["y"]), float(room["width"]), float(room["height"]))
+        pts = room.get("points") or []
+        if len(pts) >= 3:
+            xs = [float(p["x"]) for p in pts]; ys = [float(p["y"]) for p in pts]
+            x, y, w, h = min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
+            if w > 1 and h > 1:
+                area = abs(sum(
+                    (pts[i]["x"] * pts[(i + 1) % len(pts)]["y"] - pts[(i + 1) % len(pts)]["x"] * pts[i]["y"])
+                    for i in range(len(pts))
+                )) / 2
+                if area > 0 and abs(area - w * h) / (w * h) < 0.05:
+                    return (x, y, w, h)
+    except Exception:
+        return None
+    return None
+
+
+def _set_room_rect(room: dict, x: float, y: float, w: float, h: float):
+    room["x"], room["y"], room["width"], room["height"] = x, y, w, h
+    room["points"] = [{"x": x, "y": y}, {"x": x + w, "y": y},
+                      {"x": x + w, "y": y + h}, {"x": x, "y": y + h}]
+
+
+def _reassign_room(node, old_id: str, new_id: str, rooms: list):
+    """把引用了 old_id 的对象改挂到 new_id；不碰 rooms 自身。"""
+    if isinstance(node, list):
+        for v in node:
+            _reassign_room(v, old_id, new_id, rooms)
+    elif isinstance(node, dict):
+        if node is not None and node.get("roomId") == old_id:
+            node["roomId"] = new_id
+        for k, v in list(node.items()):
+            if k == "rooms" or not isinstance(v, (dict, list)):
+                continue
+            if isinstance(v, list) and v is rooms:
+                continue
+            _reassign_room(v, old_id, new_id, rooms)
+
+
+class GeometryInput(BaseModel):
+    revision: int | None = None
+    design: dict[str, Any]
+    action: str = Field(pattern=r"^(merge|split)$")
+    id: str
+    otherId: str = ""
+
+
+@app.post("/api/projects/{pid}/space-definition/geometry")
+def space_geometry_operation(pid: str, payload: GeometryInput):
+    """B6：矩形空间的合并/拆分（不规则多边形返回 422，明确不支持而不是 405）。"""
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        p = get(c, pid)
+        editable(p)
+        if payload.revision is not None and payload.revision != p["revision"]:
+            raise HTTPException(409, "项目已在其他窗口更新，请重新打开，避免覆盖修改")
+        design = copy.deepcopy(payload.design)
+        rooms = design.get("rooms") or []
+        target = next((r for r in rooms if r.get("id") == payload.id), None)
+        if not target:
+            raise HTTPException(404, "空间不存在")
+        rect = _room_rect(target)
+        if not rect:
+            raise HTTPException(422, "当前几何接口只支持轴对齐矩形空间；不规则多边形请用 CAD/手动画")
+        x, y, w, h = rect
+        if payload.action == "merge":
+            other = next((r for r in rooms if r.get("id") == payload.otherId), None)
+            if not other:
+                raise HTTPException(404, "被合并的空间不存在")
+            if (other.get("floor") or 1) != (target.get("floor") or 1):
+                raise HTTPException(422, "只能合并同一楼层的空间")
+            orect = _room_rect(other)
+            if not orect:
+                raise HTTPException(422, "被合并空间不是轴对齐矩形，暂不支持")
+            ox, oy, ow, oh = orect
+            nx, ny = min(x, ox), min(y, oy)
+            nw, nh = max(x + w, ox + ow) - nx, max(y + h, oy + oh) - ny
+            _set_room_rect(target, nx, ny, nw, nh)
+            rooms.remove(other)
+            _reassign_room(design, other["id"], target["id"], rooms)
+        else:
+            # split：沿长边中点切一刀，右/下半部分生成新空间
+            new_room = copy.deepcopy(target)
+            new_room["id"] = uuid.uuid4().hex[:16]
+            new_room["name"] = (target.get("name") or "空间") + " 2"
+            if w >= h:
+                half = w / 2
+                _set_room_rect(target, x, y, half, h)
+                _set_room_rect(new_room, x + half, y, w - half, h)
+            else:
+                half = h / 2
+                _set_room_rect(target, x, y, w, half)
+                _set_room_rect(new_room, x, y + half, w, h - half)
+            rooms.append(new_room)
+            # 把落在新空间矩形内的对象改挂到新空间
+            nr = _room_rect(new_room)
+            def _inside(obj):
+                try:
+                    return (nr[0] <= float(obj.get("x", -1e9)) < nr[0] + nr[2]
+                            and nr[1] <= float(obj.get("y", -1e9)) < nr[1] + nr[3])
+                except Exception:
+                    return False
+            def _move(node):
+                if isinstance(node, list):
+                    for v in node: _move(v)
+                elif isinstance(node, dict):
+                    if node.get("roomId") == target["id"] and _inside(node):
+                        node["roomId"] = new_room["id"]
+                    for k, v in node.items():
+                        if k != "rooms" and isinstance(v, (dict, list)) and v is not rooms:
+                            _move(v)
+            _move(design)
+        validate_design(design, p)
+        p["design"] = design
+        commit(c, p, "空间几何" + ("合并" if payload.action == "merge" else "拆分"),
+               "几何已更新；受影响的复核已失效", True)
+    return design
+
+
 class BaselineInput(BaseModel):
     revision: int
     evidence: dict[str, Any] = Field(default_factory=dict)
@@ -2786,9 +3345,51 @@ class BaselineInput(BaseModel):
     reviewNote: str = Field(default="", max_length=5000)
 
 
+@app.post("/api/projects/{pid}/requirements-baselines")
+def requirements_baseline(pid: str, payload: BaselineInput):
+    """B6：需求复核基线冻结（只追加版本，不改设计；复核签名另走 reviews）。"""
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        p = get(c, pid)
+        editable(p)
+        if payload.revision != p["revision"]:
+            raise HTTPException(409, "项目已在其他窗口更新，请重新打开，避免覆盖修改")
+        rb = p.setdefault("requirementsBaseline", {"versions": [], "currentId": None})
+        rb.setdefault("versions", [])
+        entry = {
+            "id": uuid.uuid4().hex[:16],
+            "at": now(),
+            "submitter": payload.submitter,
+            "decision": payload.decision,
+            "reviewNote": payload.reviewNote,
+            "evidence": payload.evidence,
+            "designHash": coop.design_hash(p),
+            "revision": p["revision"],
+            "version": p["version"],
+        }
+        rb["versions"].append(entry)
+        rb["currentId"] = entry["id"]
+        commit(c, p, "需求复核基线", "需求基线已冻结为新版本；不替代后续人工复核", False)
+    return p
+class BaselineInput(BaseModel):
+    revision: int
+    evidence: dict[str, Any] = Field(default_factory=dict)
+    submitter: str = Field(default="", max_length=100)
+    decision: str = Field(default="submitted", pattern=r"^(submitted|approved|returned|conditional)$")
+    reviewNote: str = Field(default="", max_length=5000)
+
+
+# 能力表（外壳 v2）——必须排在下面的 SPA 兜底路由之前
+from . import capabilities as capabilities_mod  # noqa: E402
+capabilities_mod.register(app)
+
 # 三维灯光模块（工作台内嵌的三维空间 + /api/lighting3d/*）——必须排在下面的 SPA 兜底路由之前
 from . import lighting3d as lighting3d_mod  # noqa: E402
 lighting3d_mod.register(app)
+
+# 本机版本历史 / 回退（设置 → 版本与更新）——必须在 SPA 兜底路由之前
+from . import app_versions as app_versions_mod  # noqa: E402
+app_versions_mod.register(app)
 
 
 DIST = ROOT / "frontend" / "dist"

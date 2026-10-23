@@ -1,7 +1,7 @@
 from pathlib import Path
 import hashlib
 from io import BytesIO
-import json, zipfile, re, os, base64, math
+import json, zipfile, re, os, base64, math, copy
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageChops
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill
@@ -42,6 +42,10 @@ def finished_dxf(p):
     original = source.is_file()
     info = _read_json(store / (p["id"] + ".json")) if original else {}
     doc = ezdxf.readfile(source) if original else ezdxf.new("R2010")
+    # 老 CAD 源可能是 R12（AC1009）；LWPOLYLINE 要求 R2000+。
+    # 只在导出副本上升级 DXF 版本，不改源文件。
+    if str(doc.dxfversion) < "AC1015":
+        doc.dxfversion = "AC1027"
     transform = (info.get("parsed") or {}).get("source") or {}
     if original and not all(key in transform for key in ("source_unit", "source_scale", "source_base_xy", "source_y_flip")):
         # Historical stores: derive the exact same subject bbox and padding
@@ -442,7 +446,7 @@ def cct_reason(f):
     return (f.get("cctReason") or "").strip() or "偏离 3000K 单色·原因未填"
 
 
-def rows(p):
+def rows(p, include_price=True):
     room_names = {r["id"]: r["name"] for r in p["design"]["rooms"]}
     return [
         [f.get(k, "") for k in ("code", "name", "model", "brand", "type")]
@@ -453,8 +457,12 @@ def rows(p):
             floor_label(f.get("floor", 1), p.get("basements", 0)),
             f.get("circuit", ""),
             f.get("power", 0),
-            f.get("price", 0),
-            "已核实" if f.get("priceVerified") else "模拟/待核实",
+            f.get("price", 0) if include_price else 0,
+            (
+                ("已核实" if f.get("priceVerified") else "模拟/待核实")
+                if include_price
+                else "不含价（交付版）"
+            ),
             f.get("length", 0),
             f.get("powerSupply", ""),
             f.get("controller", ""),
@@ -519,7 +527,7 @@ def circuit_row(p, key, members):
     return [key, len(members), sum(f.get("power", 0) for f in members),
             space, control, module, channel, address, "、".join(missing)]
 
-def spreadsheet(p):
+def spreadsheet(p, include_price=True):
     wb = Workbook()
     ws = wb.active
     ws.title = "灯具与报价基础"
@@ -545,7 +553,7 @@ def spreadsheet(p):
             "原因",
         ]
     )
-    for row in rows(p):
+    for row in rows(p, include_price):
         ws.append(
             [
                 (
@@ -628,13 +636,16 @@ def spreadsheet(p):
             )
     quotes = wb.create_sheet("报价基础汇总")
     quotes.append([label(p)])
+    if not include_price:
+        quotes.append(["交付版：不含价（零售价不进业主/施工交付物）"])
     quotes.append(
         ["灯具编号", "纳入报价", "计价数量", "单位", "单价", "参考小计", "价格状态"]
     )
     total = 0
     for f in p["design"]["fixtures"]:
         qty = f.get("length", 1) if f.get("type") == "灯带" else 1
-        subtotal = round(qty * f.get("price", 0), 2) if f.get("quote") else 0
+        price = f.get("price", 0) if include_price else 0
+        subtotal = round(qty * price, 2) if f.get("quote") else 0
         total += subtotal
         quotes.append(
             [
@@ -642,9 +653,13 @@ def spreadsheet(p):
                 "是" if f.get("quote") else "否",
                 qty,
                 "米" if f.get("type") == "灯带" else "盏",
-                f.get("price", 0),
+                price,
                 subtotal,
-                "已核实" if f.get("priceVerified") else "模拟/待核实",
+                (
+                    ("已核实" if f.get("priceVerified") else "模拟/待核实")
+                    if include_price
+                    else "不含价（交付版）"
+                ),
             ]
         )
     quotes.append(["参考合计（非正式报价）", "", "", "", "", round(total, 2)])
@@ -1080,7 +1095,7 @@ def plain_plan_bytes(p, fmt, floor=None):
     return out.getvalue()
 
 
-def pdf(p):
+def pdf(p, include_price=True):
     b = BytesIO()
     c = canvas.Canvas(b, pagesize=(842, 720))
     pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
@@ -1096,13 +1111,13 @@ def pdf(p):
         c.drawImage(ImageReader(plain_plan(p, floor)), 20, 66, width=802,
                     height=602, preserveAspectRatio=True, anchor="c")
         c.setFont("STSong-Light", 11)
-        c.drawString(30, 40, label(p))
+        c.drawString(30, 40, label(p) + ("" if include_price else " · 不含价交付版"))
         c.showPage()
     c.setFont("STSong-Light", 16)
     c.drawString(30, 685, "灯具清单与回路 · " + label(p))
     y = 650
     c.setFont("STSong-Light", 10)
-    for r in rows(p):
+    for r in rows(p, include_price):
         c.drawString(
             30,
             y,
@@ -1116,7 +1131,8 @@ def pdf(p):
                     r[8],
                     r[9],
                     str(r[10]) + "W",
-                    str(r[11]) + " 元",
+                    str(r[11]) + " 元"
+                    + ("（未核实）" if r[12] == "模拟/待核实" else ""),
                 ]
             ),
         )
@@ -1589,72 +1605,99 @@ def panel_engraving_html(p):
     return html.encode("utf-8")
 
 
-def export_bytes(p, fmt, floor=None):
+# C9 交付对象开关（2026-10-23 老板拍板：取消「零售价不得进业主交付物」红线）。
+#   internal = 内部版，保留参考单价/小计/合计（Excel 内部版口径）；
+#   owner    = 给业主：保留零售价（金额与价格状态照常显示），文件名 _业主版；
+#   site     = 给施工：不含价，金额字段一律 0，价格状态「不含价（交付版）」，文件名 _施工版。
+# 注：旧口径（owner 也去价）已于 2026-10-23 老板拍板作废，未改回请以本注释为准。
+EXPORT_AUDIENCES = {"internal": "", "owner": "_业主版", "site": "_施工版"}
+
+
+def _without_prices(p):
+    """不含价交付版 JSON：金额字段清零（仅 site 施工版使用，保留结构）。"""
+    data = copy.deepcopy(p)
+    design = data.get("design") or {}
+    for key in ("fixtures", "devices", "furniture"):
+        for item in design.get(key) or []:
+            if isinstance(item, dict) and "price" in item:
+                item["price"] = 0
+    for item in data.get("files") or []:
+        if isinstance(item, dict) and "price" in item:
+            item["price"] = 0
+    return data
+
+
+def export_bytes(p, fmt, floor=None, audience="internal"):
+    # 2026-10-23 老板拍板：只有 site（给施工）去价；owner（给业主）与 internal 都保留零售价。
+    include_price = audience != "site"
+    suffix = EXPORT_AUDIENCES.get(audience, "")
     stem = (
         re.sub(r"[^\w\-]", "_", p["code"]) + f"_V{p['version']:02}_R{p['revision']:03}"
     )
     if fmt == "json":
+        project = p if include_price else _without_prices(p)
         return (
             json.dumps(
-                {"schemaVersion": 1, "project": p}, ensure_ascii=False, indent=2
+                {"schemaVersion": 1, "project": project}, ensure_ascii=False, indent=2
             ).encode(),
             "application/json",
-            stem + ".json",
+            stem + suffix + ".json",
         )
     if fmt in ("png", "jpg"):
         level = floor if floor is not None else 1
         return (plain_plan_bytes(p, fmt, level),
                 "image/png" if fmt == "png" else "image/jpeg",
-                stem + f"_{floor_label(level, p.get('basements', 0))}_平面布置图.{fmt}")
+                stem + f"_{floor_label(level, p.get('basements', 0))}_平面布置图{suffix}.{fmt}")
     if fmt == "dxf":
-        return finished_dxf(p), "application/dxf", stem + "_成品图.dxf"
+        return finished_dxf(p), "application/dxf", stem + "_成品图" + suffix + ".dxf"
     if fmt == "xlsx":
         return (
-            spreadsheet(p),
+            spreadsheet(p, include_price),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            stem + ".xlsx",
+            stem + suffix + ".xlsx",
         )
     if fmt == "docx":
         return (
             word(p),
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            stem + ".docx",
+            stem + suffix + ".docx",
         )
     if fmt == "pdf":
-        return pdf(p), "application/pdf", stem + ".pdf"
+        return pdf(p, include_price), "application/pdf", stem + suffix + ".pdf"
     if fmt == "html":
         # 业主版：文件名直接写清项目与用途，方便转发与归档。
         pretty = re.sub(r"[^\w\u4e00-\u9fff\-]", "_", p.get("name", "项目"))[:24].strip("_") or "项目"
         return (
             scene_html(p),
             "text/html; charset=utf-8",
-            f"{pretty}_灯光情景演示_V{p['version']:02}.html",
+            f"{pretty}_灯光情景演示_V{p['version']:02}{suffix}.html",
         )
     if fmt == "panels":
         pretty = re.sub(r"[^\w\u4e00-\u9fff\-]", "_", p.get("name", "项目"))[:24].strip("_") or "项目"
         return (
             panel_engraving_html(p),
             "text/html; charset=utf-8",
-            f"{pretty}_面板刻字排版图_V{p['version']:02}.html",
+            f"{pretty}_面板刻字排版图_V{p['version']:02}{suffix}.html",
         )
     if fmt == "zip":
         b = BytesIO()
         with zipfile.ZipFile(b, "w", zipfile.ZIP_DEFLATED) as z:
             for f in ("json", "xlsx", "docx", "pdf", "html", "panels", "dxf"):
                 try:
-                    content, _, name = export_bytes(p, f)
+                    content, _, name = export_bytes(p, f, None, audience)
                 except ValueError:
                     if f == "dxf":
                         continue  # Legacy 2D projects have no source DXF.
                     raise
                 z.writestr(name, content)
             for level in range(1, int(p.get("floors") or 1) + 1):
-                content, _, name = export_bytes(p, "png", level)
+                content, _, name = export_bytes(p, "png", level, audience)
                 z.writestr(name, content)
             z.writestr(
                 "交付说明.txt",
                 label(p)
+                + ("\n交付对象：业主/施工（不含价）版；单价、小计、合计已清零。" if not include_price else "")
                 + "\n项目包不包含原始上传文件，仅包含结构化设计与生成资料。无真实 AI 实景、无照度验算，不可直接施工。",
             )
-        return b.getvalue(), "application/zip", stem + ".zip"
+        return b.getvalue(), "application/zip", stem + suffix + ".zip"
     raise ValueError("不支持此导出格式")

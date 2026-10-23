@@ -27,6 +27,8 @@ HIGH_RISK = [
     ("DELETE", re.compile(r"^/api/projects/[^/]+$")),
     ("DELETE", re.compile(r"^/api/projects/[^/]+/files/[^/]+$")),
     ("POST", re.compile(r"^/api/workbench/version/activate$")),
+    ("POST", re.compile(r"^/api/app/versions/[^/]+/rollback$")),
+    ("POST", re.compile(r"^/api/update/apply$")),
     ("POST", re.compile(r"^/api/products/sync$")),
     ("POST", re.compile(r"^/api/lighting3d/products/sync$")),
     ("POST", re.compile(r"^/api/knowledge/sync$")),

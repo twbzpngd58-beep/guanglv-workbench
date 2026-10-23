@@ -84,17 +84,17 @@ export function planArchitecture(design: Obj, project: Obj): ArchPlan {
   const panelsIn = devicesIn.filter((v) => v.type === "面板");
   const sensorsIn = devicesIn.filter((v) => v.type === "传感器");
 
-  if (!smart) warnings.push("项目还没设智能方案：请在项目信息里选「KNX 总线 / 无线 / 不做智能」，再生成架构。");
+  if (!smart) warnings.push("项目还没设智能方案：请在项目信息里选「无线 / KNX / 无（不做智能）」，再生成架构。");
 
   if (smart !== "KNX" && smart !== "无线") {
-    // 不做智能（或未设置）：不生成任何智能设备。
+    // 不做智能（按回路开闭）：不生成任何智能设备。
     checks.push({
-      item: "智能设备", need: smart ? "不做智能" : "智能方案未设置",
+      item: "智能设备", need: smart ? "不做智能（按回路开闭）" : "智能方案未设置",
       made: "0 台", ok: true,
       note: smart ? "灯具按回路开闭，不需要网关 / 面板 / 执行器" : "先设智能方案再生成",
     });
     return {
-      topology: smart ? "不做智能：灯具按回路开闭，情景按回路控灯" : "（智能方案未设置，未生成设备）",
+      topology: smart ? "不做智能（按回路开闭）：灯具按回路开闭，情景按回路控灯" : "（智能方案未设置，未生成设备）",
       devices: [], checks, warnings,
     };
   }

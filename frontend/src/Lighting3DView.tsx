@@ -22,6 +22,7 @@ import {
   PencilRuler,
 } from "lucide-react";
 import { api, uid, type Project, type Obj } from "./types";
+import { confirmDanger } from "./dangerConfirm";
 import { SPACE_CODES, ROLE_CODES, buildFixtureCode, nextSerial, positionsForSpace } from "./codes";
 import {
   addRow, addRowAt, batchChange, defaultSize, dupRow, payloadFromRows, removeRow, roomNames,
@@ -205,7 +206,14 @@ export function Lighting3DView({
 
   /* 上传 / 重新生成 */
   async function generate(file?: File | null, fileId?: string) {
-    if (has3d && !window.confirm("更换图纸会清除当前三维灯具、回路和场景编辑。确认继续？")) return;
+    if (has3d) {
+      const ok = await confirmDanger({
+        title: "更换图纸会清除当前三维灯具、回路和场景编辑",
+        detail: "重新生成后，三维里的灯具、回路与场景编辑需要重新布置；二维画布内容不受影响。",
+        confirmText: "确认更换",
+      });
+      if (!ok) return;
+    }
     setErr("");
     setUploading(true);
     try {
@@ -228,7 +236,12 @@ export function Lighting3DView({
 
   /* 按当前解析器重跑已有图纸（解析逻辑升级后不用重新上传 DXF） */
   async function regenerate() {
-    if (!window.confirm("重新解析图纸会清除当前三维灯具、回路和场景编辑。确认继续？")) return;
+    const ok = await confirmDanger({
+      title: "重新解析图纸会清除当前三维灯具、回路和场景编辑",
+      detail: "按当前解析器重跑这张图纸；三维里的灯具、回路与场景编辑需要重新布置，二维画布内容不受影响。",
+      confirmText: "确认重新解析",
+    });
+    if (!ok) return;
     setErr("");
     setUploading(true);
     try {
@@ -561,7 +574,7 @@ export function Lighting3DView({
         </h3>
         {drawer === "quote" ? (
           <>
-            {!reviewed ? <div className="gv3d-schemes">
+            {!reviewed && quote?.priceMode !== "generic" ? <div className="gv3d-schemes">
               {["缓亮缓灭", "开闭", "无线", "总线"].map((s) => (
                 <button
                   key={s}
@@ -580,7 +593,7 @@ export function Lighting3DView({
                   {s}
                 </button>
               ))}
-            </div> : <p>按项目智能方案出一套报价；审核通过后仅使用已确认的灯位。</p>}
+            </div> : <p>按项目智能方案出一套报价；复核通过后仅使用已确认的灯位。</p>}
             {!quote || quote.error ? (
               <p className="gv3d-al">{quote?.error || "正在读报价…"}</p>
             ) : (
@@ -600,7 +613,17 @@ export function Lighting3DView({
                       <tr key={i}>
                         <td>{r.code || "—"}</td>
                         <td>{r.name}</td>
-                        <td>{r.price ? "¥" + r.price : "缺价"}</td>
+                        <td>
+                          {r.priceMissing || r.price == null
+                            ? "—待补价"
+                            : "¥" + r.price}
+                          {r.priceSource ? (
+                            <small style={{ display: "block", opacity: 0.65 }}>
+                              {r.priceSource}
+                              {r.priceVersion ? " · " + r.priceVersion : ""}
+                            </small>
+                          ) : null}
+                        </td>
                         <td>
                           {r.qty}
                           {r.unit || ""}
@@ -611,6 +634,9 @@ export function Lighting3DView({
                   </tbody>
                 </table>
                 <div className="gv3d-tot">合计 ¥{quote.total}</div>
+                {quote.priceNote ? (
+                  <p className="gv3d-al">{quote.priceNote}</p>
+                ) : null}
                 <p className="gv3d-al">{quote.note}</p>
                 {(quote.warnings || []).length ? (
                   <p className="gv3d-al circuit-warn-text" role="alert">

@@ -40,7 +40,6 @@ import {
   HelpCircle,
   BookOpen,
   Sparkles,
-  ExternalLink,
   RefreshCw,
 } from "lucide-react";
 import { api, post, fmtDate, clone, type Project, type Obj } from "./types";
@@ -48,9 +47,14 @@ import { guessLevels } from "./floorDetect";
 import { levelSummary } from "./floors";
 import { Plan } from "./Plan";
 import { Workspace } from "./Workspace";
+import { ShellV2 } from "./ShellV2";
+import { AppVersionPanel } from "./AppVersionPanel";
+import { UpdatePanel } from "./UpdatePanel";
+import { FeatureAdminCard, FeatureRuntime } from "./featureFlags";
 import { ProductLibrary } from "./ProductLibrary";
 import "./styles.css";
 import { Button, Modal, Badge, Field, STATUS_MATCH } from "./ui";
+import { confirmDanger } from "./dangerConfirm";
 
 // 截止按北京时间；旧数据只有日期的按当天 23:59 算。
 const isOverdue = (dueAt?: string) => {
@@ -84,28 +88,14 @@ function App() {
     [activity, setActivity] = useState<Obj[]>([]),
     [products, setProducts] = useState<Obj[]>([]),
     [sceneTemplates, setSceneTemplates] = useState<Obj[]>([]),
-    [updateInfo, setUpdateInfo] = useState<Obj | null>(null),
-    [checkingUpdate, setCheckingUpdate] = useState(false),
     [health, setHealth] = useState<Obj>({}),
     [busy, setBusy] = useState(false),
+    // 外壳 v2：根入口默认就是 v2；?shell=old 回到旧壳（旧壳里可再切回新版）。
+    [shellV2, setShellV2] = useState(() => new URLSearchParams(location.search).get("shell") !== "old"),
     // 有新版可用时记下新的包名：只提示，不自动刷新页面。
     [updateAsset, setUpdateAsset] = useState("");
   const toastTimer = useRef<any>(null);
   const importRef = useRef<HTMLInputElement>(null);
-  const checkUpdate = async () => {
-    setCheckingUpdate(true);
-    try {
-      const r = await api<Obj>("/update/check");
-      setUpdateInfo(r);
-      if (r.error) notify(`检查更新失败：${r.error}`);
-      else if (r.hasUpdate) notify(`发现新版本 v${r.latest}，点「打开下载页」查看`);
-      else notify(`已是最新版本 v${r.current}`);
-    } catch (e: any) {
-      notify(`检查更新失败：${e.message}`);
-    } finally {
-      setCheckingUpdate(false);
-    }
-  };
   const notify = useCallback((s: string) => {
     setToast(s);
     clearTimeout(toastTimer.current);
@@ -174,11 +164,12 @@ function App() {
   }, [notify]);
   function open(id: string) {
     setActive(id);
-    history.replaceState(null, "", `?project=${id}`);
+    // 旧壳里打开项目时把 shell=old 带上，刷新/返回不会跳回新版壳
+    history.replaceState(null, "", `?project=${id}` + (shellV2 ? "" : "&shell=old"));
   }
   function close() {
     setActive(null);
-    history.replaceState(null, "", location.pathname);
+    history.replaceState(null, "", shellV2 ? location.pathname : `${location.pathname}?shell=old`);
     refresh();
   }
   const run = async (fn: () => Promise<any>, message: string) => {
@@ -194,12 +185,15 @@ function App() {
       setBusy(false);
     }
   };
-  const mutate = (p: Project, action: string) => {
-    if (
-      action === "delete" &&
-      !confirm(`永久删除「${p.name}」及其附件和历史记录？此操作不可撤销。`)
-    )
-      return;
+  const mutate = async (p: Project, action: string) => {
+    if (action === "delete") {
+      const ok = await confirmDanger({
+        title: `永久删除「${p.name}」？`,
+        detail: "项目附件与历史记录会一并删除，此操作不可撤销。",
+        confirmText: "确认删除",
+      });
+      if (!ok) return;
+    }
     run(
       () =>
         action === "delete"
@@ -266,6 +260,50 @@ function App() {
       color: "purple",
     },
   ];
+  if (shellV2 && !active) {
+    return (
+      <>
+        <ShellV2
+          projects={projects}
+          health={health}
+          products={products}
+          sceneTemplates={sceneTemplates}
+          onOpen={open}
+          onCreate={() => setModal("create")}
+          onNavigate={(p) => {
+            setShellV2(false);
+            setPage(p);
+            // 从 v2 进设置/项目库等旧页时明确进入旧壳，刷新后不会莫名跳回 v2
+            history.replaceState(null, "", `${location.pathname}?shell=old`);
+          }}
+          onOld={() => {
+            setShellV2(false);
+            setPage("dashboard");
+            history.replaceState(null, "", `${location.pathname}?shell=old`);
+          }}
+          notify={notify}
+        />
+        {modal === "create" && (
+          <CreateProject
+            onClose={() => setModal("")}
+            onCreated={(p) => {
+              setModal("");
+              open(p.id);
+              notify("项目已创建，开始你的设计");
+            }}
+            notify={notify}
+          />
+        )}
+        {toast && (
+          <div className="toast">
+            <CheckCircle2 size={18} />
+            {toast}
+          </div>
+        )}
+      </>
+    );
+  }
+
   if (active)
     return (
       <>
@@ -276,6 +314,7 @@ function App() {
           products={products}
           sceneTemplates={sceneTemplates}
           health={health}
+          shellV2={shellV2}
         />
         {toast && (
           <div className="toast">
@@ -343,6 +382,11 @@ function App() {
         <div className="nav-divider" />
         <div className="nav-caption">工具与支持</div>
         <nav>
+          <button onClick={() => { location.href = "?shell=v2"; }}>
+            <Sparkles size={18} />
+            <span>新版工作台</span>
+            <ArrowUpRight size={14} />
+          </button>
           <button onClick={() => setModal("guide")}>
             <BookOpen size={18} />
             <span>使用指南</span>
@@ -472,7 +516,7 @@ function App() {
                         </button>
                       </div>
                       <span className="banner-foot">
-                        空间识别 <i /> 灯光设计 <i /> 智能情景 <i /> 项目交付
+                        空间识别 <i /> 灯光设计 <i /> 智能情景 <i /> 复核与交付
                       </span>
                     </div>
                     <div className="hero-plan">
@@ -514,7 +558,7 @@ function App() {
                         </div>
                         {loaded ? (
                           <strong>
-                            {String(s.value).padStart(2, "0")}
+                            {s.value > 0 ? String(s.value).padStart(2, "0") : "0"}
                             <span>个项目</span>
                           </strong>
                         ) : (
@@ -679,10 +723,6 @@ function App() {
                         ? "试试其他项目名称或客户关键词。"
                         : "从一张户型图开始你的第一个灯光设计。"}
                     </p>
-                    <Button onClick={() => setModal("create")}>
-                      <Plus size={16} />
-                      新建项目
-                    </Button>
                   </div>
                 )}
               </section>
@@ -857,12 +897,12 @@ function App() {
                   <h3>模型与数据安全</h3>
                   <div className="notice">
                     <ShieldCheck size={18} />
-                    本机未保存任何云端密钥；上传的图纸仅作为画布底图，空间由人工框选，基础设计不依赖外部服务。
+                    本机未保存任何云端密钥；上传的图纸仅作为画布底图，识别结果需人工确认，基础设计不依赖外部服务。
                   </div>
                   <p className="body-copy">
-                    导入的图纸直接作为画布底图，不自动识别空间；空间由人工框选并命名，面积与尺寸需人工确认；DXF
-                    使用基础几何解析。图像输出为二维灯光示意，不是 AI
-                    实景图或照度计算。
+                    导入图片 / PDF 后自动识别空间边界；DXF 只解析基础几何，房间名、面积与语义属性需人工填写与校正。
+                    识别结果先以草稿出现，人工确认后才进入设计数据。图像输出为二维灯光示意，不是 AI
+                    实景图或照度计算，也不做照度验算。
                   </p>
                   <p className="body-copy">
                     替换模型请在后端 Provider
@@ -878,41 +918,8 @@ function App() {
                     <span>当前版本</span>
                     <b>v{health.version || __APP_VERSION__}</b>
                   </div>
-                  <div className="setting-row">
-                    <span>更新状态</span>
-                    <b>
-                      {!updateInfo
-                        ? "尚未检查"
-                        : updateInfo.error
-                          ? "检查失败"
-                          : updateInfo.hasUpdate
-                            ? `有新版本 v${updateInfo.latest}`
-                            : "已是最新"}
-                    </b>
-                  </div>
-                  <p className="body-copy">
-                    检查 GitHub 上有没有比这版更新的发行版。有新版本时打开下载页，按 README
-                    覆盖安装即可；项目数据放在 data 目录，覆盖代码不会动它。
-                  </p>
-                  <div className="update-actions">
-                    <Button disabled={checkingUpdate} onClick={checkUpdate}>
-                      {checkingUpdate ? "正在检查…" : "检查更新"} <RefreshCw size={15} />
-                    </Button>
-                    {updateInfo?.hasUpdate && (
-                      <a href={String(updateInfo.url || "")} target="_blank" rel="noreferrer">
-                        打开下载页 <ExternalLink size={14} />
-                      </a>
-                    )}
-                    {!!updateInfo?.error && (
-                      <small className="update-note">
-                        {String(updateInfo.error)}；不影响本机使用，可直接去
-                        <a href="https://github.com/twbzpngd58-beep/guanglv-workbench/releases" target="_blank" rel="noreferrer">
-                          Releases
-                        </a>
-                        看。
-                      </small>
-                    )}
-                  </div>
+                  <AppVersionPanel notify={notify} />
+                  <UpdatePanel notify={notify} />
                 </section>
                 <section className="white-panel">
                   <h3>关于与联系</h3>
@@ -934,6 +941,7 @@ function App() {
                     </a>
                   </div>
                 </section>
+                <FeatureAdminCard />
               </div>
             </>
           )}
@@ -1101,7 +1109,9 @@ function ProjectCard({
                   {[
                     ["duplicate", "复制项目", Copy],
                     ["versions", "新建版本", Layers3],
-                    ["archive", "归档项目", Archive],
+                    ...(p.status === "已归档"
+                      ? [["unarchive", "取消归档", Archive]]
+                      : [["archive", "归档项目", Archive]]),
                     ["delete", "删除项目", Trash2],
                   ].map(([k, t, I]: any) => (
                     <button
@@ -1359,11 +1369,11 @@ function CreateProject({
             >
               <option value="无线">做智能 · 无线（飞利浦）</option>
               <option value="KNX">做智能 · KNX 总线</option>
-              <option value="无">不做智能 · 普通平面图</option>
+              <option value="无">无（不做智能 · 按回路开闭）</option>
             </select>
             <small>
               {form.smart === "无"
-                ? "不做智能：不建情景，工作台保留普通平面图；灯具回路编号在「灯具配置」里维护"
+                ? "不做智能（按回路开闭）：不建智能设备与情景，灯具按回路开闭；回路编号在「灯具配置」里维护"
                 : form.smart === "KNX"
                   ? "KNX 总线：有线总线，逐灯调光调色温"
                   : "无线智能：品牌改用飞利浦（原 JOCO 方案停用）；新的灯具清单到位后逐灯选型"}
@@ -1513,6 +1523,7 @@ function CreateProject({
 }
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
+    <FeatureRuntime />
     <App />
   </React.StrictMode>,
 );

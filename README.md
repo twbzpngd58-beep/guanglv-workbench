@@ -8,7 +8,7 @@
 
 来自 **光律 GUANGLV**（晷季照明）—— 一套在真实照明项目里跑出来的出图工具，开源给你用。
 
-**当前版本 v1.3.1**：单用户免登录、空库启动，设置页可一键检查更新。
+**当前版本 v1.3.2**：单用户免登录、空库启动；设置页可检查更新并「立即更新」到新版（下载 → 校验 → 备份 → 覆盖 → 重启，数据不动）。
 
 ![三维灯光场景](docs/preview-3d.png)
 ![图纸解析与情景](docs/preview-plan.png)
@@ -141,9 +141,9 @@ python3 start.py --host 0.0.0.0     # 允许局域网访问（默认只监听本
 python3 start.py --rebuild          # 改了前端源码后重建
 ```
 
-## 检查更新
+## 检查更新 / 一键更新
 
-工作台设置页点「检查更新」，后端去 GitHub 问一次版本，三种口径依次回退：
+工作台「设置 → 版本与更新」点「检查更新」，后端去 GitHub 问一次版本，三种口径依次回退：
 
 1. 仓库的 latest release
 2. 仓库里版本号最大的 tag
@@ -156,6 +156,22 @@ python3 start.py --rebuild          # 改了前端源码后重建
 UPDATE_REPO=你的账号/guanglv-workbench
 ```
 
+**一键更新（1.3.2 起）**：检查到新版后点「立即更新到 vX」，工作台自己完成
+
+```
+下载 guanglv-workbench-X.tar.gz → SHA256 校验 → 备份当前版本
+→ 停服务 → 覆盖 backend/ frontend/ scripts/ 等程序文件 → 重启 → 自检版本号
+```
+
+`data/`（项目、附件、SQLite）和 `.env` 全程不动。设置页有实时进度；万一新版有问题，
+双击桌面「光律-回退版本.command」（或版本库里 `version_rollback.sh --to <id>`）就能退回。
+更新过程中页面会短暂断线，属于正常现象。
+
+**已经装了 1.3.1 或更早版本**：那些版本只会打开下载页，请到
+[Releases](https://github.com/twbzpngd58-beep/guanglv-workbench/releases) 下载
+`光律-更新.command`，双击运行（它会自动找安装目录、下载新包、校验、备份、替换、重启），
+升级到 1.3.2 之后就都有「立即更新」了。
+
 手动更新（仓库里 `frontend/dist/` 已构建好，覆盖代码不用装 Node）：
 
 ```bash
@@ -163,6 +179,23 @@ cd guanglv-workbench
 git pull            # 或者下载新版本压缩包覆盖
 python3 start.py    # 后端重启即生效；data/ 不动，项目还在
 ```
+
+只想检查不安装（脚本和设置页同一口径）：
+
+```bash
+python3 scripts/apply_update.py --check
+```
+
+## 发版（维护者）
+
+```bash
+python3 scripts/build_release.py            # 生成 dist-release/：发行包 + SHA256SUMS + 老用户更新脚本
+git tag v1.3.2 && git push origin main --tags
+gh release create v1.3.2 dist-release/* --notes "…"
+```
+
+`build_release.py` 只打包程序资产（不含 `data/`、`.env`、`.venv/`、`node_modules/`），
+前端用的是已经构建好的 `frontend/dist/`，所以发行包解压即用、不需要 Node。
 
 ## 数据与配置
 

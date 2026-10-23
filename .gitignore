@@ -9,3 +9,10 @@ __pycache__/
 .pytest_cache/
 frontend/test-results/
 frontend/playwright-report/
+
+# 施工备份与本地发版产物（部署目录里会有，不进仓库）
+*.bak-*
+.tools/
+frontend/tsconfig.tsbuildinfo
+dist-release/
+.DS_Store

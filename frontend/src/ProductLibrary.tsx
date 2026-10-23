@@ -91,7 +91,7 @@ export function ProductLibrary({
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">PRODUCT LIBRARY · 知识库产品库</div>
+          <div className="eyebrow">PRODUCT LIBRARY · 产品库</div>
           <h1>为每个空间，找到合适的光。</h1>
           <p>
             产品来自随源码分发的产品资料：统一灯具报价表 + 各品牌产品清单。
@@ -100,7 +100,7 @@ export function ProductLibrary({
         </div>
         <Button disabled={syncing} onClick={syncLibrary}>
           {syncing ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
-          {syncing ? "同步中…" : "从知识库同步"}
+          {syncing ? "同步中…" : "同步产品资料"}
         </Button>
       </div>
 
@@ -113,7 +113,7 @@ export function ProductLibrary({
           </b>
           <span>
             {(status?.warnings || []).join("；") ||
-              "关联产品后，可在项目灯具表中修改全部参数；知识库零售价不会被标记为已核实价格。"}
+              "关联产品后，可在项目灯具表中修改全部参数；产品资料里的零售价不会被标记为已核实价格。"}
           </span>
         </div>
       </div>
@@ -177,7 +177,7 @@ export function ProductLibrary({
         </p>
       ) : !items.length ? (
         <p className="subtle">
-          没有匹配的产品。产品库来自知识库，可点右上「从知识库同步」重新灌一次。
+          没有匹配的产品。产品库来自产品资料，可点右上「同步产品资料」重新灌一次。
         </p>
       ) : (
         <div className="product-library">
@@ -209,7 +209,7 @@ export function ProductLibrary({
               <div>
                 <b>
                   {p.price != null ? `¥ ${p.price}` : "待补价"}{" "}
-                  <small>{p.price != null ? "/ 知识库零售价" : "/ 资料里没写"}</small>
+                  <small>{p.price != null ? "/ 产品资料零售价" : "/ 资料里没写"}</small>
                 </b>
                 <Button
                   onClick={() => {

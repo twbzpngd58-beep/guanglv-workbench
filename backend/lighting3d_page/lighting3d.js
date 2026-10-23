@@ -208,6 +208,47 @@
 
     buildFurniture();
 
+    // 空间名落点：优先面积质心；质心落在轮廓外时退回扫描线内部点（与 Ueyi3D 同一口径）。
+    function labelAnchor(poly) {
+      if (!Array.isArray(poly) || poly.length < 3) return null;
+      let a = 0, cx = 0, cz = 0;
+      for (let i = 0; i < poly.length; i++) {
+        const p = poly[i], q = poly[(i + 1) % poly.length];
+        const cr = p[0] * q[1] - q[0] * p[1];
+        a += cr; cx += (p[0] + q[0]) * cr; cz += (p[1] + q[1]) * cr;
+      }
+      a *= 0.5;
+      let x = Math.abs(a) > 1e-9 ? cx / (6 * a) : poly[0][0];
+      let z = Math.abs(a) > 1e-9 ? cz / (6 * a) : poly[0][1];
+      const inside = (px, pz) => {
+        let ins = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+          const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+          if (((yi > pz) !== (yj > pz)) && (px < (xj - xi) * (pz - yi) / (yj - yi) + xi)) ins = !ins;
+        }
+        return ins;
+      };
+      if (inside(x, z)) return [x, z];
+      const zs = poly.map(p => p[1]);
+      const zz = Math.min(Math.max(z, Math.min.apply(null, zs) + 0.001), Math.max.apply(null, zs) - 0.001);
+      const xs = [];
+      for (let i = 0; i < poly.length; i++) {
+        const p = poly[i], q = poly[(i + 1) % poly.length];
+        if ((p[1] > zz) !== (q[1] > zz)) xs.push(p[0] + (zz - p[1]) * (q[0] - p[0]) / (q[1] - p[1]));
+      }
+      xs.sort((m, n) => m - n);
+      let best = null;
+      for (let i = 0; i < xs.length - 1; i += 2) {
+        const d = xs[i + 1] - xs[i];
+        if (d > 0 && (!best || d > best[1] - best[0])) best = [xs[i], xs[i + 1]];
+      }
+      if (best) {
+        const mx = (best[0] + best[1]) / 2;
+        if (inside(mx, zz)) return [mx, zz];
+      }
+      return [x, z];
+    }
+
     rooms.forEach((r, ridx) => {
       const cv = document.createElement("canvas"); cv.width = 256; cv.height = 64;
       const g = cv.getContext("2d");
@@ -215,8 +256,9 @@
       g.textAlign = "center"; g.textBaseline = "middle";
       g.fillStyle = "#ffffff"; g.fillText(r.name || "", 128, 34);
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false }));
-      sp.position.set(r.cx, 1.75, r.cz);
-      sp.scale.set(1.8, 0.45, 1);
+      const la = labelAnchor(r.poly) || [r.cx, r.cz];
+      sp.position.set(la[0], 1.75, la[1]);
+      sp.scale.set(0.72, 0.18, 1);   // 初始值；渲染循环里按距离换算成约 20px
       sp.userData.room = ridx;      // 点空间名标签 = 进这个空间
       G.labels.add(sp);
     });
@@ -1466,7 +1508,17 @@
           controls.target.lerpVectors(fly.tFrom, fly.tTo, e);
           if (fly.t >= 1) fly = null;
         }
-        controls.update(); renderer.render(scene, cam);
+        controls.update();
+        // 空间名：按相机距离换算成约 20px 屏幕高度——拉近不顶满屏，拉远也看得见（2026-10-23）
+        var tanHalf = Math.tan((cam.fov || 45) * Math.PI / 360);
+        var viewH = renderer.domElement.clientHeight || 600;
+        G.labels.children.forEach(function (sp) {
+          if (!sp.visible) return;
+          var dist = cam.position.distanceTo(sp.position);
+          var h = Math.max(0.14, Math.min(0.8, (2 * dist * tanHalf) * 20 / viewH));
+          sp.scale.set(h * 4, h, 1);
+        });
+        renderer.render(scene, cam);
       })(performance.now());
     }
     window.__ready = true;

@@ -1426,7 +1426,7 @@ hr {
   color: #969088;
   margin-bottom: 20px;
 }
-/* 产品库（知识库来源）：筛选工具条 + 来源标注 + 分页 */
+/* 产品库（产品资料来源）：筛选工具条 + 来源标注 + 分页 */
 .notice > div > span {
   display: block;
   margin-top: 4px;
@@ -3352,7 +3352,7 @@ hr {
   padding: 6px 8px;
   margin: -8px 0 12px;
 }
-/* 复核前置条件（与 cooperation.gate_check 同口径）：签名前要先在「设计师协作」做的事 */
+/* 复核前置条件（与后端复核门禁同口径）：签名前要先做完卡片上写的条件 */
 .review-cards .review-prereq {
   display: block;
   font-size: 10px;
@@ -5127,6 +5127,67 @@ hr {
 .scene-model-viewport { position: absolute; inset: 0; }
 /* 三维 = 优邑珺和渲染内核（iframe）。编辑只在二维，这里只负责看。 */
 .scene-model-iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: #0d0f12; }
+
+/* ── D-05 手机（≤700px）三维竖屏全屏 ────────────────────────────────────────
+ * 落地口径：只在「外壳 v2 + 情景页 + 正在看 3D」时生效（根节点 .scene3d-full 由
+ * Workspace.tsx 的 3D 分支打标，不改变任何分支逻辑），把工作台 chrome（侧栏/页头/
+ * 工具栏）收起，画布吃满宽度——手机上 3D iframe 才有 ≥360px 可用宽度。
+ * iframe 内部浮层（HUD/面板/工具按钮）由 shell.html 的窄容器 media query 自适应收起。
+ * 不碰 2D 平面图、不碰桌面布局。 */
+@media (max-width: 700px) {
+  .studio-shell.scene3d-full .wsv2-rail { display: none !important; }
+  .studio-shell.scene3d-full .studio-content,
+  .studio-shell.scene3d-full .studio-content.scene-page {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    height: calc(100vh - 52px - 24px) !important; /* 顶栏 52 + 底部状态栏 24，竖屏全屏 */
+    min-height: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  .studio-shell.scene3d-full .page-heading,
+  .studio-shell.scene3d-full .heading-line,
+  .studio-shell.scene3d-full .notice,
+  .studio-shell.scene3d-full .scene-canvas-title,
+  .studio-shell.scene3d-full .scene-tabs { display: none !important; }
+  .studio-shell.scene3d-full .scene-workspace,
+  .studio-shell.scene3d-full .scene-stage {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    min-height: 0 !important;
+  }
+  .studio-shell.scene3d-full .scene-stage > .scene-rail,
+  .studio-shell.scene3d-full .scene-stage > .scene-insp { display: none !important; }
+  .studio-shell.scene3d-full .scene-workspace > .scene-canvas,
+  .studio-shell.scene3d-full .scene-stage > .scene-center,
+  .studio-shell.scene3d-full .scene-center > .scene-canvas {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+  }
+  .studio-shell.scene3d-full .scene-model-3d,
+  .studio-shell.scene3d-full .scene-canvas > .scene-model-3d,
+  .studio-shell.scene3d-full .scene-center .scene-canvas > .scene-model-3d {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+  }
+  .studio-shell.scene3d-full .scene-model-iframe { width: 100% !important; height: 100% !important; }
+}
 .scene-model-viewport canvas { display: block; width: 100%; height: 100%; cursor: grab; }
 .scene-model-viewport canvas:active { cursor: grabbing; }
 .scene-model-caption { position: absolute; z-index: 1; left: 14px; bottom: 14px; max-width: calc(100% - 28px); padding: 7px 11px; border-radius: 7px; color: #edf4e9; background: #152720e6; font-size: 12px; pointer-events: none; }
@@ -6032,7 +6093,7 @@ hr {
 .task-quote th, .task-quote td { border: 1px solid #d7dbd8; padding: .25rem .6rem; text-align: left; }
 .task-deliver { border: 1px solid #d7dbd8; border-radius: .4rem; padding: .6rem .8rem; margin: .8rem 0; }
 
-/* 第⑤刀：渠道台账、知识库迁入 */
+/* 第⑤刀：渠道台账、产品资料迁入 */
 .owner-partners { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
 .owner-partners article { border: 1px solid #d7dbd8; border-radius: .4rem; padding: .5rem .7rem; }
 .owner-partners details { margin-top: .3rem; }
@@ -6756,8 +6817,608 @@ table.owner-clients td small { white-space:normal; }
   padding: 0;
   margin: 0 3px;
 }
+/* 一键更新进度：下载 / 校验 / 快照 / 覆盖 / 重启，这一段是唯一会「服务掉线」的操作，
+   所以进度条要一直在眼前，别让人以为页面坏了。 */
+.update-progress {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #e6e0d4;
+  border-radius: 10px;
+  background: #fbf9f4;
+}
+.update-progress-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #4b453c;
+}
+.update-progress-head b {
+  font-weight: 600;
+}
+.update-progress-head span {
+  margin-left: auto;
+  color: #9b968e;
+  font-variant-numeric: tabular-nums;
+}
+.update-bar {
+  margin: 9px 0 8px;
+  height: 5px;
+  border-radius: 99px;
+  background: #ece6da;
+  overflow: hidden;
+}
+.update-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #b08a4a, #d8b978);
+  transition: width 0.35s ease;
+}
+.update-progress p {
+  margin: 0;
+  font-size: 12px;
+  color: #6d655a;
+}
+.update-progress small {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  color: #a39c92;
+}
 @media (max-width: 640px) {
   .contact-cards {
     grid-template-columns: 1fr;
   }
 }
+
+/* ===== 2026-10-23 D-10 B9/C9 + D-09（frontend-delivery）：交付页导出抽屉、去价选择、价格门入口 ===== */
+.deliver-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.deliver-freeze-reason {
+  font-size: 10px;
+  line-height: 1.8;
+  color: #8a5a2b;
+  background: #f7efe4;
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin-top: 10px;
+}
+.review-summary .draft-export-note {
+  font-size: 10px;
+  line-height: 1.8;
+  color: #8a5a2b;
+  background: #f7efe4;
+  border-radius: 4px;
+  padding: 6px 9px;
+  margin-top: 8px;
+}
+.export-audience-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: #8a6a3a;
+  background: #f4ecdd;
+  border: 1px solid #e4d6bd;
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.export-audience-chip:hover {
+  background: #efe4cd;
+}
+.export-audience-note {
+  display: block;
+  font-size: 9px;
+  color: #9b7a45;
+  margin-top: 2px;
+}
+.export-audience-pick {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+.export-audience-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 13px;
+  cursor: pointer;
+}
+.export-audience-option b {
+  font-size: 12px;
+  font-weight: 500;
+  color: #786d5e;
+}
+.export-audience-option small {
+  font-size: 9px;
+  line-height: 1.7;
+  color: #a39a8d;
+}
+.export-audience-option.on {
+  border-color: #c79a4f;
+  background: #fbf6ec;
+  box-shadow: inset 0 0 0 1px #c79a4f;
+}
+.export-grid-drawer {
+  margin: 14px 0;
+  max-height: 46vh;
+  overflow: auto;
+  padding-right: 4px;
+}
+.export-internal-warn {
+  font-size: 10px;
+  line-height: 1.7;
+  color: #b04a2f;
+  margin: 8px 0 0;
+}
+.price-batch-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0;
+  font-size: 10px;
+  color: #8e816f;
+}
+.price-batch-list {
+  max-height: 42vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #ffffff;
+}
+.price-batch-row {
+  display: grid;
+  grid-template-columns: 22px 86px 1fr 96px 64px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border-bottom: 1px solid #efebe4;
+  font-size: 11px;
+  color: #786d5e;
+  cursor: pointer;
+}
+.price-batch-row:last-child {
+  border-bottom: 0;
+}
+.price-batch-row.ok {
+  background: #f6f4ef;
+}
+.price-batch-code {
+  font-size: 10px;
+  color: #8e816f;
+}
+.price-batch-name small {
+  display: block;
+  font-size: 9px;
+  color: #a89e90;
+  line-height: 1.6;
+}
+.price-batch-price {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+.price-batch-row .badge {
+  justify-self: end;
+}
+.review-gate-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.review-gate-error > div {
+  flex: 1;
+}
+.review-gate-error b {
+  display: block;
+  margin-bottom: 2px;
+}
+.review-gate-error span {
+  font-size: 11px;
+  line-height: 1.7;
+}
+.review-gate-error .btn {
+  align-self: center;
+  white-space: nowrap;
+}
+/* shell v2 深色交付页：新控件跟随深色面板 */
+.wsv2 .studio-content .export-audience-option {
+  background: #202024;
+  border-color: #3a3a41;
+  color: #e9e3d6;
+}
+.wsv2 .studio-content .export-audience-option b {
+  color: #e9e3d6;
+}
+.wsv2 .studio-content .export-audience-option small {
+  color: #9c9384;
+}
+.wsv2 .studio-content .export-audience-option.on {
+  background: #2a2419;
+  border-color: #5a4a2e;
+  box-shadow: inset 0 0 0 1px #5a4a2e;
+}
+.wsv2 .studio-content .price-batch-list {
+  background: #1a1a1d;
+  border-color: #2d2d33;
+}
+.wsv2 .studio-content .price-batch-row {
+  border-bottom-color: #2d2d33;
+  color: #c9c1b2;
+}
+.wsv2 .studio-content .price-batch-row.ok {
+  background: #21201c;
+}
+.wsv2 .studio-content .price-batch-code,
+.wsv2 .studio-content .price-batch-name small {
+  color: #8e8678;
+}
+.wsv2 .studio-content .export-audience-chip {
+  background: #2a2419;
+  border-color: #5a4a2e;
+  color: #e3bf7f;
+}
+.wsv2 .studio-content .export-audience-note {
+  color: #c9a05f;
+}
+.wsv2 .studio-content .deliver-freeze-reason,
+.wsv2 .studio-content .review-summary .draft-export-note {
+  background: #2a2419;
+  color: #d8ae72;
+}
+.wsv2 .studio-content .export-internal-warn {
+  color: #d98b6d;
+}
+.wsv2 .studio-content .review-gate-error,
+.wsv2 .studio-content .pricing-gate {
+  background: #2a1d17;
+  border-color: #5a3a2b;
+  color: #e0a98c;
+}
+/* shell v2 的白色弹窗会继承深色正文色，标题/说明发灰：弹窗内恢复浅底深字（D-10 新抽屉同受益） */
+.wsv2 .modal {
+  color: #3d3730;
+}
+.wsv2 .modal h2 {
+  color: #3d3730;
+}
+.wsv2 .modal .modal-head p {
+  color: #8e8678;
+}
+.wsv2 .modal .modal-head .icon-btn {
+  color: #786d5e;
+}
+
+/* ==========================================================================
+   batch4 · 1.3.4 体验批
+   D-12 B7 移动端（旧壳 5 页签横滚+渐隐 / 旧首页侧栏 / 首屏画布优先）
+   D-14 C4 可读性（旧首页首屏字号 ≥12px、次要文本对比度 ≥4.5:1、金额等宽右对齐）
+   D-15 C2 v2 首页空库（1 主 CTA、无 00）+ C8 危险操作统一确认弹窗
+   全部收在本段；3D 段与交付页段不动（其他队负责）。
+   ========================================================================== */
+
+/* ---------- D-14 C4：字号（旧首页首屏整组抬到 12px 起） ---------- */
+.app-shell .topbar > div,
+.app-shell .topbar .local-status { font-size: 12px; }
+.app-shell .sidebar .nav-caption,
+.app-shell .sidebar .nav-caption span { font-size: 12px; }
+.app-shell .sidebar nav button { font-size: 12px; }
+.app-shell .sidebar .offline-note { font-size: 12px; }
+.app-shell .sidebar .offline-note p,
+.app-shell .sidebar .offline-note small { font-size: 12px; line-height: 1.6; }
+.app-shell .sidebar .workspace-switch b,
+.app-shell .sidebar .workspace-switch small { font-size: 12px; }
+.app-shell .sidebar .user-profile b,
+.app-shell .sidebar .user-profile small { font-size: 12px; }
+.app-shell .page-heading .eyebrow { font-size: 12px; }
+.app-shell .page-heading p { font-size: 12px; }
+.app-shell .welcome-banner .mini-kicker { font-size: 12px; letter-spacing: 1.1px; }
+.app-shell .welcome-banner .banner-copy p { font-size: 12px; }
+.app-shell .welcome-banner .banner-copy .text-link { font-size: 12px; }
+.app-shell .welcome-banner .banner-foot { font-size: 12px; }
+.app-shell .welcome-banner .floating-label b { font-size: 12px; }
+.app-shell .welcome-banner .floating-label small { font-size: 12px; line-height: 1.5; }
+.app-shell .welcome-banner .plan-caption,
+.app-shell .welcome-banner .plan-caption span { font-size: 12px; }
+.app-shell .stats-grid .stat-card > div > span:first-child { font-size: 12px; }
+.app-shell .stats-grid .stat-card strong span { font-size: 12px; }
+.app-shell .stats-grid .stat-card small { font-size: 12px; }
+.app-shell .section-heading h2 span { font-size: 12px; }
+.app-shell .section-heading > span,
+.app-shell .section-heading .subtle { font-size: 12px; }
+.app-shell .project-toolbar .project-tabs button,
+.app-shell .project-toolbar .tab-arch,
+.app-shell .project-toolbar select,
+.app-shell .project-toolbar .search-field input { font-size: 12px; }
+.app-shell .project-card .project-code,
+.app-shell .project-card .project-meta span,
+.app-shell .project-card .project-review small,
+.app-shell .project-card .project-card-foot { font-size: 12px; }
+.app-shell .badge { font-size: 12px; }
+.app-shell .btn { font-size: 12px; }
+.app-shell .text-link { font-size: 12px; }
+.app-shell .avatar.small,
+.app-shell .workspace-avatar { font-size: 12px; }
+.app-shell .empty-state h3 { font-size: 15px; }
+.app-shell .empty-state p { font-size: 12px; }
+
+/* ---------- D-14 C4：对比度（次要文本压深；白底/米底均 ≥4.5:1，实测见回执） ---------- */
+.app-shell .page-heading .eyebrow { color: #5f5a52; }
+.app-shell .page-heading p { color: #5b5449; }
+.app-shell .welcome-banner .mini-kicker { color: #6a5f4b; }
+.app-shell .welcome-banner .banner-copy p { color: #5b5449; }
+.app-shell .welcome-banner .banner-copy .text-link { color: #5b5449; }
+.app-shell .welcome-banner .banner-foot { color: #5b5449; }
+.app-shell .welcome-banner .floating-label small { color: #5b5449; }
+.app-shell .welcome-banner .plan-caption,
+.app-shell .welcome-banner .plan-caption span { color: #5b5449; }
+.app-shell .stats-grid .stat-card > div > span:first-child { color: #4f4a43; }
+.app-shell .stats-grid .stat-card small { color: #5b5449; }
+.app-shell .stats-grid .stat-card strong span { color: #5b5449; }
+.app-shell .section-heading > span,
+.app-shell .section-heading .subtle { color: #5b5449; }
+.app-shell .project-toolbar .project-tabs button { color: #5b5449; }
+.app-shell .project-toolbar .project-tabs button.active { color: #6a4f26; }
+.app-shell .project-toolbar .tab-arch { color: #5b5449; border-color: #b9b2a5; }
+.app-shell .project-toolbar .tab-arch.on { color: #6a4f26; }
+.app-shell .project-toolbar select { color: #4f4a43; }
+.app-shell .text-link { color: #5b5449; }
+.app-shell .project-card .project-code,
+.app-shell .project-card .project-meta span,
+.app-shell .project-card .project-review small,
+.app-shell .project-card .project-card-foot { color: #5b5449; }
+.app-shell .sidebar .nav-caption,
+.app-shell .sidebar .nav-caption span { color: #5b5449; }
+.app-shell .sidebar nav button { color: #5b5449; }
+.app-shell .sidebar nav button.active { color: #6a4f26; }
+.app-shell .sidebar .offline-note,
+.app-shell .sidebar .offline-note p,
+.app-shell .sidebar .offline-note small { color: #5b5449; }
+.app-shell .topbar .local-status { color: #5b5449; }
+/* 首屏最后两个非 SVG 小字：侧栏品牌英文 tagline 与导航计数徽标 */
+.app-shell .sidebar .brand em { font-size: 12px; color: #5b5449; letter-spacing: .8px; }
+.app-shell .sidebar nav button small { font-size: 12px; color: #5b5449; }
+/* 抽样复测发现的其它次要文本（工作空间切换、顶栏面包屑、头像字、徽章） */
+.app-shell .sidebar .workspace-switch small,
+.app-shell .sidebar .workspace-switch b { color: #4f4a43; }
+.app-shell .topbar > div { color: #5b5449; }
+.app-shell .topbar > div b { color: #38342e; }
+.app-shell .sidebar .user-profile b { color: #4f4a43; }
+.app-shell .sidebar .user-profile small { color: #5b5449; }
+.app-shell .avatar,
+.app-shell .avatar.small,
+.app-shell .workspace-avatar { color: #55462f; }
+.app-shell .badge { color: #5b5449; }
+.app-shell .badge.gray { color: #5b5449; }
+.app-shell .badge.amber { color: #6a5324; }
+.app-shell .badge.green { color: #4d5a45; }
+
+/* ---------- D-14 C4：金额等宽 + 右对齐（灯具清单价格列、参考合计、右栏零售价） ---------- */
+.data-table td.amount {
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+.data-table th.amount { text-align: right; }
+.quote-summary strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  display: inline-block;
+  min-width: 132px;
+  text-align: right;
+}
+.quote-summary > div { justify-content: flex-end; }
+.wsv2 .studio-content .wsv2-ikv .wsv2-iinput[type="number"] {
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- D-15 C8：危险操作统一确认弹窗（Workspace.tsx askDanger 唯一出口） ---------- */
+.confirm-modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(28, 25, 21, 0.46);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.confirm-modal {
+  width: min(430px, 100%);
+  background: #ffffff;
+  border: 1px solid #e2ded7;
+  border-radius: 12px;
+  box-shadow: 0 24px 60px rgba(30, 25, 18, 0.28);
+  padding: 20px 20px 16px;
+}
+.confirm-modal-head { display: flex; align-items: center; gap: 9px; }
+.confirm-modal-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #f7ece9;
+  color: #b4554a;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.confirm-modal-head h3 { margin: 0; font-size: 15px; font-weight: 550; color: #2f2b25; }
+.confirm-modal-detail { margin: 12px 0 0; font-size: 12px; line-height: 1.75; color: #5b5449; }
+.confirm-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.confirm-modal-actions .btn { min-height: 34px; font-size: 12px; padding: 0 14px; }
+.confirm-modal-actions .btn.danger {
+  background: #b4554a;
+  border: 1px solid #9c463d;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.confirm-modal-actions .btn.danger:hover { background: #a34a40; color: #ffffff; }
+
+/* ---------- D-15 C2：v2 首页空库首屏（一个主 CTA + 一处空态，零数据不出现 00） ---------- */
+.sv2 .sv2-emptyhome {
+  margin: 22px 0 8px;
+  border: 1px dashed #3c3c43;
+  background: #17171a;
+  border-radius: 10px;
+  padding: 30px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+.sv2 .sv2-emptyhome .sv2-eh-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #24242a;
+  color: #c79a4f;
+  display: grid;
+  place-items: center;
+}
+.sv2 .sv2-emptyhome b { font-size: 15px; color: #e9e3d6; font-weight: 600; }
+.sv2 .sv2-emptyhome p { margin: 0; font-size: 12px; line-height: 1.8; color: #9a938a; max-width: 480px; }
+
+/* ---------- D-12 B7：390 移动端 ---------- */
+@media (max-width: 650px) {
+  /* 旧首页：左侧 58–72px 图标栏改底部横条，导航仍可达，横向让出全部宽度 */
+  .sidebar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100% !important;
+    height: 56px;
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    padding: 0 8px;
+    border-right: 0;
+    border-top: 1px solid #e2ded7;
+    background: #fbfaf8;
+    z-index: 70;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .sidebar .brand,
+  .sidebar .workspace-switch,
+  .sidebar .nav-caption,
+  .sidebar .nav-divider,
+  .sidebar .sidebar-bottom { display: none !important; }
+  .sidebar nav {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 2px;
+    margin: 0 !important;
+  }
+  .sidebar nav button {
+    width: 44px;
+    height: 44px;
+    padding: 0 !important;
+    justify-content: center;
+    flex: none;
+  }
+  .main-shell { margin-left: 0 !important; }
+  .main-content { padding: 14px 12px 78px !important; }
+  .topbar { height: 50px !important; padding: 0 12px !important; }
+  .app-shell .welcome-banner { min-height: 0; }
+
+  /* 旧项目壳：5 个页签横向滚动 + 左右渐隐（.tabbar-fade-l/r 由 Workspace.tsx 按 scrollLeft 切换） */
+  .studio-shell:not(.wsv2) > .studio-tabbar {
+    position: relative;
+    padding: 0 6px;
+    justify-content: flex-start;
+  }
+  .studio-shell:not(.wsv2) > .studio-tabbar > div {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    gap: 8px;
+  }
+  .studio-shell:not(.wsv2) > .studio-tabbar > div::-webkit-scrollbar { display: none; }
+  .studio-shell:not(.wsv2) > .studio-tabbar button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    font-size: 12px;
+    gap: 5px;
+    padding: 0 2px;
+  }
+  .studio-shell:not(.wsv2) > .studio-tabbar.tabbar-fade-r::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 1px;
+    width: 36px;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0), #ffffff 72%);
+    pointer-events: none;
+  }
+  .studio-shell:not(.wsv2) > .studio-tabbar.tabbar-fade-l::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 1px;
+    width: 30px;
+    background: linear-gradient(270deg, rgba(255, 255, 255, 0), #ffffff 72%);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* 首屏画布优先：横幅/进度移到画布下方（旧壳与 v2 壳都只在小屏生效，桌面不变） */
+  .studio-shell:not(.wsv2) > .notice,
+  .studio-shell:not(.wsv2) > .drawing-progress { order: 5; }
+  .studio-shell:not(.wsv2) > .studio-footer { order: 6; }
+  .studio-shell.wsv2 > .notice,
+  .studio-shell.wsv2 > .drawing-progress { order: 5; }
+  .studio-shell.wsv2 > .editor-toolbar { order: 0; }
+  .studio-shell.wsv2 > .editor-layout { order: 1; }
+  .studio-shell:not(.wsv2) > .editor-toolbar { flex-wrap: wrap; padding: 8px; gap: 6px; }
+}
+
+/* 设置 · 版本与更新：本机版本历史 / 回退 */
+.appver { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.appver-loading { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); padding: 6px 0; }
+.appver-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 12px 0 6px; }
+.appver-head b { font-size: 13px; color: var(--ink); }
+.appver-head span { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.appver-history-head { margin-top: 16px; }
+.appver-notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.appver-notes li { padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: #faf9f7; }
+.appver-notes li b { display: block; font-size: 12px; color: var(--ink); margin-bottom: 2px; }
+.appver-notes li span { display: block; font-size: 11.5px; color: var(--muted); line-height: 1.55; }
+.appver-hint { font-size: 11.5px; color: var(--muted); line-height: 1.6; margin: 6px 0 0; }
+.appver-hint code { background: #f1efeb; padding: 0 4px; border-radius: 4px; font-size: 11px; }
+.appver-row { display: flex; gap: 8px; align-items: center; margin-top: 9px; }
+.appver-row select { flex: 1; min-width: 0; padding: 8px 10px; font-size: 12px; background: #fff; }
+.appver-row button { flex: 0 0 auto; white-space: nowrap; }
+.appver-note { margin: 8px 0 0; padding: 8px 10px; background: #faf9f7; border: 1px solid var(--line); border-radius: 8px; font-size: 11.5px; color: #6f6a63; line-height: 1.55; max-height: 92px; overflow: auto; }
+.appver-error { display: flex; gap: 6px; align-items: flex-start; color: #b23a3a; font-size: 12px; line-height: 1.5; margin-top: 8px; }
+.appver-error button { color: #8a5a19; text-decoration: underline; }
+.appver-overlay { position: fixed; inset: 0; z-index: 300; display: flex; align-items: center; justify-content: center; background: rgba(24,21,17,.46); backdrop-filter: blur(3px); }
+.appver-overlay > div { width: min(360px, calc(100vw - 40px)); padding: 24px 26px; border-radius: 16px; background: #fff; box-shadow: 0 24px 70px rgba(0,0,0,.25); text-align: center; }
+.appver-overlay b { display: block; margin-top: 10px; font-size: 15px; color: var(--ink); }
+.appver-overlay p { margin: 6px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }

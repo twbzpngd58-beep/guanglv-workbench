@@ -428,7 +428,7 @@ export function isAutoFixtureName(name?: string): boolean {
   return Object.values(DEFAULT_FIXTURE_NAME).includes(n)
     || n === "防眩射灯" || n === "防眩筒灯" || n === "线性灯带";
 }
-/** 灯具类型 → 默认型号：只给能确定的两类，其他留空让用户从知识库选（旧版一律 DL-07）。 */
+/** 灯具类型 → 默认型号：只给能确定的两类，其他留空让用户从产品资料选（旧版一律 DL-07）。 */
 export function defaultFixtureModel(type: string): string {
   const t = type || "";
   if (t.includes("灯带")) return "ST-01";
@@ -592,12 +592,12 @@ export function applyColorMode(f: Obj, mode: ColorMode): void {
 }
 
 /* 色温口径：手动布灯默认单色 3000K；偏离（双色 / 彩色 / 非 3000K）必须写原因。
- * 导入或知识库没给色温的灯 = 「待核」：内部先用 3000K 占位（后端要求上下限是数字），
+ * 导入或产品资料没给色温的灯 = 「待核」：内部先用 3000K 占位（后端要求上下限是数字），
  * 界面与导出一律显示「待核」，不再猜 2700/6500；人工改过光源类型或色温即解除待核。 */
 export const CCT_PENDING_LABEL = "待核";
 export const CCT_PLACEHOLDER = 3000;
 
-/** 色温是否待核（导入 / 知识库缺色温）。 */
+/** 色温是否待核（导入 / 产品资料缺色温）。 */
 export const isCctPending = (f: Obj): boolean => !!(f && f.cctPending);
 
 /** 偏离默认（单色 3000K）需要写原因；待核灯另走待核清单，不算偏离。 */
@@ -614,7 +614,7 @@ export function cctText(f: Obj): string {
   return `${f.cctMin}–${f.cctMax}K`;
 }
 
-/** 套用知识库产品：产品没色温就落成「待核」占位，不把 null 写进灯具（后端会拒存）。 */
+/** 套用产品资料里的产品：产品没色温就落成「待核」占位，不把 null 写进灯具（后端会拒存）。 */
 export function applyProductCct(f: Obj, prod: Obj): void {
   const lo = Number(prod?.cctMin);
   const hi = Number(prod?.cctMax);
@@ -629,6 +629,30 @@ export function applyProductCct(f: Obj, prod: Obj): void {
     return;
   }
   delete f.cctPending;
+}
+
+/** 选品写灯具的白名单字段：只取设计需要的值，不把产品备注/来源/路径整包写进灯具。 */
+const PRODUCT_FIXTURE_KEYS = [
+  "model", "name", "brand", "power", "watt", "cct", "cctMin", "cctMax",
+  "angle", "cutout", "unit", "warranty", "control", "protocol",
+  "dimmable", "tunable", "category",
+] as const;
+
+/** 把产品落进灯具：保留灯具自己的备注/来源；无价产品写 0 并打 priceMissing，界面显示「—待补价」。 */
+export function applyProductToFixture(f: Obj, prod: Obj): void {
+  const picked: Obj = {};
+  for (const k of PRODUCT_FIXTURE_KEYS) {
+    if (prod?.[k] !== undefined) picked[k] = prod[k];
+  }
+  const raw = prod?.price;
+  const price = raw === null || raw === undefined || raw === "" ? 0 : Number(raw);
+  Object.assign(f, picked, {
+    productId: prod?.id,
+    price: Number.isFinite(price) ? price : 0,
+    priceMissing: !Number.isFinite(price) || price <= 0,
+    priceVerified: false,
+  });
+  applyProductCct(f, prod);
 }
 
 /** 把色温夹取到该灯具允许区间。 */

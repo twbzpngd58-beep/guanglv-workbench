@@ -1,0 +1,475 @@
+/* 功能编号与隐藏 · 全局样式
+   设计原则：不改变任何既有布局，只做浮层徽标、浮层清单，以及隐藏时的 display:none。 */
+
+/* ---------- 编号徽标浮层 ---------- */
+.gv-fid-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  pointer-events: none;
+  overflow: hidden;
+}
+.gv-fid-badge {
+  position: absolute;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: #b08a4a;
+  color: #191307;
+  font: 600 9px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 4px #0007, 0 0 0 1px #f6e7c433 inset;
+}
+
+/* 定位时的高亮 */
+.gv-fid-flash {
+  outline: 2px solid #b08a4a !important;
+  outline-offset: 2px;
+  animation: gvFidPulse 1.5s ease-out;
+}
+@keyframes gvFidPulse {
+  0% { box-shadow: 0 0 0 0 #b08a4a99; }
+  100% { box-shadow: 0 0 0 16px #b08a4a00; }
+}
+
+/* ---------- 右下角入口 ---------- */
+.gv-fid-pill {
+  position: fixed;
+  right: 16px;
+  bottom: 46px;
+  z-index: 260;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(20, 18, 15, 0.92);
+  border: 1px solid rgba(176, 138, 74, 0.45);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font: 12px/1 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #e9dcc2;
+  user-select: none;
+}
+.gv-fid-pillbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  opacity: 0.82;
+}
+.gv-fid-pillbtn:hover {
+  background: rgba(176, 138, 74, 0.16);
+  opacity: 1;
+}
+.gv-fid-pillbtn.on {
+  background: #b08a4a;
+  color: #191307;
+  opacity: 1;
+}
+.gv-fid-pillbtn em {
+  font-style: normal;
+  background: #b08a4a;
+  color: #191307;
+  border-radius: 999px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 14px;
+  margin-left: 2px;
+}
+.gv-fid-pillsp {
+  width: 1px;
+  height: 14px;
+  background: rgba(176, 138, 74, 0.35);
+}
+
+/* ---------- 功能清单面板 ---------- */
+.gv-fid-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 340;
+  background: rgba(8, 7, 5, 0.62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px;
+}
+.gv-fid-modal {
+  width: min(900px, 100%);
+  max-height: min(88vh, 860px);
+  display: flex;
+  flex-direction: column;
+  background: #161411;
+  color: #ece3d2;
+  border: 1px solid rgba(176, 138, 74, 0.38);
+  border-radius: 16px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+.gv-fid-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(176, 138, 74, 0.18);
+  background: linear-gradient(180deg, rgba(176, 138, 74, 0.1), transparent);
+}
+.gv-fid-title {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+.gv-fid-glyph {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: rgba(176, 138, 74, 0.14);
+  border: 1px solid rgba(176, 138, 74, 0.35);
+  display: grid;
+  place-items: center;
+  color: #d8b36a;
+  flex: none;
+}
+.gv-fid-title b {
+  display: block;
+  font-size: 15px;
+  letter-spacing: 0.3px;
+}
+.gv-fid-title small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: #a99a83;
+}
+.gv-fid-close {
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #b9aa92;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.gv-fid-close:hover {
+  background: rgba(176, 138, 74, 0.14);
+  border-color: rgba(176, 138, 74, 0.3);
+  color: #efe4cc;
+}
+.gv-fid-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(176, 138, 74, 0.12);
+}
+.gv-fid-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 280px;
+  min-width: 220px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: #0f0e0b;
+  border: 1px solid rgba(176, 138, 74, 0.24);
+  color: #a99a83;
+}
+.gv-fid-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: #f0e6d2;
+  font: 13px/1.2 inherit;
+}
+.gv-fid-search button {
+  border: 0;
+  background: transparent;
+  color: #a99a83;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 2px;
+}
+.gv-fid-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #b9aa92;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.gv-fid-check input {
+  accent-color: #b08a4a;
+}
+.gv-fid-unknown {
+  margin: 10px 20px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(198, 124, 72, 0.1);
+  border: 1px solid rgba(198, 124, 72, 0.3);
+  color: #e0b48a;
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+.gv-fid-body {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 20px 16px;
+  scrollbar-width: thin;
+}
+.gv-fid-group {
+  margin-top: 8px;
+}
+.gv-fid-grouphead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 2px 6px;
+  position: sticky;
+  top: 0;
+  background: #161411;
+  z-index: 1;
+}
+.gv-fid-mod {
+  min-width: 26px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 5px;
+  display: inline-grid;
+  place-items: center;
+  background: rgba(176, 138, 74, 0.14);
+  color: #d8b36a;
+  font: 600 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.5px;
+  border: 1px solid rgba(176, 138, 74, 0.28);
+}
+.gv-fid-grouphead b {
+  font-size: 12.5px;
+  color: #e9dcc2;
+}
+.gv-fid-grouphead small {
+  font-size: 11px;
+  color: #8f8371;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gv-fid-grouphead em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 11px;
+  color: #8f8371;
+}
+.gv-fid-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  transition: background 0.12s;
+}
+.gv-fid-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(176, 138, 74, 0.14);
+}
+.gv-fid-row.is-hidden {
+  opacity: 0.62;
+}
+.gv-fid-chip {
+  flex: none;
+  width: 46px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 5px;
+  background: #0f0e0b;
+  border: 1px solid rgba(176, 138, 74, 0.4);
+  color: #d8b36a;
+  font: 600 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.4px;
+}
+.gv-fid-meta {
+  min-width: 0;
+  flex: 1;
+}
+.gv-fid-meta b {
+  display: block;
+  font-size: 12.8px;
+  font-weight: 600;
+  color: #efe6d5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gv-fid-meta small {
+  display: block;
+  margin-top: 1px;
+  font-size: 11.2px;
+  color: #948875;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gv-fid-acts {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+.gv-fid-acts button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 7px;
+  background: transparent;
+  border: 1px solid rgba(176, 138, 74, 0.24);
+  color: #c9b896;
+  font: 11.5px/1 inherit;
+  cursor: pointer;
+}
+.gv-fid-acts button:hover {
+  background: rgba(176, 138, 74, 0.14);
+  color: #f0e6d2;
+}
+.gv-fid-acts button.on {
+  background: rgba(176, 138, 74, 0.16);
+  color: #e6c98f;
+  border-color: rgba(176, 138, 74, 0.5);
+}
+.gv-fid-empty {
+  padding: 30px 0;
+  text-align: center;
+  color: #8f8371;
+  font-size: 12.5px;
+}
+.gv-fid-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  border-top: 1px solid rgba(176, 138, 74, 0.16);
+  background: #12100e;
+  font-size: 11.5px;
+  color: #8f8371;
+  min-height: 44px;
+}
+.gv-fid-msg {
+  color: #d8b36a;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gv-fid-sp {
+  flex: 1;
+}
+.gv-fid-note {
+  white-space: nowrap;
+  color: #7d7262;
+  font-size: 11px;
+}
+.gv-fid-restore {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(176, 138, 74, 0.3);
+  background: transparent;
+  color: #c9b896;
+  font: 11.5px/1 inherit;
+  cursor: pointer;
+}
+.gv-fid-restore:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.gv-fid-restore:hover:not(:disabled) {
+  background: rgba(176, 138, 74, 0.14);
+}
+
+/* 设置页里的入口卡片 */
+.gv-fid-card .update-actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .gv-fid-pill {
+    bottom: 14px;
+    right: 10px;
+  }
+  .gv-fid-note {
+    display: none;
+  }
+  .gv-fid-meta small {
+    display: none;
+  }
+  .gv-fid-mask {
+    padding: 10px;
+  }
+  .gv-fid-modal {
+    max-height: 94vh;
+  }
+}
+
+.gv-fid-groupbtn {
+  margin-left: auto;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(176, 138, 74, 0.22);
+  background: transparent;
+  color: #9c8d76;
+  font: 11px/1 inherit;
+  cursor: pointer;
+  flex: none;
+}
+.gv-fid-groupbtn:hover {
+  background: rgba(176, 138, 74, 0.14);
+  color: #e6c98f;
+  border-color: rgba(176, 138, 74, 0.4);
+}
+.gv-fid-grouphead em {
+  margin-left: 0;
+}
+.gv-fid-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(176, 138, 74, 0.22);
+  background: transparent;
+  color: #c9b896;
+  font: 11.5px/1 inherit;
+  cursor: pointer;
+  flex: none;
+}
+.gv-fid-entry:hover {
+  background: rgba(176, 138, 74, 0.14);
+}

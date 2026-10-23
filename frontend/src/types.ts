@@ -68,6 +68,7 @@ export interface Project {
   isDemo: boolean;
   recognition: Obj | null;
   renders: Obj[];
+  siteEvidence?: Obj[];
   cooperation: Obj;
 }
 // Unlike randomUUID(), getRandomValues also works on a trusted LAN HTTP origin.

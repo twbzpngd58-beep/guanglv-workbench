@@ -11,16 +11,22 @@
     font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif; color:#1c1c1e; }
   #app { position:fixed; inset:0; }
   #labels { position:fixed; inset:0; pointer-events:none; }
+  /* 空间名：从“大卡片”收成一枚小胶囊，别挡住户型和灯位（2026-10-23） */
   .room { position:absolute; transform:translate(-50%,-50%); text-align:center; white-space:nowrap;
-    background:rgba(255,255,255,.82); border:1px solid var(--line); border-radius:10px;
-    padding:5px 9px; box-shadow:0 2px 10px rgba(0,0,0,.08); backdrop-filter:blur(8px); }
-  .room b { display:block; font-size:13px; font-weight:600; letter-spacing:.3px; }
-  .room span { font-size:11px; color:#6b6b70; }
-  .room em { display:block; font-size:10px; color:var(--gold); font-style:normal; }
+    background:rgba(255,255,255,.78); border:1px solid var(--line); border-radius:8px;
+    padding:3px 7px; box-shadow:0 1px 6px rgba(0,0,0,.07); backdrop-filter:blur(6px); }
+  .room b { display:block; font-size:10.5px; font-weight:600; letter-spacing:.2px; line-height:1.3; }
+  .room span { display:none; font-size:8.5px; color:#6b6b70; line-height:1.2; }  /* 空间名优先，面积不占标签（进空间后顶部胶囊有面积） */
+  .room em { display:none; font-size:8px; color:var(--gold); font-style:normal; }
   #hud { position:fixed; left:16px; top:16px; padding:10px 13px; border-radius:12px;
     background:rgba(255,255,255,.86); border:1px solid var(--line); box-shadow:0 4px 18px rgba(0,0,0,.06);
     font-size:12px; line-height:1.6; backdrop-filter:blur(10px); }
   #hud b { font-size:13px; }
+  #hud .gl-mode { display:inline-flex; align-items:center; gap:4px; margin-top:6px; padding:4px 9px;
+    min-height:28px; border-radius:999px; border:1px solid var(--line); background:#fff; color:#574f44;
+    font:inherit; font-size:11px; cursor:pointer; }
+  #hud .gl-mode:hover { border-color:var(--gold); }
+  #hud .gl-mode.on { background:var(--gold); border-color:var(--gold); color:#fff; }
   #panel { position:fixed; right:16px; top:16px; width:196px; padding:12px 13px; border-radius:14px;
     background:rgba(255,255,255,.9); border:1px solid var(--line); box-shadow:0 6px 24px rgba(0,0,0,.08);
     backdrop-filter:blur(12px); }
@@ -51,16 +57,54 @@
   #legend { position:fixed; left:16px; bottom:16px; font-size:11px; color:#6b6b70;
     background:rgba(255,255,255,.82); border:1px solid var(--line); border-radius:10px; padding:8px 11px; }
   #legend i { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:middle; }
-  .hint { position:fixed; left:50%; bottom:16px; transform:translateX(-50%); font-size:11px; color:#8a8a8f; }
-  @media (max-width:760px) { #panel { width:auto; left:12px; right:12px; top:auto; bottom:44px; max-height:52vh; overflow:auto }
+  .hint { position:fixed; left:50%; bottom:16px; transform:translateX(-50%); font-size:11px; color:#6b6b70;
+    background:rgba(255,255,255,.78); border:1px solid var(--line); border-radius:999px; padding:5px 12px;
+    max-width:calc(100% - 32px); text-align:center; }
+  /* 窄容器（工作台把 3D 嵌成一条窄栏时）：浮层跟着容器走，不按桌面 px 硬撑 */
+  @media (max-width:760px) {
+    #hud { font-size:10.5px; padding:7px 9px; max-width:52%; }
+    #hud b { font-size:11.5px; }
+    #panel { width:min(180px, 46%); padding:8px 9px; max-height:calc(100% - 20px); overflow:auto; }
+    #panel h4 { font-size:10px; margin:0 0 5px; }
+    #panel .row { gap:4px; margin-bottom:7px; }
+    #panel button { font-size:10.5px; padding:5px 7px; min-height:30px; }
     #circuits { max-height:18vh } #fixtures { display:none } .tipbox { display:none !important }
-    #legend { display:none; } #hud { font-size:11px; padding:8px 10px; } }
+    #legend { display:none; }
+    .room b { font-size:10px } .room span { font-size:8px } .room { padding:2px 6px }
+    .hint { display:none }
+  }
+  /* 手机宽度：右面板默认收起，用右下「工具」打开；HUD 独占一行，不压画面。
+     注意顺序：.gl-tools 基础样式必须写在 @media 前面，否则 display:none 会把
+     @media 里的 display:inline-flex 覆盖掉（旧版顺序 bug → 手机工具按钮永远不出现）。 */
+  .gl-tools { display:none; position:fixed; right:10px; bottom:10px; z-index:20; align-items:center;
+    min-height:40px; padding:0 16px; border-radius:999px; border:1px solid var(--line);
+    background:rgba(255,255,255,.94); color:#332b1e; font:inherit; font-size:13px; cursor:pointer;
+    box-shadow:0 6px 20px rgba(0,0,0,.12); }
+  .gl-tools.on { background:var(--gold); border-color:var(--gold); color:#fff; }
+  @media (max-width:430px) {
+    #hud { max-width:calc(100% - 24px); font-size:10px; padding:6px 9px; border-radius:10px; }
+    #hud b { font-size:11px; }
+    #hud .gl-mode { min-height:26px; margin-top:4px; padding:3px 8px; font-size:10.5px; }
+    #panel { display:none; }
+    #panel.gl-open { display:block; left:10px; right:10px; top:auto; bottom:54px; width:auto;
+      max-height:62%; overflow:auto; }
+    .gl-tools { display:inline-flex; }
+  }
+  .gl-fail { position:fixed; left:50%; top:16px; transform:translateX(-50%); max-width:min(460px, calc(100% - 24px));
+    padding:16px 20px; background:#fffdf9; border:1px solid #e4e1db; border-radius:12px;
+    box-shadow:0 8px 24px #332b1e14; font:13px/1.55 -apple-system,sans-serif; color:#574f44; text-align:center; z-index:30; }
+  .gl-fail b { display:block; margin-bottom:6px; font-size:14px; color:#332b1e; }
+  .gl-fail p { margin:0 0 10px; font-size:12px; color:#8a8a8f; }
+  .gl-fail .gl-btns { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .gl-fail button { min-height:34px; padding:7px 16px; font-size:12px; border:1px solid #e4e1db;
+    border-radius:8px; background:#f7f4ef; color:#88693a; cursor:pointer; }
 </style>
 </head>
 <body>
 <div id="app"></div>
 <div id="labels"></div>
 <div id="hud">加载中…</div>
+<button class="gl-tools" id="glTools" type="button">工具</button>
 
 <div id="panel">
   <h4 id="scenesH">灯光场景（点一下真的亮灭）</h4>
@@ -88,7 +132,7 @@
     <button data-toggle="ceilLine">吊顶线</button>
   </div>
   <div class="row" style="margin-bottom:0">
-    <button id="btnLabel" class="on">房间面积</button>
+    <button id="btnLabel" class="on">空间名</button>
     <button id="btnLight" class="on">灯光演示</button>
     <button id="btnShot">截图</button>
   </div>
@@ -105,23 +149,68 @@
 
 <script>
 /* 光律 · 三维灯光场景外壳
- * 渲染内核（app.js）来自「优邑珺和-可执行灯光场景.html」，原样搬运、未改一行。
- * 它只认 window.__SCENE__ 一个全局：场景数据由光律自己给，不动它的渲染逻辑。
+ * 渲染内核（app.js）来自「优邑珺和-可执行灯光场景.html」，只改了一处手势：
+ *   内核把「点击灯位开关灯」和「拖动旋转」绑在同一个 pointerdown 上，手一抖就把灯关了。
+ *   这里改成 pointerup 且位移 < 6px 才算点击（2026-10-22）。
  * 参数：?project=<pid>&floor=<n>  或  ?scene=<json 地址>
  */
 (function () {
   var q = new URLSearchParams(location.search);
-  // N1：空态卡——标题 + 后端原句 +（back=1 时）「回二维平面图」键。
   var canBack = q.get('back') === '1';
-  function fail(msg) {
+  var hudEl = document.getElementById('hud');
+  var booted = false;       // 内核启动过
+  var gotLevels = false;    // 工作台是否已把回路亮度发过来
+  var userMode = false;     // 用户是否手动切过昼夜（手动优先，不再自动跳）
+  var nightMode = false;    // 当前是否「灯光演示」（默认关：一进 3D 是日景）
+  var chipEl = null;        // HUD 里的「看灯光演示」开关（重建 HUD 时要补回）
+  var failed = false;       // 失败卡已出过（避免重复/被后续回调覆盖）
+
+  function post(type, extra) {
+    try {
+      var msg = { type: type };
+      if (extra) for (var k in extra) msg[k] = extra[k];
+      if (parent && parent !== window) parent.postMessage(msg, location.origin);
+    } catch (e) {}
+  }
+
+  // N1：空态/失败卡——标题 + 原因 + 动作（回二维 / 重试）。
+  // D-06：卡片同时带 .fail 类（验收选择器 document.querySelector('.fail') 必须命中）；
+  //       不再清空 body，保留 #hud 并改成明确的失败文案（不能停在「加载中…」）。
+  function fail(msg, title, hint) {
+    if (failed) return;
+    failed = true;
+    post('guanglv:fail', { reason: msg || '' });
+    if (hudEl) {
+      hudEl.classList.add('hud-fail');
+      hudEl.textContent = '三维暂时打不开 · 见下方说明';
+    }
+    // 失败后收起内核面板/图例/操作提示等「假活」控件，避免用户继续点无效按钮。
+    ['app', 'panel', 'fixtures', 'legend', 'tip', 'glTools', 'labels'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    var hintEl = document.querySelector('.hint');
+    if (hintEl) hintEl.style.display = 'none';
     var card = document.createElement('div');
-    card.className = 'fail';
-    var title = document.createElement('b');
-    title.textContent = '这个项目还没有三维场景';
-    var note = document.createElement('p');
-    note.textContent = msg;
-    card.appendChild(title);
-    card.appendChild(note);
+    card.className = 'gl-fail fail';
+    var b = document.createElement('b');
+    b.textContent = title || '这个项目还没有三维场景';
+    var p = document.createElement('p');
+    p.textContent = msg;
+    card.appendChild(b);
+    card.appendChild(p);
+    if (hint) {
+      var p2 = document.createElement('p');
+      p2.textContent = hint;
+      card.appendChild(p2);
+    }
+    var btns = document.createElement('div');
+    btns.className = 'gl-btns';
+    var retry = document.createElement('button');
+    retry.type = 'button';
+    retry.textContent = '重新加载';
+    retry.addEventListener('click', function () { location.reload(); });
+    btns.appendChild(retry);
     if (canBack) {
       var btn = document.createElement('button');
       btn.type = 'button';
@@ -129,45 +218,192 @@
       btn.addEventListener('click', function () {
         parent.postMessage({ type: 'guanglv:back2d' }, location.origin);
       });
-      card.appendChild(btn);
+      btns.appendChild(btn);
     }
-    document.body.innerHTML = '';
+    card.appendChild(btns);
     document.body.appendChild(card);
   }
-  // 内核自带的情景按钮和回路列表，跟工作台右栏的「情景 / 回路」重复；
-  // 两边都能改，谁最后改谁赢，会互相打架。这里只把重复的两块藏掉，
-  // 视角 / 昼夜 / 剖切 / 图层这些内核独有的照留。
+
+  function hasWebGL() {
+    try {
+      var c = document.createElement('canvas');
+      return !!(c.getContext('webgl2') || c.getContext('webgl') || c.getContext('experimental-webgl'));
+    } catch (e) { return false; }
+  }
+
+  // 内核自带的「情景按钮 / 回路列表 / 灯具清单」与工作台右栏重复，藏掉；
+  // 但操作提示（.hint）保留——它说明能拖、能点灯，不该藏。
   var css = document.createElement('style');
   css.textContent =
-    '#scenesH,#circuitsH,#scenes,#sceneNote,#circuits,#fixtures,.hint{display:none!important}' +
-    // 原文件带 @media(max-width:760px)：窄窗口下 #panel 会变成铺满底部的抽屉，
-    // 嵌在工作台右栏旁边一定会盖住画面。这里强制回桌面布局（只留视角/剖切/图层）。
-    '#panel{width:186px!important;left:auto!important;right:10px!important;top:10px!important;' +
-    'bottom:auto!important;max-height:calc(100% - 20px)!important;padding:9px 10px!important}' +
-    '#panel h4{font-size:10.5px!important;margin:0 0 6px!important}' +
-    '#panel .row{gap:4px!important;margin-bottom:7px!important}' +
-    '#panel button{font-size:10.5px!important;padding:4px 7px!important}' +
-    '#hud{font-size:11px!important;padding:7px 10px!important}' +
-    '#legend{font-size:10px!important}' +
-    // N1：三维空态卡。只作用于 .fail，不碰 123 行的隐藏清单与 #panel / #hud / #legend。
-    // 批 4：顶部对齐（原先 50% 垂直居中，容器只有两百来像素时整张卡落在可视区外被裁）。
-    '.fail{position:absolute;left:50%;top:10px;transform:translateX(-50%);max-width:460px;' +
-    'padding:14px 20px;background:#fffdf9;border:1px solid #e4e1db;border-radius:12px;' +
-    'box-shadow:0 8px 24px #332b1e14;font:13px/1.55 -apple-system,sans-serif;color:#574f44;text-align:center}' +
-    '.fail b{display:block;margin-bottom:6px;font-size:14px;color:#332b1e}' +
-    '.fail p{margin:0 0 10px;font-size:12px;color:#8a8a8f}' +
-    '.fail button{min-height:30px;padding:6px 14px;font-size:12px;border:1px solid #e4e1db;' +
-    'border-radius:8px;background:#f7f4ef;color:#88693a;cursor:pointer}';
+    '#scenesH,#circuitsH,#scenes,#sceneNote,#circuits,#fixtures{display:none!important}';
   document.head.appendChild(css);
 
+  // D-04 兜底光照：内核夜间模式（setLightingMode(true)）把半球光/主光/补光压到
+  // 0.1 / 0.18 / 0.08，整屋黑到看不清（旧实测画布 avgLum=13、亮度<30 占 97.1%）。
+  // 外壳侧加一盏常驻环境光 + 夜间把三盏光抬到可用区间：夜里既看得见户型，也仍看得出灯亮没亮。
+  // 注意：只在「灯光演示」时抬，日景完全交给内核原值，不改变白天观感。
+  var fallback = null;   // { amb, hemi, dirs }
+  var FALLBACK_NIGHT = { hemi: 2.6, dirs: [2.8, 1.0], amb: 8.0, clear: 0x2a313d };
+
+  function collectLights() {
+    var v = window.__viewer;
+    if (!v) return false;
+    if (fallback) return true;
+    var hemi = null, dirs = [];
+    v.scene.traverse(function (o) {
+      if (o.isHemisphereLight) hemi = o;
+      else if (o.isDirectionalLight) dirs.push(o);
+    });
+    var amb = new v.THREE.AmbientLight(0xffffff, 0);
+    v.scene.add(amb);
+    fallback = { amb: amb, hemi: hemi, dirs: dirs };
+    return true;
+  }
+
+  function applyFallback(night) {
+    if (!collectLights()) return;
+    var v = window.__viewer;
+    if (night) {
+      var cfg = FALLBACK_NIGHT;
+      if (fallback.hemi) fallback.hemi.intensity = cfg.hemi;
+      fallback.dirs.forEach(function (d, i) { d.intensity = cfg.dirs[i] || 0; });
+      fallback.amb.intensity = cfg.amb;
+      v.renderer.setClearColor(cfg.clear, 1);
+    } else {
+      // setLightingMode(false) 已把内核光恢复成日景原值，这里只关掉兜底环境光
+      fallback.amb.intensity = 0;
+    }
+  }
+
+  function hudLine(extra) {
+    var re = window.__SCENE__ || {};
+    var rooms = (re.rooms || []).length;
+    var lights = (re.lights_meta || []).length || (re.lights || []).length;
+    var circuits = (re.circuits || []).length;
+    var parts = [];
+    if (rooms) parts.push(rooms + ' 个空间');
+    if (re.area_total_m2) parts.push(re.area_total_m2 + ' ㎡');
+    if (lights) parts.push(lights + ' 盏灯');
+    if (circuits) parts.push(circuits + ' 条回路');
+    var text = parts.join(' · ') || '户型三维';
+    hudEl.innerHTML = '<b>场景预览</b><br>' + text +
+      (extra ? '<br><span style="color:#8a8a8f">' + extra + '</span>' : '');
+    // 「看灯光演示」开关是 HUD 的常驻子节点：hudLine 每次重建 HUD 后要把它补回来，
+    // 否则 append 完立刻被 innerHTML 冲掉，用户根本看不到/点不到这个开关。
+    if (chipEl) {
+      hudEl.appendChild(document.createElement('br'));
+      hudEl.appendChild(chipEl);
+    }
+    hudEl.title = (re.source || '') + ' · 层高 ' + ((re.height_m || 2.8) * 1000).toFixed(0) +
+      ' mm · 墙厚 ' + ((re.thickness_m || 0.2) * 1000).toFixed(0) + ' mm · ' +
+      (re.wall_segments || 0) + ' 段墙';
+    return text;
+  }
+
+  function syncModeUI(night) {
+    var b = document.getElementById('btnLight');
+    if (b) b.classList.toggle('on', !!night);
+    var chip = chipEl || document.getElementById('glDemo');
+    if (chip) {
+      chip.classList.toggle('on', !!night);
+      chip.textContent = night ? '灯光演示中' : '看灯光演示';
+      chip.setAttribute('aria-pressed', night ? 'true' : 'false');
+    }
+    hudLine(night ? '灯光演示：暗环境看亮灯效果' : '日景预览：点「看灯光演示」看亮灯效果');
+  }
+
+  function setMode(night) {
+    if (!window.__viewer) return;
+    night = !!night;
+    nightMode = night;
+    window.__viewer.setLightingMode(night);
+    applyFallback(night);
+    syncModeUI(night);
+  }
+
+  // N1c：内核（app.js）只画墙/地面/灯，没有家具层；外壳按场景 JSON 的家具清单，
+  // 用内核自己暴露的 three 工厂补一层体块，并挂到 viewer.groups.furniture ——
+  // 内核原有的「图层 → 家具」按钮就会直接生效（不改 app.js 一行）。
+  // 坐标口径与内核一致：JSON 的 x/z 是设计米坐标，世界系 z 取负；rot 已是设计旋转的负值。
+  var furnGroup = null;
+  function buildFurniture() {
+    var v = window.__viewer;
+    if (!v || !v.THREE || !v.scene || !v.groups) return null;
+    var T = v.THREE;
+    var rows = (window.__SCENE__ || {}).furniture || [];
+    if (!Array.isArray(rows) || !rows.length) return null;
+    var FABRIC = ['沙发', '床', '床头', '地毯', '窗帘', '椅', '凳'];
+    var METAL = ['水槽', '灶台', '台盆', '淋浴', '浴缸', '冰箱', '洗衣', '设备'];
+    function colorOf(kind) {
+      for (var i = 0; i < METAL.length; i++) if (kind.indexOf(METAL[i]) >= 0) return [0x8f9aa3, 0.42, 0.3];
+      for (var j = 0; j < FABRIC.length; j++) if (kind.indexOf(FABRIC[j]) >= 0) return [0xb0987f, 0.96, 0.02];
+      if (kind.indexOf('柜') >= 0) return [0xd8c8ae, 0.78, 0.02];
+      return [0xb08a55, 0.85, 0.02];
+    }
+    var clip = v.clipPlane ? [v.clipPlane] : null; // 跟内核剖切同一条剖面（不裁会从切面往上冒头）
+    var group = new T.Group();
+    group.name = 'furniture';
+    rows.forEach(function (f) {
+      var h = Math.max(0.08, Number(f.h) || 0.75);
+      var kind = String(f.kind || '');
+      var c = colorOf(kind);
+      var mat = new T.MeshStandardMaterial({
+        color: c[0], roughness: c[1], metalness: c[2],
+        clippingPlanes: clip, clipShadows: true,
+      });
+      var mesh;
+      if (Array.isArray(f.pts) && f.pts.length >= 3) {
+        var xs = f.pts.map(function (p) { return p[0]; });
+        var zs = f.pts.map(function (p) { return p[1]; });
+        var cx = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2;
+        var cz = (Math.min.apply(null, zs) + Math.max.apply(null, zs)) / 2;
+        var shape = new T.Shape(f.pts.map(function (p) { return new T.Vector2(p[0] - cx, p[1] - cz); }));
+        var geo = new T.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+        geo.rotateX(-Math.PI / 2);
+        mesh = new T.Mesh(geo, mat);
+        mesh.position.set(cx, 0.004, -cz);
+      } else {
+        var w = Math.max(0.15, Number(f.w) || 0.6);
+        var d = Math.max(0.15, Number(f.d) || 0.6);
+        mesh = new T.Mesh(new T.BoxGeometry(w, h, d), mat);
+        mesh.position.set(Number(f.x) || 0, h / 2 + 0.004, -(Number(f.z) || 0));
+      }
+      mesh.rotation.y = -(Number(f.rot) || 0) * Math.PI / 180;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.userData = { kind: 'furniture', id: f.id || '', label: kind };
+      group.add(mesh);
+    });
+    group.visible = true; // 家具是设计的一部分：默认开，「家具」按钮可关（2026-10-23）
+    v.scene.add(group);
+    v.groups.furniture = group;
+    return group;
+  }
+
   function boot(scene) {
+    if (!hasWebGL()) {
+      fail('浏览器没有启用 WebGL（或显卡加速被关闭）。同一份户型可以在「图纸」页用二维平面图查看。',
+        '这台设备暂时打不开三维', '换 Chrome / Edge 打开，或在设置里打开「使用硬件加速」。');
+      return;
+    }
     window.__SCENE__ = scene;
+
+    // 观察失败：内核建渲染器时若抛错（驱动异常），3 秒内没有 canvas 就出失败卡。
+    var watchdog = setTimeout(function () {
+      if (!booted || !document.querySelector('#app canvas')) {
+        fail('三维内核没能启动（渲染器创建失败或超时）。可以先用二维平面图继续做方案。',
+          '三维暂时打不开', 'files：app.js 可能被网络/缓存拦住了，可点「重新加载」再试。');
+      }
+    }, 6000);
+
     var s = document.createElement('script');
-    s.src = 'app.js';
-    s.onerror = function () { fail('渲染内核 app.js 没加载上'); };
+    s.src = 'app.js?v=20261023-3d';
+    s.onerror = function () { clearTimeout(watchdog); fail('渲染内核 app.js 没加载上'); };
     s.onload = function () {
+      booted = true;
+      clearTimeout(watchdog);
+      if (failed) return; // 已经出过失败卡（例如 WebGL 不可用），别再起内核 UI
       // 情景默认「全开」：进来看的是这套灯装完是什么样，不是演示某个生活场景。
-      // 房间还没命名时，会客/观影这类按房间名匹配的预置会把整屋压到 15%，一进去像没开灯。
       var want = q.get('preset') || '全开';
       var tries = 0;
       (function pick() {
@@ -175,21 +411,133 @@
         if (btn) { btn.click(); return; }
         if (++tries < 80) setTimeout(pick, 50);
       })();
+
+      // 默认进「日景」：没收到设计里的亮灯状态之前，别让整屋压黑（业主第一眼会以为坏了）。
+      setMode(false);
+      // HUD：改成业主/客户看得懂的一句话；技术参数移到 hover title。
+      var chip = document.createElement('button');
+      chip.type = 'button';
+      chip.id = 'glDemo';
+      chip.className = 'gl-mode';
+      chip.textContent = '看灯光演示';
+      chip.addEventListener('click', function () {
+        userMode = true;
+        setMode(!nightMode);
+        // 用内核自己的回路状态重画一次
+        if (window.__viewer) window.__viewer.applyLevels();
+      });
+      chipEl = chip;
+      syncModeUI(false); // hudLine 会把 chipEl 补回 #hud（append 后不会被 innerHTML 冲掉）
+
+      // 3D 家具：内核不画家具，外壳补一层体块（默认开，跟「图层 → 家具」按钮联动）
+      furnGroup = buildFurniture();
+      (function () {
+        var fbtn = document.querySelector('[data-toggle="furniture"]');
+        if (!fbtn) return;
+        if (!furnGroup) {
+          fbtn.disabled = true;
+          fbtn.title = '当前楼层没有家具数据';
+          fbtn.style.opacity = '.45';
+          fbtn.style.cursor = 'default';
+        } else {
+          fbtn.title = '显示这一层的 ' + furnGroup.children.length + ' 件家具（体块占位，可开关）';
+          if (furnGroup.visible) fbtn.classList.add('on');
+        }
+      })();
+
+      // 内核面板里的「灯光演示」按钮与 HUD 开关保持同一状态（否则两个入口各切各的）
+      var btnLight = document.getElementById('btnLight');
+      if (btnLight) {
+        btnLight.onclick = function () { userMode = true; setMode(!nightMode); };
+      }
+
+      // 面板收起态（手机宽度）：用右下「工具」按钮打开
+      var tools = document.getElementById('glTools');
+      var panel = document.getElementById('panel');
+      tools.addEventListener('click', function () {
+        var open = panel.classList.toggle('gl-open');
+        tools.classList.toggle('on', open);
+        tools.textContent = open ? '收起' : '工具';
+      });
+
+      // 就绪握手：告诉工作台「可以推亮度了」，避免它靠猜时间补发
+      post('guanglv:ready', { floor: q.get('floor') || '1' });
+      setTimeout(function () { post('guanglv:ready', { floor: q.get('floor') || '1' }); }, 600);
+
+      // 画布可访问性
+      var cv = document.querySelector('#app canvas');
+      if (cv) {
+        cv.setAttribute('role', 'img');
+        cv.setAttribute('aria-label', '户型三维灯光场景，可拖动旋转、滚轮缩放');
+      }
+
+      // D-05 房间标签：内核按投影写 left/top，窄屏下会落到视口外被裁（旧实测 390 下
+      // 休闲阳台 x=-21、主卧 x=-30）。这里在内核每帧写完之后把标签夹回视口内，
+      // 不改内核投影/判定逻辑（儿童房 display:none 属 P1，保持不修）。
+      var labelsEl = document.getElementById('labels');
+      (function clampLabels() {
+        if (labelsEl && labelsEl.style.display !== 'none') {
+          var vw = window.innerWidth, vh = window.innerHeight;
+          var els = labelsEl.children;
+          for (var i = 0; i < els.length; i++) {
+            var el = els[i];
+            if (el.style.display === 'none') continue;
+            var l = parseFloat(el.style.left), t = parseFloat(el.style.top);
+            if (!isFinite(l) || !isFinite(t)) continue;
+            var ew = el.offsetWidth, eh = el.offsetHeight;
+            if (!ew || !eh) continue;
+            var nl = Math.min(Math.max(l, ew / 2 + 4), Math.max(ew / 2 + 4, vw - ew / 2 - 4));
+            var nt = Math.min(Math.max(t, eh / 2 + 4), Math.max(eh / 2 + 4, vh - eh / 2 - 4));
+            if (Math.abs(nl - l) > 0.5) el.style.left = nl + 'px';
+            if (Math.abs(nt - t) > 0.5) el.style.top = nt + 'px';
+          }
+        }
+        window.requestAnimationFrame(clampLabels);
+      })();
+
+      // 竖屏全屏手机（iframe 又窄又高，如 390×768）时，内核默认 42° 竖向视场会把左右两侧
+      // 房间挤出标签候选窗（实测 390×768 下「主卧」display:none，只剩 8 个标签）。
+      // 这里把视场角轻微放宽到 48°，整套户型 + 9 个房间标签就都落在画面内；
+      // 儿童房仍在候选窗外（|y|>1.2，P1 不修）。
+      (function fitPortraitView() {
+        var v = window.__viewer;
+        if (v && window.innerWidth < 460 && window.innerHeight > window.innerWidth * 1.5 && v.camera.fov < 48) {
+          v.camera.fov = 48;
+          v.camera.updateProjectionMatrix();
+        }
+        window.requestAnimationFrame(fitPortraitView);
+      })();
     };
     document.body.appendChild(s);
+
     // 工作台切情景 / 拖回路亮度时，会把每个回路的 0..1 亮度发过来。
-    // 内核只认它自己的预置，这里替它把回路状态改成设计给的值再重画。
     window.addEventListener('message', function (e) {
       var d = e.data || {};
       if (d.type !== 'guanglv:levels' || !window.__viewer || !window.__SCENE__) return;
       var levels = d.levels || {};
       var names = (window.__SCENE__.circuits || []).map(function (c) { return c.name; });
+      var any = false;
       names.forEach(function (n) {
         var v = levels[n];
-        window.__viewer.setCircuit(n, v === undefined ? 0 : Math.max(0, Math.min(1, Number(v) || 0)));
+        var vv = v === undefined ? 0 : Math.max(0, Math.min(1, Number(v) || 0));
+        if (vv > 0.02) any = true;
+        window.__viewer.setCircuit(n, vv);
       });
+      gotLevels = true;
+      // D-04：默认保持日景（进 3D 第一眼必须亮）。「灯光演示」只由用户点开关触发，
+      // 不再因为「设计里有灯亮着」自动压暗——否则一进 3D 又回到几乎全黑。
+      if (nightMode) hudLine('灯光演示：暗环境看亮灯效果');
     });
   }
+
+  window.addEventListener('error', function (e) {
+    var msg = String((e && e.message) || '');
+    if (/webgl|context/i.test(msg)) {
+      fail('三维需要的 WebGL 初始化失败：' + msg, '三维暂时打不开',
+        '可以先用二维平面图继续；换 Chrome / Edge 或打开硬件加速后再试。');
+    }
+  });
+
   if (q.get('scene')) {
     fetch(q.get('scene')).then(function (r) { return r.json(); }).then(boot).catch(function (e) { fail(e.message); });
     return;

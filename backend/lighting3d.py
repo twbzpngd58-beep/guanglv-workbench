@@ -337,6 +337,12 @@ def _products_map(scheme: str | None = None) -> dict:
     return PR.map_products(str(DB), scheme)
 
 
+def _products_map_all() -> dict:
+    """全部产品（不按 scheme 过滤）。1.3.1 的 scheme 218/218 为空，按方案过滤必空；
+    报价先按型号精确取价，scheme 数据由品牌方/老胡签字后再启用。"""
+    return PR.map_products(str(DB))
+
+
 def _project_doc(pid: str) -> dict:
     con = sqlite3.connect(DB)
     try:
@@ -644,8 +650,11 @@ def _engine_view(pid: str, st: dict, parsed: dict, opts: dict) -> dict:
                     poly = _furn_poly_geom(f)     # 画过轮廓的件以轮廓为准（见 _furn_poly_geom 注释）
                     engine_rows.append({
                         "id": f["id"], "kind": f["kind"],
-                        "x": poly[0] if poly else f["x"] / DESIGN_UNITS_PER_M,
-                        "z": poly[1] if poly else f["y"] / DESIGN_UNITS_PER_M,
+                        # _furn_poly_geom 的 x/y 是设计单位（26/米），引擎要米；
+                        # 2026-10-23 修：之前直接把 238.59 当米，沙发被放到 238m 外，
+                        # 三维里就“完全不显示”。
+                        "x": round(poly[0] / DESIGN_UNITS_PER_M, 3) if poly else round(f["x"] / DESIGN_UNITS_PER_M, 3),
+                        "z": round(poly[1] / DESIGN_UNITS_PER_M, 3) if poly else round(f["y"] / DESIGN_UNITS_PER_M, 3),
                         "w": poly[2] if poly else f["widthM"],
                         "d": poly[3] if poly else f["depthM"],
                         "h": f["heightM"], "rot": -f.get("rotation", 0), "floor": f.get("floor", 1),
@@ -1495,7 +1504,8 @@ def quote(pid: str, scheme: str = ""):
         raise HTTPException(400, "这个项目还没有图纸数据")
     default_scheme = {"无线": "无线", "KNX": "总线", "无": "开闭"}.get(project.get("smart"), "缓亮缓灭")
     scheme = default_scheme if approved else (scheme if scheme in SCHEMES else default_scheme)
-    prods = _products_map(scheme)
+    # A2a：不按空 scheme 过滤；按型号精确取价。scheme 只作展示，不参与过滤。
+    prods = _products_map_all()
     agg, order = {}, []
     # §十.11 第 1 项：报价以**设计里的灯具**为准（布灯画布是唯一编辑面）；图纸解析只在
     # 设计还没有灯时兜底：直接读图纸解析结果。
@@ -1519,10 +1529,16 @@ def quote(pid: str, scheme: str = ""):
             missing.append({"code": code, "qty": agg[code]})
             continue
         qty = agg[code]
-        sub = round((p.get("price") or 0) * qty, 2)
-        total += sub
+        raw_price = p.get("price")
+        price = None if raw_price is None or raw_price == "" else float(raw_price)
+        sub = round((price or 0) * qty, 2)
+        if price is not None:
+            total += sub
         rows.append({"code": code, "name": p["name"], "watt": p.get("watt"), "cct": p.get("cct"),
-                     "price": p.get("price"), "qty": qty, "unit": p.get("unit") or "个", "subtotal": sub})
+                     "price": price, "qty": qty, "unit": p.get("unit") or "个", "subtotal": sub,
+                     "priceMissing": price is None,
+                     "priceSource": "零售价" if price is not None else "",
+                     "priceVersion": p.get("synced_at") or ""})
     design_strips = [f for f in project.get("design", {}).get("fixtures", [])
                      if f.get("type") == "灯带" and (f.get("length") or 0)]
     strip_len = round(sum(s.get("length") or 0 for s in (
@@ -1535,7 +1551,9 @@ def quote(pid: str, scheme: str = ""):
         total += sub
         rows.append({"code": "", "name": strip_prod["name"] + "（按图纸长度）", "watt": strip_prod.get("watt"),
                      "cct": strip_prod.get("cct"), "price": strip_prod.get("price"),
-                     "qty": strip_len, "unit": "米", "subtotal": sub})
+                     "qty": strip_len, "unit": "米", "subtotal": sub,
+                     "priceMissing": False, "priceSource": "零售价",
+                     "priceVersion": strip_prod.get("synced_at") or ""})
     # R5：报价单是提示档，有回路问题照出，带提示原文。
     from .app import connect, get
     from . import circuit_rules
@@ -1543,6 +1561,8 @@ def quote(pid: str, scheme: str = ""):
         _, warnings = circuit_rules.export_gate(get(con, pid), "quote")
     return {"pid": pid, "scheme": scheme, "schemes": SCHEMES, "rows": rows,
             "missing": missing, "total": round(total, 2), "warnings": warnings,
+            "priceMode": "generic",
+            "priceNote": "方案分类待补：按型号精确取价，暂不按总线/无线/开闭过滤；只含终端零售价",
             "note": "零售价口径 · 未含智能控制设备（主机、面板、网关）；出厂价不进工作台"}
 
 

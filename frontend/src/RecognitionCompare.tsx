@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Obj, Design } from "./types";
 import { Button } from "./ui";
 import { floorLabel } from "./floors";
+import { confirmDanger } from "./dangerConfirm";
 
 function points(room: Obj | undefined): Obj[] {
   if (!room) return [];
@@ -202,14 +203,15 @@ export function RecognitionCompare({
           result.simulated ||
           sameBoundary(points(target), points(candidate))
         }
-        onClick={() => {
-          if (
-            target &&
-            confirm(
-              `确认用「${candidate.name}」的候选轮廓替换「${target.name}」？保留名称与灯具关联，人工修改的边界会被替换；面积、灯位及相邻边界需要重新复核。`,
-            )
-          )
-            onReplace(candidate.id, target.id);
+        onClick={async () => {
+          if (!target) return;
+          const ok = await confirmDanger({
+            title: `用「${candidate.name}」的候选轮廓替换「${target.name}」？`,
+            detail:
+              "保留名称、ID 与灯具关联；人工修改过的边界会被替换，面积、灯位及相邻边界需要重新复核。",
+            confirmText: "确认替换",
+          });
+          if (ok) onReplace(candidate.id, target.id);
         }}
       >
         {done ? "该候选已替换到画布" : "确认替换所选空间"}
