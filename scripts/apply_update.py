@@ -622,7 +622,8 @@ def main() -> int:
                 if args.json:
                     print(json.dumps({"ok": True, "uptodate": True, "version": current}, ensure_ascii=False))
                 return 2
-            write_state(state, phase="check", message=f"发现新版本 v{target}", to=target, **base)
+            base["to"] = target
+            write_state(state, phase="check", message=f"发现新版本 v{target}", **base)
             package = resolve_package(release)
 
         target = args.version or (release.get("version") or "")
