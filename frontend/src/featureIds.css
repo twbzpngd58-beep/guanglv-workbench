@@ -473,3 +473,436 @@
 .gv-fid-entry:hover {
   background: rgba(176, 138, 74, 0.14);
 }
+
+/* ---------- 改动次数 / 功能详情 / 回退 ---------- */
+.gv-fid-badge {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.gv-fid-row {
+  cursor: pointer;
+}
+.gv-fid-count {
+  flex: none;
+  font-size: 10.5px;
+  color: #a08a66;
+  background: rgba(176, 138, 74, 0.1);
+  border: 1px solid rgba(176, 138, 74, 0.2);
+  border-radius: 5px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+.gv-fid-chip.big {
+  width: auto;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+.gv-fid-detail-modal {
+  width: min(820px, 100%);
+}
+.gv-fid-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 7px;
+  border: 1px solid rgba(176, 138, 74, 0.28);
+  background: transparent;
+  color: #c9b896;
+  font: 12px/1 inherit;
+  cursor: pointer;
+  flex: none;
+}
+.gv-fid-back:hover {
+  background: rgba(176, 138, 74, 0.14);
+  color: #f0e6d2;
+}
+.gv-fid-detail {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 20px 20px;
+  scrollbar-width: thin;
+}
+.gv-fid-sec {
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(176, 138, 74, 0.1);
+}
+.gv-fid-sec:last-of-type {
+  border-bottom: 0;
+}
+.gv-fid-sec h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: #b08a4a;
+}
+.gv-fid-sec > p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #ddd2be;
+}
+.gv-fid-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: #a99a83;
+}
+.gv-fid-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.gv-fid-stats b {
+  color: #e6c98f;
+  font-weight: 600;
+}
+.gv-fid-detail-acts {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.gv-fid-detail-acts button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 7px;
+  border: 1px solid rgba(176, 138, 74, 0.3);
+  background: transparent;
+  color: #d6c5a4;
+  font: 12px/1 inherit;
+  cursor: pointer;
+}
+.gv-fid-detail-acts button:hover {
+  background: rgba(176, 138, 74, 0.14);
+  color: #f0e6d2;
+}
+.gv-fid-timeline {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0 0 0 14px;
+  position: relative;
+}
+.gv-fid-timeline::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: rgba(176, 138, 74, 0.22);
+}
+.gv-fid-timeline li {
+  position: relative;
+  padding: 0 0 14px 8px;
+}
+.gv-fid-timeline li:last-child {
+  padding-bottom: 0;
+}
+.gv-fid-tl-dot {
+  position: absolute;
+  left: -14px;
+  top: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #b08a4a;
+  box-shadow: 0 0 0 2px #161411, 0 0 0 3px rgba(176, 138, 74, 0.35);
+}
+.gv-fid-tl-main {
+  min-width: 0;
+}
+.gv-fid-tl-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gv-fid-tl-head b {
+  font: 600 11.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #b08a4a;
+  letter-spacing: 0.2px;
+}
+.gv-fid-tl-head span {
+  font-size: 13px;
+  font-weight: 600;
+  color: #efe6d5;
+}
+.gv-fid-tl-main > p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #a99a83;
+}
+.gv-fid-tl-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 7px;
+  font-size: 11px;
+  color: #8f8371;
+}
+.gv-fid-tl-foot > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gv-fid-rollback {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(176, 138, 74, 0.38);
+  background: rgba(176, 138, 74, 0.1);
+  color: #e6c98f;
+  font: 11.5px/1 inherit;
+  cursor: pointer;
+}
+.gv-fid-rollback:hover:not(:disabled) {
+  background: rgba(176, 138, 74, 0.2);
+}
+.gv-fid-rollback:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.gv-fid-footnote {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #7d7262;
+}
+.gv-fid-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: #8f8371;
+}
+.gv-fid-error {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(180, 90, 70, 0.12);
+  border: 1px solid rgba(180, 90, 70, 0.35);
+  color: #e3a08c;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.gv-fid-rolling {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(12, 11, 9, 0.86);
+  backdrop-filter: blur(3px);
+  color: #e9dcc2;
+  text-align: center;
+}
+.gv-fid-rolling b {
+  font-size: 14px;
+}
+.gv-fid-rolling p {
+  margin: 0;
+  font-size: 12px;
+  color: #a99a83;
+}
+.gv-fid-detail-modal {
+  position: relative;
+}
+
+/* 危险确认弹窗要盖住功能清单/详情（原 z-index:120 会被清单面板 340 挡住） */
+.confirm-modal-mask {
+  z-index: 400 !important;
+}
+.confirm-modal-host {
+  position: relative;
+  z-index: 400;
+}
+
+/* ---------- 隐藏反馈 / 定位 / 本页标记 ---------- */
+.gv-fid-status {
+  position: fixed;
+  left: 16px;
+  bottom: 46px;
+  z-index: 260;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 10px;
+  border-radius: 999px;
+  background: rgba(20, 18, 15, 0.94);
+  border: 1px solid rgba(176, 138, 74, 0.45);
+  color: #e9dcc2;
+  font: 12px/1 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  user-select: none;
+}
+.gv-fid-status > span {
+  white-space: nowrap;
+  color: #d9c8a6;
+}
+.gv-fid-status button {
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(176, 138, 74, 0.35);
+  background: transparent;
+  color: #d8c5a0;
+  font: 11.5px/1 inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.gv-fid-status button:hover {
+  background: rgba(176, 138, 74, 0.18);
+  color: #f0e6d2;
+}
+
+.gv-fid-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 46px;
+  transform: translateX(-50%);
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(92vw, 760px);
+  padding: 9px 10px 9px 12px;
+  border-radius: 10px;
+  background: rgba(23, 20, 16, 0.95);
+  border: 1px solid rgba(176, 138, 74, 0.5);
+  color: #efe6d5;
+  font: 12.5px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: gvFidToastIn 0.18s ease-out;
+}
+.gv-fid-toast.hide {
+  border-color: rgba(196, 120, 80, 0.6);
+}
+.gv-fid-toast.show {
+  border-color: rgba(120, 170, 110, 0.55);
+}
+.gv-fid-toast-text {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gv-fid-toast-action {
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 7px;
+  border: 1px solid rgba(176, 138, 74, 0.5);
+  background: #b08a4a;
+  color: #191307;
+  font: 600 11.5px/1 inherit;
+  cursor: pointer;
+  flex: none;
+}
+.gv-fid-toast-action:hover {
+  background: #c39a56;
+}
+.gv-fid-toast-x {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #9c8d76;
+  cursor: pointer;
+  flex: none;
+}
+.gv-fid-toast-x:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #e9dcc2;
+}
+@keyframes gvFidToastIn {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.gv-fid-locatetag {
+  position: fixed;
+  z-index: 320;
+  pointer-events: none;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #b08a4a;
+  color: #191307;
+  font: 600 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.3px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+}
+
+.gv-fid-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #6a6153;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+.gv-fid-dot.on {
+  background: #7fc08a;
+  box-shadow: 0 0 0 2px rgba(127, 192, 138, 0.2);
+}
+
+.gv-fid-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 20px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(176, 138, 74, 0.12);
+  border: 1px solid rgba(176, 138, 74, 0.35);
+  color: #e2cd9f;
+  font: 12px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+.gv-fid-notice span {
+  flex: 1;
+  min-width: 0;
+}
+.gv-fid-notice button {
+  border: 0;
+  background: transparent;
+  color: #c9b896;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  flex: none;
+}
+
+.gv-fid-acts button:disabled,
+.gv-fid-detail-acts button:disabled {
+  opacity: 0.32;
+  cursor: default;
+}
+.gv-fid-acts button:disabled:hover,
+.gv-fid-detail-acts button:disabled:hover {
+  background: transparent;
+  color: #c9b896;
+}

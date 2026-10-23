@@ -145,7 +145,7 @@ export function AppVersionPanel({ notify }: { notify: (s: string) => void }) {
   }
 
   return (
-    <div className="appver">
+    <div className="appver" data-fid="K-07">
       {loading && (
         <div className="appver-loading">
           <Loader2 className="spin" size={15} /> 正在读取本机版本…
@@ -154,12 +154,12 @@ export function AppVersionPanel({ notify }: { notify: (s: string) => void }) {
       {!!error && (
         <div className="appver-error">
           {error}
-          <button type="button" onClick={() => void load()}>重试</button>
+          <button type="button" onClick={() => void load()} data-fid="K-12">重试</button>
         </div>
       )}
       {!loading && !error && (
         <>
-          <div className="appver-head">
+          <div className="appver-head" data-fid="K-08">
             <b>本版更新</b>
             <span>
               v{notes?.version || data?.current?.version || ""}
@@ -179,7 +179,7 @@ export function AppVersionPanel({ notify }: { notify: (s: string) => void }) {
             <p className="appver-hint">这个版本没有登记更新说明。</p>
           )}
 
-          <div className="appver-head appver-history-head">
+          <div className="appver-head appver-history-head" data-fid="K-09">
             <b>本机版本历史</b>
             <span>共 {versions.length} 个</span>
           </div>
@@ -194,7 +194,7 @@ export function AppVersionPanel({ notify }: { notify: (s: string) => void }) {
                   value={selected}
                   onChange={(e) => setSelected(e.target.value)}
                   disabled={rolling}
-                  aria-label="选择要回退的本机版本"
+                  aria-label="选择要回退的本机版本" data-fid="K-10"
                 >
                   {versions.map((v) => (
                     <option key={v.id} value={v.id}>
@@ -206,7 +206,7 @@ export function AppVersionPanel({ notify }: { notify: (s: string) => void }) {
                 <Button
                   disabled={rolling || !selectedRow || selected === currentId}
                   onClick={() => void rollback()}
-                  title={selected === currentId ? "当前已经在用这个版本" : "回退到选中的本机快照"}
+                  title={selected === currentId ? "当前已经在用这个版本" : "回退到选中的本机快照"} fid="K-11"
                 >
                   <RotateCcw size={14} /> {selected === currentId ? "当前版本" : "回退到此版本"}
                 </Button>

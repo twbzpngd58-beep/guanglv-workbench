@@ -206,16 +206,16 @@ export function UpdatePanel({ notify }: { notify: (s: string) => void }) {
         校验 SHA256、备份当前版本、覆盖程序与前端并重启，项目数据在 data/ 不会被改动。
       </p>
       <div className="update-actions">
-        <Button disabled={checking || busy} onClick={() => void check()}>
+        <Button disabled={checking || busy} onClick={() => void check()} fid="K-02">
           {checking ? "正在检查…" : "检查更新"} <RefreshCw size={15} />
         </Button>
         {info?.hasUpdate && info.canAutoUpdate && !busy && (
-          <Button variant="primary" onClick={() => void apply()}>
+          <Button variant="primary" onClick={() => void apply()} fid="K-04">
             <Download size={15} /> 立即更新到 v{info.latest}
           </Button>
         )}
         {info?.hasUpdate && (
-          <a href={String(info.url || "")} target="_blank" rel="noreferrer">
+          <a href={String(info.url || "")} target="_blank" rel="noreferrer" data-fid="K-03">
             打开下载页 <ExternalLink size={14} />
           </a>
         )}

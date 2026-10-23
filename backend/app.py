@@ -3391,6 +3391,10 @@ lighting3d_mod.register(app)
 from . import app_versions as app_versions_mod  # noqa: E402
 app_versions_mod.register(app)
 
+# 功能改动记录（功能清单里查作用 / 改动次数 / 回退）——同样必须在 SPA 兜底路由之前
+from . import feature_history as feature_history_mod  # noqa: E402
+feature_history_mod.register(app)
+
 
 DIST = ROOT / "frontend" / "dist"
 if DIST.exists():

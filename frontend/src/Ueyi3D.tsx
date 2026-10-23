@@ -99,7 +99,7 @@ export function Ueyi3D({
   }, [levels]);
 
   return (
-    <div className="scene-model-3d" aria-label="三维灯光场景">
+    <div className="scene-model-3d" aria-label="三维灯光场景" data-fid="V-24">
       <iframe
         ref={frame}
         key={`${projectId}-${floor}`}

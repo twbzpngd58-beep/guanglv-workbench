@@ -1564,19 +1564,19 @@ export function Workspace({
   const addPositions = groupedPositionsForSpace(addSpaceCode);
   // 图层开关：底图与布灯、情景演示共用一套状态。
   const layerSwitch = (
-    <div className="layer-switch" title="图层开关：灯具与设备（面板）叠在一起时，关掉设备层就能单独看灯、单独拖灯">
+    <div className="layer-switch" title="图层开关：灯具与设备（面板）叠在一起时，关掉设备层就能单独看灯、单独拖灯" data-fid="D-63">
       <span>图层</span>
       <button
         className={fixtureLayer ? "active" : ""}
         onClick={() => setFixtureLayer((v) => !v)}
-        title="显示/隐藏灯具层"
+        title="显示/隐藏灯具层" data-fid="D-64"
       >
         <Lightbulb size={13} /> 灯具 {(d?.fixtures || []).filter(isSceneLight).length}
       </button>
       <button
         className={deviceLayer ? "active" : ""}
         onClick={() => setDeviceLayer((v) => !v)}
-        title="显示/隐藏设备层（面板、传感器、网关等）"
+        title="显示/隐藏设备层（面板、传感器、网关等）" data-fid="D-65"
       >
         <Plus size={13} /> 设备 {d?.devices?.length ?? 0}
       </button>
@@ -3616,61 +3616,61 @@ export function Workspace({
       fmt: "html",
       title: "业主版灯光演示 HTML",
       desc: "单个文件、离线可用：把文件发给业主即可打开，可点情景触发、切楼层、看灯具分组",
-      icon: Sparkles,
+      icon: Sparkles, fid: "E-01",
     },
     {
       fmt: "panels",
       title: "面板刻字排版图",
       desc: "给面板厂家的可打印刻字清单：按真实键位排布，含每键刻字与绑定情景",
-      icon: LayoutGrid,
+      icon: LayoutGrid, fid: "E-02",
     },
     {
       fmt: "zip",
       title: "完整设计资料包",
       desc: "JSON + 灰度平面 PNG/JPG + PDF + Excel + Word + HTML + 布置 DXF",
-      icon: Box,
+      icon: Box, fid: "E-03",
     },
     {
       fmt: "png",
       title: "2D 平面布置图 PNG",
       desc: "普通灰度平面图叠加已布置灯具与设备；不生成不可靠彩平，未标定比例仅供设计参考",
-      icon: FileText,
+      icon: FileText, fid: "E-04",
     },
     {
       fmt: "jpg",
       title: "2D 平面布置图 JPG",
       desc: "按当前楼层导出普通灰度平面图和灯具设备点位",
-      icon: FileText,
+      icon: FileText, fid: "E-05",
     },
     {
       fmt: "dxf",
       title: "灯具设备布置图 DXF",
       desc: "含当前灯具、面板和传感器；无原始 CAD 时仅为无标定布置图，须补原始 DXF 和房间边界后才能作为完整施工图",
-      icon: PencilRuler,
+      icon: PencilRuler, fid: "E-06",
     },
     {
       fmt: "pdf",
       title: "平面图及清单 PDF",
       desc: "逐楼层灰度平面布置图与灯具清单，无需彩平图",
-      icon: FileText,
+      icon: FileText, fid: "E-07",
     },
     {
       fmt: "xlsx",
       title: "灯具 / 回路 / 场景表",
       desc: "Excel 工作簿，含报价基础数据",
-      icon: LayoutGrid,
+      icon: LayoutGrid, fid: "E-08",
     },
     {
       fmt: "docx",
       title: "灯光设计说明",
       desc: "可编辑 Word 文档与交付限制",
-      icon: FileText,
+      icon: FileText, fid: "E-09",
     },
     {
       fmt: "json",
       title: "结构化项目文件",
       desc: "可重新导入的 JSON 项目备份",
-      icon: Layers3,
+      icon: Layers3, fid: "E-10",
     },
   ];
   // D-09：价格复核门禁就地提示用——纳价灯具与待核实清单（阈值与后端一致：未核实 >30% 或 >10 行会被拦）。
@@ -3727,14 +3727,14 @@ export function Workspace({
     });
   };
   const railMain = [
-    { id: "plan", label: "图纸", icon: Layers3, tab: "plan" },
-    { id: "fixtures", label: "布灯", icon: Lightbulb, tab: "fixtures" },
-    { id: "review", label: "复核", icon: ShieldCheck, tab: "deliver" },
-    { id: "export", label: "交付", icon: Download, tab: "deliver" },
+    { id: "plan", label: "图纸", icon: Layers3, tab: "plan", fid: "P-05" },
+    { id: "fixtures", label: "布灯", icon: Lightbulb, tab: "fixtures", fid: "P-06" },
+    { id: "review", label: "复核", icon: ShieldCheck, tab: "deliver", fid: "P-07" },
+    { id: "export", label: "交付", icon: Download, tab: "deliver", fid: "P-08" },
   ];
   const railPlugins = [
-    ...((!capsSnapshot || hasSlot("dock:scenes")) ? [{ id: "scenes", label: "情景", icon: Sun, tab: "scenes" }] : []),
-    ...((!capsSnapshot || hasSlot("canvas:render")) ? [{ id: "renders", label: "示意", icon: Image, tab: "renders" }] : []),
+    ...((!capsSnapshot || hasSlot("dock:scenes")) ? [{ id: "scenes", label: "情景", icon: Sun, tab: "scenes", fid: "P-09" }] : []),
+    ...((!capsSnapshot || hasSlot("canvas:render")) ? [{ id: "renders", label: "示意", icon: Image, tab: "renders", fid: "P-10" }] : []),
   ];
   const dockKnx = capsSnapshot ? hasSlot("dock:knx") : knxMode;
   const goV2 = (section: string, t: string) => {
@@ -3749,46 +3749,46 @@ export function Workspace({
       {shellV2 ? (
         <>
           <header className="wsv2-top">
-            <button className="wsv2-back" onClick={leave} aria-label="返回工作台"><ArrowLeft size={18} /></button>
+            <button className="wsv2-back" onClick={leave} aria-label="返回工作台" data-fid="P-01"><ArrowLeft size={18} /></button>
             <div className="wsv2-brand"><span className="wsv2-mark" /><span><b>光律</b><small>GUANGLV</small></span></div>
             <span className="wsv2-div" />
-            <div className="wsv2-pname">
+            <div className="wsv2-pname" data-fid="X-13">
               <b>{p.name}</b>
               <span className="wsv2-status">{p.status}</span>
               <small>{p.code} · {p.city || "城市未填"} · {p.area} ㎡ · V{String(p.version).padStart(2, "0")}{smartLabelOf(p.smart) ? ` · ${smartLabelOf(p.smart)}` : ""}</small>
             </div>
             <span className="wsv2-sp" />
-            <span className="wsv2-save">
+            <span className="wsv2-save" data-fid="X-14">
               {w.saving ? <Loader2 className="spin" size={13} /> : w.saveError ? <AlertCircle size={13} /> : w.dirty ? <Clock3 size={13} /> : <CheckCircle2 size={13} />}
               {w.saving ? "保存中" : w.saveError ? "保存失败" : w.dirty ? "等待保存" : "已保存至本地"}
             </span>
-            <button className="wsv2-btn" onClick={historyOpen}><History size={14} /> 版本</button>
-            <button className="wsv2-btn" disabled={busy || locked} onClick={save} title="编辑会自动保存；这里立即保存一次"><Save size={14} /> 立即保存</button>
-            <button className="wsv2-btn gold" onClick={() => goV2("export", "deliver")} title="打开「复核与交付」页"><Download size={14} /> 复核与交付</button>
+            <button className="wsv2-btn" onClick={historyOpen} data-fid="P-02"><History size={14} /> 版本</button>
+            <button className="wsv2-btn" disabled={busy || locked} onClick={save} title="编辑会自动保存；这里立即保存一次" data-fid="P-03"><Save size={14} /> 立即保存</button>
+            <button className="wsv2-btn gold" onClick={() => goV2("export", "deliver")} title="打开「复核与交付」页" data-fid="P-04"><Download size={14} /> 复核与交付</button>
           </header>
           <nav className="wsv2-rail">
             <span className="wsv2-rgroup">主流程</span>
             {railMain.map((t) => (
-              <button key={t.id} className={"wsv2-railbtn" + (v2Section === t.id ? " on" : "")} title={t.label} onClick={() => goV2(t.id, t.tab)}>
+              <button key={t.id} className={"wsv2-railbtn" + (v2Section === t.id ? " on" : "")} title={t.label} onClick={() => goV2(t.id, t.tab)} data-fid={t.fid}>
                 <t.icon size={17} /><span>{t.label}</span>
               </button>
             ))}
             <span className="wsv2-rgroup">插件</span>
             {railPlugins.map((t) => (
-              <button key={t.id} className={"wsv2-railbtn" + (v2Section === t.id ? " on" : "")} title={t.label} onClick={() => goV2(t.id, t.tab)}>
+              <button key={t.id} className={"wsv2-railbtn" + (v2Section === t.id ? " on" : "")} title={t.label} onClick={() => goV2(t.id, t.tab)} data-fid={t.fid}>
                 <t.icon size={17} /><span>{t.label}</span>
               </button>
             ))}
-            {dockKnx && <button className="wsv2-railbtn" title="KNX 工程" onClick={() => notify("KNX 工程：S0 接入；当前先走旧版交付页")}><Grid2X2 size={17} /><span>KNX</span></button>}
+            {dockKnx && <button className="wsv2-railbtn" title="KNX 工程" onClick={() => notify("KNX 工程：S0 接入；当前先走旧版交付页")} data-fid="P-11"><Grid2X2 size={17} /><span>KNX</span></button>}
             <span className="wsv2-sp" />
-            <button className={"wsv2-railbtn" + (v2Tree ? " on" : "")} title="项目结构" onClick={() => setV2Tree(v => !v)}><Grid2X2 size={17} /><span>结构</span></button>
-            <button className="wsv2-railbtn" title="能力与插件" onClick={() => notify("能力与插件：首页能力抽屉已可用，项目内接口下一批接入")}><PanelRightClose size={17} /><span>能力</span></button>
-            <button className="wsv2-railbtn" title="返回工作台" onClick={leave}><ArrowLeft size={17} /><span>返回</span></button>
+            <button className={"wsv2-railbtn" + (v2Tree ? " on" : "")} title="项目结构" onClick={() => setV2Tree(v => !v)} data-fid="P-12"><Grid2X2 size={17} /><span>结构</span></button>
+            <button className="wsv2-railbtn" title="能力与插件" onClick={() => notify("能力与插件：首页能力抽屉已可用，项目内接口下一批接入")} data-fid="P-13"><PanelRightClose size={17} /><span>能力</span></button>
+            <button className="wsv2-railbtn" title="返回工作台" onClick={leave} data-fid="P-14"><ArrowLeft size={17} /><span>返回</span></button>
           </nav>
-          <aside className={"wsv2-tree" + (v2Tree ? " on" : "")}>
-            <div className="wsv2-treeh"><b>项目结构</b><span>对象层</span><span className="wsv2-sp" /><button title="管理空间" onClick={() => setModal("spaces")}><Plus size={14} /></button><button onClick={() => setV2Tree(false)}><X size={14} /></button></div>
+          <aside className={"wsv2-tree" + (v2Tree ? " on" : "")} data-fid="P-16">
+            <div className="wsv2-treeh"><b>项目结构</b><span>对象层</span><span className="wsv2-sp" /><button title="管理空间" onClick={() => setModal("spaces")} data-fid="P-17"><Plus size={14} /></button><button onClick={() => setV2Tree(false)} data-fid="P-18"><X size={14} /></button></div>
             <div className="wsv2-treeb">
-              {spaceMode && <details className="wsv2-dsec" {...treeSec("空间")}>
+              {spaceMode && <details className="wsv2-dsec" {...treeSec("空间")} data-fid="P-19">
                 <summary onClick={treeToggle("空间")}>空间</summary>
                 {(d.rooms || []).filter((r: Obj) => Number(r.floor || 1) === floor).map((r: Obj) => (
                   <button key={r.id} className={"wsv2-trow" + (selection?.kind === "rooms" && selection.id === r.id ? " on" : "")}
@@ -3798,7 +3798,7 @@ export function Workspace({
                 ))}
                 {!(d.rooms || []).filter((r: Obj) => Number(r.floor || 1) === floor).length && <div className="wsv2-tempty">本层暂无空间</div>}
               </details>}
-              <details className="wsv2-dsec" {...treeSec("对象")}>
+              <details className="wsv2-dsec" {...treeSec("对象")} data-fid="P-20">
                 <summary onClick={treeToggle("对象")}>对象</summary>
                 {[
                   ["回路", Array.from(new Set((d.fixtures || []).map((f: Obj) => f.circuit).filter(Boolean))).length],
@@ -3811,7 +3811,7 @@ export function Workspace({
                   <div className="wsv2-trow" key={String(k)}><span className="wsv2-tdot" />{k}<span className="wsv2-tcnt">{n}</span></div>
                 ))}
               </details>
-              <details className="wsv2-dsec" {...treeSec("交付")}>
+              <details className="wsv2-dsec" {...treeSec("交付")} data-fid="P-21">
                 <summary onClick={treeToggle("交付")}>交付</summary>
                 <div className="wsv2-trow"><span className="wsv2-tdot red" />缺件单<span className="wsv2-tcnt">{circuitIssues(d).length}</span></div>
                 <div className="wsv2-trow"><span className="wsv2-tdot" />导出格式<span className="wsv2-tcnt">10</span></div>
@@ -3819,7 +3819,7 @@ export function Workspace({
                 {knxMode && <div className="wsv2-trow"><span className="wsv2-tdot" />KNX 刻字/调试<span className="wsv2-tcnt">本机</span></div>}
                 {iesMode && <div className="wsv2-trow"><span className="wsv2-tdot" />IES 绑定<span className="wsv2-tcnt">{(d.fixtures || []).filter((f: Obj) => f.ies).length}</span></div>}
               </details>
-              {planMode && <details className="wsv2-dsec" {...treeSec("图层")}>
+              {planMode && <details className="wsv2-dsec" {...treeSec("图层")} data-fid="P-22">
                 <summary onClick={treeToggle("图层")}>图层</summary>
                 {([
                   ["家具占位", furniture, setFurniture],
@@ -3831,7 +3831,7 @@ export function Workspace({
                     <input type="checkbox" checked={!!v} onChange={(e) => set(e.target.checked)} style={{ display: "none" }} /></label>
                 ))}
               </details>}
-              <details className="wsv2-dsec" {...treeSec("能力")}>
+              <details className="wsv2-dsec" {...treeSec("能力")} data-fid="P-23">
                 <summary onClick={treeToggle("能力")}>能力</summary>
                 {capModuleRows.map((m: Obj) => (
                   <div className="wsv2-trow" key={m.id}><span className="wsv2-tdot" />{m.id}<span className="wsv2-tcnt">{String(m.pack || "").replace("pack.", "")}</span></div>
@@ -3839,7 +3839,7 @@ export function Workspace({
                 {capModules.length === 0 && <div className="wsv2-tempty">个人版 · 仅内核</div>}
                 {capModules.length > 0 && <div className="wsv2-trow"><span className="wsv2-tdot" />启用模块<span className="wsv2-tcnt">{capModules.length}</span></div>}
               </details>
-              {(knxMode || entMode) && <details className="wsv2-dsec" {...treeSec("现场基准 L1")}>
+              {(knxMode || entMode) && <details className="wsv2-dsec" {...treeSec("现场基准 L1")} data-fid="P-24">
                 <summary onClick={treeToggle("现场基准 L1")}>现场基准 L1</summary>
                 <div className="wsv2-trow wsv2-tmuted">客厅 · 4 角照 + 三尺寸</div>
                 <div className="wsv2-trow wsv2-tmuted">主卧 · 4 角照 + 三尺寸</div>
@@ -3848,12 +3848,12 @@ export function Workspace({
             </div>
           </aside>
           {v2Preview && (
-            <div className="wsv2-lightbox" onClick={() => setV2Preview("")}>
+            <div className="wsv2-lightbox" onClick={() => setV2Preview("")} data-fid="X-15">
               <img src={v2Preview} alt="现场资料预览" />
               <button title="关闭" onClick={() => setV2Preview("")}><X size={18} /></button>
             </div>
           )}
-          <div className="wsv2-statusbar">
+          <div className="wsv2-statusbar" data-fid="X-12">
             <span>本地 · SQLite</span><span>数据版本 V{String(p.version).padStart(2, "0")}</span>
             <span className="wsv2-sp" />
             <span>空间 {(d.rooms || []).length} · 灯位 {(d.fixtures || []).length} · 设备 {(d.devices || []).length}</span>
@@ -3861,7 +3861,7 @@ export function Workspace({
           </div>
         </>
       ) : (
-      <header className="studio-header">
+      <header className="studio-header" data-fid="P-29">
         <button className="studio-back" onClick={leave} aria-label="返回工作台">
           <ArrowLeft size={20} />
         </button>
@@ -3886,8 +3886,8 @@ export function Workspace({
         <div className="studio-header-actions">
           {/* 三维只在「智能情景」页：绘图页（底图与空间）不放三维，切换按钮也只在这里出现 */}
           {p.mode === "3D" && tab === "scenes" && <>
-            <Button onClick={() => setView3d((v) => !v)}>{view3d ? "看平面图" : "看三维演示"}</Button>
-            {hasDxfDrawing && <Button onClick={() => setShowCadWorkbench(true)}>三维模型 / 同步灯位</Button>}
+            <Button onClick={() => setView3d((v) => !v)} fid="V-01">{view3d ? "看平面图" : "看三维演示"}</Button>
+            {hasDxfDrawing && <Button onClick={() => setShowCadWorkbench(true)} fid="V-02">三维模型 / 同步灯位</Button>}
           </>}
           <span className={"save-state " + (w.saveError ? "error-text" : "")}>
             {w.saving ? (
@@ -3907,15 +3907,15 @@ export function Workspace({
                   ? "等待保存"
                   : "已保存至本地"}
           </span>
-          <Button onClick={historyOpen}>
+          <Button onClick={historyOpen} fid="P-02">
             <History size={16} />
             <span>版本记录</span>
           </Button>
-          <Button disabled={busy || locked} onClick={save} title="编辑会自动保存；这里立即保存一次">
+          <Button disabled={busy || locked} onClick={save} title="编辑会自动保存；这里立即保存一次" fid="P-03">
             <Save size={16} />
             <span>立即保存</span>
           </Button>
-          <Button variant="primary" onClick={() => setTab("deliver")}>
+          <Button variant="primary" onClick={() => setTab("deliver")} fid="P-04">
             <Download size={16} />
             复核与交付
           </Button>
@@ -3923,20 +3923,20 @@ export function Workspace({
       </header>
       )}
       {!shellV2 && (
-      <div className={"studio-tabbar" + (tabFade.l ? " tabbar-fade-l" : "") + (tabFade.r ? " tabbar-fade-r" : "")}>
+      <div className={"studio-tabbar" + (tabFade.l ? " tabbar-fade-l" : "") + (tabFade.r ? " tabbar-fade-r" : "")} data-fid="P-30">
         <div ref={tabbarScrollRef} onScroll={syncTabFade}>
           {[
-            { id: "plan", label: "底图与空间", icon: Layers3 },
-            { id: "fixtures", label: "灯具配置", icon: Lightbulb },
-            { id: "scenes", label: "智能情景", icon: Sun },
-            { id: "renders", label: "效果与示意", icon: Image },
-            { id: "deliver", label: "复核与交付", icon: ShieldCheck },
+            { id: "plan", label: "底图与空间", icon: Layers3, fid: "P-05" },
+            { id: "fixtures", label: "灯具配置", icon: Lightbulb, fid: "P-06" },
+            { id: "scenes", label: "智能情景", icon: Sun, fid: "P-09" },
+            { id: "renders", label: "效果与示意", icon: Image, fid: "P-10" },
+            { id: "deliver", label: "复核与交付", icon: ShieldCheck, fid: "P-08" },
           ].map((t) => (
             <button
               key={t.id}
               data-tab={t.id}
               className={tab === t.id ? "active" : ""}
-              onClick={() => setTab(t.id)}
+              onClick={() => setTab(t.id)} data-fid={t.fid}
             >
               <t.icon size={16} />
               {t.label}
@@ -3988,10 +3988,10 @@ export function Workspace({
         />
       )}
       {w.saveError && (
-        <div className="error-banner">
+        <div className="error-banner" data-fid="X-07">
           <AlertCircle size={16} />
           自动保存失败：{w.saveError}
-          <Button onClick={save}>重试</Button>
+          <Button onClick={save} fid="X-08">重试</Button>
           <Button
             onClick={() => {
               askDanger("放弃未保存更改，重新载入本地版本？", () => {
@@ -4000,20 +4000,20 @@ export function Workspace({
                   "已重新载入",
                 );
               }, "未保存的改动会丢失，本地版本保留上次保存的内容。");
-            }}
+            }} fid="X-09"
           >
             重新载入
           </Button>
         </div>
       )}
       {locked && (
-        <div className="notice lock-notice">
+        <div className="notice lock-notice" data-fid="X-10">
           <Lock size={16} />
           此版本已冻结或归档，不能编辑。
           <Button
             onClick={() =>
               run(() => operation("/versions"), "新版本已建立，复核状态已重置")
-            }
+            } fid="X-11"
           >
             新建可编辑版本
           </Button>
@@ -4023,14 +4023,14 @@ export function Workspace({
         <div className="notice amber">
           <AlertCircle size={17} />
           当前存在 AI 空间草稿。若边界出现重叠、错位或碎片，请先清除这一轮 AI 草稿；人工绘制空间和灯具不会被删除，再重新识别或手画空间。
-          <Button disabled={busy || locked} onClick={() => askDanger("清除错误 AI 草稿？", () => run(() => operation("/space-definition/discard-ai-draft"), "已清除错误 AI 空间草稿；人工对象已保留"), "只清除 AI 生成的空间草稿；人工绘制的空间和灯具不会被删除。")}>清除错误 AI 草稿</Button>
+          <Button disabled={busy || locked} onClick={() => askDanger("清除错误 AI 草稿？", () => run(() => operation("/space-definition/discard-ai-draft"), "已清除错误 AI 空间草稿；人工对象已保留"), "只清除 AI 生成的空间草稿；人工绘制的空间和灯具不会被删除。")} fid="D-67">清除错误 AI 草稿</Button>
         </div>
       )}
       {tab === "plan" && d.rooms.some((r) => r.semanticSource === "local-geometry-suggestion") && (
         <div className="notice amber">
           <AlertCircle size={17} />
           当前彩平含旧版“轮廓猜测”结果，可能把家具、图例或尺寸碎片当作房间，不能用于设计。
-          <Button disabled={busy || locked} onClick={() => askDanger("清除旧版错误彩平？", () => run(() => operation("/recognition/reset-auto-plan"), "已清除错误的旧版自动彩平；请重新导入或接入语义户型接口"), "只清除旧版轮廓猜测生成的彩平；人工绘制的空间和灯具不会被删除。")}>清除旧版错误彩平</Button>
+          <Button disabled={busy || locked} onClick={() => askDanger("清除旧版错误彩平？", () => run(() => operation("/recognition/reset-auto-plan"), "已清除错误的旧版自动彩平；请重新导入或接入语义户型接口"), "只清除旧版轮廓猜测生成的彩平；人工绘制的空间和灯具不会被删除。")} fid="D-68">清除旧版错误彩平</Button>
         </div>
       )}
       {tab === "plan" && p.recognition && (
@@ -4064,7 +4064,7 @@ export function Workspace({
             onClick={() => {
               setRecognitionFile(p.recognition!.fileId);
               openFiles();
-            }}
+            }} fid="D-69"
           >
             查看识别结果 <ChevronRight size={14} />
           </Button>
@@ -4077,7 +4077,7 @@ export function Workspace({
                   "已清除识别草稿；人工绘制的空间与灯具未改动",
                 );
               }, "只清除这一轮自动识别结果；人工绘制的空间、灯具与情景不受影响。")
-            }
+            } fid="D-70"
           >
             清除识别草稿
           </Button>
@@ -4104,7 +4104,7 @@ export function Workspace({
                 onClick={openPlace}
                 disabled={locked}
                 variant={spaceConfirmed && tool !== "draw-strip" ? "primary" : ""}
-                title="点一下进入布灯模式，再在图纸上点要放灯的位置（再点一次退出）"
+                title="点一下进入布灯模式，再在图纸上点要放灯的位置（再点一次退出）" fid="L-01"
               >
                 <Lightbulb size={15} />
                 放置灯具
@@ -4113,14 +4113,14 @@ export function Workspace({
                 onClick={openStripDraw}
                 disabled={locked}
                 variant={spaceConfirmed && tool === "draw-strip" ? "primary" : ""}
-                title="灯带画法（§十.10）：点一下进入折线模式，在图纸上依次点拐点，点一下接一段；长度按折线自动量（也可在灯具属性里直接填米数）"
+                title="灯带画法（§十.10）：点一下进入折线模式，在图纸上依次点拐点，点一下接一段；长度按折线自动量（也可在灯具属性里直接填米数）" fid="L-02"
               >
                 <PencilRuler size={15} />
                 {tool === "draw-strip" ? "完成灯带" : "画灯带折线"}
               </Button>
               {!furnitureEditing && (
                 <Button disabled={locked || furnitureLoading}
-                  onClick={() => { setFurnitureEditing(v => !v); setFurniture(true); setTool("select"); setPlacingFurniture(""); setMovingFurniture(false); }}>
+                  onClick={() => { setFurnitureEditing(v => !v); setFurniture(true); setTool("select"); setPlacingFurniture(""); setMovingFurniture(false); }} fid="L-03">
                   <Box size={15} /> 调整家具
                 </Button>
               )}
@@ -4128,21 +4128,21 @@ export function Workspace({
                 {/* B7：两个边界点键只在选中家具后出现（常驻 disabled 仍计可见键，5>3 判不过）。 */}
                 {selectedFurnitureId && (<>
                 <Button disabled={locked} variant={tool === "add-furn-point" ? "primary" : ""}
-                  onClick={() => setTool(tool === "add-furn-point" ? "select" : "add-furn-point")}>
+                  onClick={() => setTool(tool === "add-furn-point" ? "select" : "add-furn-point")} fid="L-04">
                   <Plus size={15} /> 增加边界点
                 </Button>
                 <Button disabled={locked} variant={tool === "delete-furn-point" ? "primary" : ""}
-                  onClick={() => setTool(tool === "delete-furn-point" ? "select" : "delete-furn-point")}>
+                  onClick={() => setTool(tool === "delete-furn-point" ? "select" : "delete-furn-point")} fid="L-05">
                   <Minus size={15} /> 删除边界点
                 </Button>
                 </>)}
                 <Button disabled={locked} variant={tool === "draw-furn-poly" ? "primary" : ""}
-                  onClick={() => { setTool(tool === "draw-furn-poly" ? "select" : "draw-furn-poly"); setPlacingFurniture(""); setMovingFurniture(false); setSelectedFurnitureId(""); }}>
+                  onClick={() => { setTool(tool === "draw-furn-poly" ? "select" : "draw-furn-poly"); setPlacingFurniture(""); setMovingFurniture(false); setSelectedFurnitureId(""); }} fid="L-06">
                   <MousePointer2 size={15} /> {tool === "draw-furn-poly" ? "取消绘制轮廓" : "画家具轮廓（多边形）"}
                 </Button>
               </>}
               {furnitureEditing && (
-                <Button variant="primary" onClick={() => setFurnitureEditing(false)}>
+                <Button variant="primary" onClick={() => setFurnitureEditing(false)} fid="L-07">
                   <CheckCircle2 size={15} /> ✓ 完成家具编辑
                 </Button>
               )}
@@ -4152,7 +4152,7 @@ export function Workspace({
                   variant="primary"
                   disabled={busy || locked || !d.rooms.length}
                   title={d.rooms.length ? "核对所有楼层的空间名称、边界和面积后确认" : "请先添加或导入空间"}
-                  onClick={() => void run(confirmRoomsAndOpenings, "")}
+                  onClick={() => void run(confirmRoomsAndOpenings, "")} fid="D-54"
                 >
                   <CheckCircle2 size={15} /> 确认空间
                 </Button>
@@ -4168,14 +4168,14 @@ export function Workspace({
                   aria-haspopup="menu"
                   aria-expanded={toolMenu === "add"}
                   title="添加传感器 / 智能设备 / 窗帘；记住上次用的类型"
-                  onClick={() => setToolMenu(toolMenu === "add" ? "" : "add")}
+                  onClick={() => setToolMenu(toolMenu === "add" ? "" : "add")} data-fid="D-43"
                 >
                   <Plus size={15} /> 添加 <ChevronDown size={11} />
                 </button>
                 {toolMenu === "add" && (
                   <>
                     <div className="menu-away" onClick={() => setToolMenu("")} />
-                    <div className="dropdown-menu toolbar-menu" role="menu">
+                    <div className="dropdown-menu toolbar-menu" role="menu" data-fid="L-08">
                       {[
                         ["传感器", "传感器"],
                         ["面板", "智能设备"],
@@ -4201,7 +4201,7 @@ export function Workspace({
                   aria-haspopup="menu"
                   aria-expanded={toolMenu === "file"}
                   title="图纸：导入图纸 / 空间预览"
-                  onClick={() => setToolMenu(toolMenu === "file" ? "" : "file")}
+                  onClick={() => setToolMenu(toolMenu === "file" ? "" : "file")} data-fid="D-44"
                 >
                   <Upload size={15} /> 图纸 <ChevronDown size={11} />
                 </button>
@@ -4209,10 +4209,10 @@ export function Workspace({
                   <>
                     <div className="menu-away" onClick={() => setToolMenu("")} />
                     <div className="dropdown-menu toolbar-menu" role="menu">
-                      <button role="menuitem" onClick={() => { setToolMenu(""); openFiles(); }}>
+                      <button role="menuitem" onClick={() => { setToolMenu(""); openFiles(); }} data-fid="D-41">
                         <Upload size={14} /> 导入图纸 <span className="count-bubble">{p.files.length}</span>
                       </button>
-                      <button role="menuitem" disabled={locked} onClick={() => { setToolMenu(""); void openSpacePreview(); }}>
+                      <button role="menuitem" disabled={locked} onClick={() => { setToolMenu(""); void openSpacePreview(); }} data-fid="D-42">
                         <PencilRuler size={14} /> 空间预览 / 修改空间与门窗
                       </button>
                     </div>
@@ -4227,7 +4227,7 @@ export function Workspace({
                 className="icon-btn"
                 onClick={w.undo}
                 disabled={!w.canUndo || locked}
-                title="撤销"
+                title="撤销" data-fid="X-01"
               >
                 <Undo2 size={17} />
               </button>
@@ -4235,7 +4235,7 @@ export function Workspace({
                 className="icon-btn"
                 onClick={w.redo}
                 disabled={!w.canRedo || locked}
-                title="重做"
+                title="重做" data-fid="X-02"
               >
                 <Redo2 size={17} />
               </button>
@@ -4263,13 +4263,13 @@ export function Workspace({
             </div>
           </div>
           <div className="editor-layout">
-            <aside className="object-panel">
+            <aside className="object-panel" data-fid="D-52">
               <div className="panel-title">
                 <h3>空间图层</h3>
                 <button
                   className="mini-btn"
                   disabled={locked}
-                  onClick={() => setModal("spaces")}
+                  onClick={() => setModal("spaces")} data-fid="D-46"
                 >
                   管理空间
                 </button>
@@ -4289,7 +4289,7 @@ export function Workspace({
                   disabled={locked}
                   aria-label="新增空间"
                   title="先选分区，再选房间；记住上次的分区"
-                  onClick={() => setAddSpaceOpen(true)}
+                  onClick={() => setAddSpaceOpen(true)} data-fid="D-45"
                 >
                   <Plus size={15} /> 新增空间
                 </button>
@@ -4300,18 +4300,18 @@ export function Workspace({
               <div className="layer-toggle">
                 <button
                   className={!source ? "active" : ""}
-                  onClick={() => setSource(false)}
+                  onClick={() => setSource(false)} data-fid="D-48"
                 >
                   设计图层
                 </button>
                 <button
                   className={source ? "active" : ""}
-                  onClick={() => setSource(true)}
+                  onClick={() => setSource(true)} data-fid="D-49"
                 >
                   来源图层
                 </button>
               </div>
-              <div className="object-list">
+              <div className="object-list" data-fid="D-47">
                 {d.rooms
                   .filter((r) => r.floor === floor)
                   .map((r) => (
@@ -4378,7 +4378,7 @@ export function Workspace({
                   <p className="panel-empty">添加房间，构建你的空间。</p>
                 )}
               </div>
-              <div className="layer-settings">
+              <div className="layer-settings" data-fid="D-50">
                 <h4>画布显示</h4>
                 {[
                   ["家具占位", furniture, setFurniture],
@@ -4399,7 +4399,7 @@ export function Workspace({
                   <span>底图 / 图纸叠加</span>
                   <select
                     value={background}
-                    onChange={(e) => setBackground(e.target.value)}
+                    onChange={(e) => setBackground(e.target.value)} data-fid="D-51"
                   >
                     <option value="">
                       按当前楼层自动{floorFile ? `（${floorFile.name}）` : "（本层暂无图纸）"}
@@ -4448,14 +4448,14 @@ export function Workspace({
                     onClick={() => {
                       update((n) => { n.planMasked = false; if (!noSmart) ensurePanels(n, smart); });
                       setPlanMaskBarClosed(true);
-                    }}
+                    }} fid="D-66"
                   >
                     确定
                   </Button>
                   <button
                     className="icon-btn canvas-prompt-x"
                     title="这次不用（本次会话不再提示，重新导入图纸再出）"
-                    onClick={() => setPlanMaskBarClosed(true)}
+                    onClick={() => setPlanMaskBarClosed(true)} data-fid="X-16"
                   >
                     <X size={13} />
                   </button>
@@ -4558,32 +4558,32 @@ export function Workspace({
                 planMasked={d.planMasked !== false}
                 focus={focus}
               />}
-              <div className="canvas-controls">
+              <div className="canvas-controls" data-fid="V-12">
                 <button
                   className={tool === "select" ? "active" : ""}
                   title="选择与拖动"
-                  onClick={() => setTool("select")}
+                  onClick={() => setTool("select")} data-fid="V-13"
                 >
                   <MousePointer2 size={16} />
                 </button>
                 <button
                   className={tool === "pan" ? "active" : ""}
                   title="平移画布"
-                  onClick={() => setTool("pan")}
+                  onClick={() => setTool("pan")} data-fid="V-14"
                 >
                   <Hand size={16} />
                 </button>
                 <i />
                 <button
                   title="缩小"
-                  onClick={() => setZoom(Math.max(0.4, zoom - 0.1))}
+                  onClick={() => setZoom(Math.max(0.4, zoom - 0.1))} data-fid="V-15"
                 >
                   <Minus size={16} />
                 </button>
                 <span>{Math.round(zoom * 100)}%</span>
                 <button
                   title="放大"
-                  onClick={() => setZoom(Math.min(2, zoom + 0.1))}
+                  onClick={() => setZoom(Math.min(2, zoom + 0.1))} data-fid="V-16"
                 >
                   <Plus size={16} />
                 </button>
@@ -4594,7 +4594,7 @@ export function Workspace({
                     setZoom(1);
                     setTool("select");
                     setCanvasReset((v) => v + 1);
-                  }}
+                  }} data-fid="V-17"
                 >
                   <Maximize size={16} />
                 </button>
@@ -4616,14 +4616,14 @@ export function Workspace({
                 本层 {floorLights} 盏灯 · {floorDevices} 个设备
               </div>
             </div>
-            <aside className={"inspector" + (shellV2 ? " wsv2-inspector" : "") + (shellV2 && v2Insp !== "属性" ? " wsv2-insp-other" : "")}>
+            <aside className={"inspector" + (shellV2 ? " wsv2-inspector" : "") + (shellV2 && v2Insp !== "属性" ? " wsv2-insp-other" : "")} data-fid="D-53">
               {shellV2 && (
-                <div className="wsv2-itabs">
+                <div className="wsv2-itabs" data-fid="V-18">
                   {v2InspTabs.map(t => <button key={t} className={v2Insp === t ? "on" : ""} onClick={() => setV2Insp(t)}>{t}</button>)}
                 </div>
               )}
               {shellV2 && v2Insp !== "属性" && (
-                <div className="wsv2-ipanel">
+                <div className="wsv2-ipanel" data-fid="V-19">
                   {v2Insp === "组地址" ? (
                     v2SelFix ? <>
                       <div className="wsv2-ih">KNX 映射<span>本机 · local-only</span></div>
@@ -4657,7 +4657,7 @@ export function Workspace({
                         {v2SelFix.ies?.parseError && <div className="wsv2-inote">{v2SelFix.ies.parseError}</div>}
                         {(v2SelFix.ies?.parsed?.warnings || []).map((w: string) => <div className="wsv2-inote" key={w}>{w}</div>)}
                         {entMode ? (
-                          <label className="wsv2-iupload">
+                          <label className="wsv2-iupload" data-fid="V-20">
                             <Upload size={13} /> {v2SelFix.ies ? "替换 IES" : "上传 IES"}
                             <input type="file" accept=".ies" hidden onChange={(e) => { uploadIes(e.target.files?.[0]); e.target.value = ""; }} />
                           </label>
@@ -4762,7 +4762,7 @@ export function Workspace({
                                 : "示例 / 模拟对象"}
                       </span>
                     </div>
-                    <fieldset disabled={locked || busy}>
+                    <fieldset disabled={locked || busy} data-fid="D-62">
                       {selection?.kind === "rooms" && (
                         <>
                           {(selected.source === "image-analysis" || selected.source === "semantic-vision") && (
@@ -4771,7 +4771,7 @@ export function Workspace({
                                 这是 AI 空间草稿，不是固定示例。面积为待测值，房间名称与边界均可人工校正。
                               </p>
                               <Button
-                                onClick={() => patch("needsReview", false)}
+                                onClick={() => patch("needsReview", false)} fid="D-55"
                               >
                                 <CheckCircle2 size={14} />
                                 人工确认此空间
@@ -4935,16 +4935,16 @@ export function Workspace({
                                   },
                                 ],
                               )
-                            }
+                            } fid="D-56"
                           >
                             <MousePointer2 size={14} />
                             编辑边界点
                           </Button>
-                          <Button onClick={addBoundaryPoint}>
+                          <Button onClick={addBoundaryPoint} fid="D-57">
                             <Plus size={14} />
                             增加边界点
                           </Button>
-                          <Button onClick={removeBoundaryPoint}>
+                          <Button onClick={removeBoundaryPoint} fid="D-58">
                             <Minus size={14} />
                             删除最后边界点
                           </Button>
@@ -4956,18 +4956,18 @@ export function Workspace({
                             <option value="">选择同层相邻空间</option>{d.rooms.filter(r => r.id !== selected.id && r.floor === selected.floor).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                           </select></label>
                           <div className="two-fields">
-                            <Button onClick={splitRoom}>
+                            <Button onClick={splitRoom} fid="D-59">
                               <Split size={14} />
                               拆分
                             </Button>
-                            <Button disabled={!mergeTargetId} onClick={mergeRoom}>
+                            <Button disabled={!mergeTargetId} onClick={mergeRoom} fid="D-60">
                               <Combine size={14} />
                               合并
                             </Button>
                           </div>
                             </>
                           )}
-                          <Button onClick={() => addFixture(4)}>
+                          <Button onClick={() => addFixture(4)} fid="D-61">
                             <Lightbulb size={14} />
                             在房间内布置 4 盏灯
                           </Button>
@@ -5178,7 +5178,7 @@ export function Workspace({
                               <Field label="视场角（防穿墙：贴墙装、只朝一侧）">
                                 <select
                                   value={String(sensorShape(selected).fov)}
-                                  onChange={(e) => patch("fov", Number(e.target.value))}
+                                  onChange={(e) => patch("fov", Number(e.target.value))} data-fid="L-13"
                                 >
                                   {FOV_OPTIONS.map((v) => (
                                     <option key={v} value={v}>
@@ -5231,7 +5231,7 @@ export function Workspace({
                                       );
                                     }
                                     setCoverageEdit(selected.id);
-                                  }}
+                                  }} fid="L-43"
                                 >
                                   <MousePointer2 size={14} />
                                   {coverageEdit === selected.id ? "结束调整" : "手动调整范围"}
@@ -5437,7 +5437,7 @@ export function Workspace({
                                       <select
                                         value={activeSpace}
                                         aria-label="关联区域"
-                                        onChange={(e) => setLinkSpace(e.target.value)}
+                                        onChange={(e) => setLinkSpace(e.target.value)} data-fid="L-17"
                                       >
                                         <option value="">
                                           本层全部区域（{inFloor.length} 盏）
@@ -5746,7 +5746,7 @@ export function Workspace({
                 variant="primary"
                 disabled={locked}
                 onClick={openPlace}
-                title="点一下进入布灯模式，再在图纸上点要放灯的位置；编号自动生成（如 kc001）并同步标准情景"
+                title="点一下进入布灯模式，再在图纸上点要放灯的位置；编号自动生成（如 kc001）并同步标准情景" fid="L-09"
               >
                 <Plus size={16} />
                 布灯
@@ -5758,7 +5758,7 @@ export function Workspace({
             示例产品与单价仅供参考；勾选「价格已核实」代表人工核验。每段灯带独立编号、长度、电源与控制关系。
           </div>
           {cctIssues.length > 0 && (
-            <div className="notice error-banner cct-warn">
+            <div className="notice error-banner cct-warn" data-fid="L-21">
               <AlertCircle size={17} />
               <div>
                 <b>灯具色温异常 {cctIssues.length} 盏</b>
@@ -5770,10 +5770,10 @@ export function Workspace({
                     <li key={f.id}>
                       <b>{f.code}</b>
                       <em>{reasons.join("；")}</em>
-                      <button className="text-link" onClick={() => locateFixture(f)}>
+                      <button className="text-link" onClick={() => locateFixture(f)} data-fid="L-23">
                         定位 <ChevronRight size={13} />
                       </button>
-                      <button className="text-link" onClick={() => fixCct(f)}>
+                      <button className="text-link" onClick={() => fixCct(f)} data-fid="L-22">
                         一键修正
                       </button>
                     </li>
@@ -5793,7 +5793,7 @@ export function Workspace({
               <Button
                 disabled={locked || !d.fixtures.length}
                 onClick={tidyFixtureSpaces}
-                title="按灯具编号（如 kc001）把每盏灯归入空间，并同步标准情景"
+                title="按灯具编号（如 kc001）把每盏灯归入空间，并同步标准情景" fid="L-10"
               >
                 <Layers3 size={14} />
                 按编号同步空间与情景
@@ -5811,7 +5811,7 @@ export function Workspace({
                       legacy
                         ? `有 ${legacy} 盏灯的控制方式不是本方案的合法值（界面显示「旧值，请重选」），一键按方案归一到开闭；要调光的再单独改 DALI`
                         : "所有灯具的控制方式都符合当前方案"
-                    }
+                    } fid="L-11"
                   >
                     <SlidersHorizontal size={14} />
                     归一控制方式{legacy ? `（${legacy} 盏旧值）` : ""}
@@ -5821,7 +5821,7 @@ export function Workspace({
               <Button
                 disabled={!d.fixtures.length}
                 onClick={copyFixtureCodes}
-                title="把勾选的灯具编号复制成多行文本（首行是清单表头，第二行是列名，之后每行：编号-名称-空间-位置-楼层-灯组，制表符分列），可直接粘进 Excel 或发给同事；没勾选就复制全部"
+                title="把勾选的灯具编号复制成多行文本（首行是清单表头，第二行是列名，之后每行：编号-名称-空间-位置-楼层-灯组，制表符分列），可直接粘进 Excel 或发给同事；没勾选就复制全部" fid="L-12"
               >
                 <Copy size={14} />
                 复制编号{checked.length ? `（${checked.length} 盏）` : "（全部）"}
@@ -5850,7 +5850,7 @@ export function Workspace({
                       .forEach((f) => (f.group = g)),
                   );
                   notify(`已将 ${checked.length} 盏灯设为灯组「${g}」`);
-                }}
+                }} fid="L-14"
               >
                 设为该灯组
               </Button>
@@ -5862,14 +5862,14 @@ export function Workspace({
                       .filter((f) => checked.includes(f.id))
                       .forEach((f) => (f.group = "")),
                   )
-                }
+                } fid="L-15"
               >
                 取消分组
               </Button>
               <select
                 value={groupFilter}
                 aria-label="按灯组筛选"
-                onChange={(e) => setGroupFilter(e.target.value)}
+                onChange={(e) => setGroupFilter(e.target.value)} data-fid="L-16"
               >
                 <option value="">全部灯组</option>
                 {fixtureGroups.map((g) => (
@@ -5896,7 +5896,7 @@ export function Workspace({
                       .filter((f) => checked.includes(f.id))
                       .forEach((f) => (f.x += offset)),
                   )
-                }
+                } fid="L-18"
               >
                 向右移动
               </Button>
@@ -5916,14 +5916,14 @@ export function Workspace({
                     });
                     setChecked([]);
                   }, "灯具及其情景中的开关状态会一并移除。");
-                }}
+                }} fid="L-19"
               >
                 <Trash2 size={14} />
                 批量删除
               </Button>
             </div>
           </div>
-          <div className="data-table-wrap">
+          <div className="data-table-wrap" data-fid="L-20">
             <table className="data-table">
               <thead>
                 <tr>
@@ -6046,7 +6046,7 @@ export function Workspace({
                         onClick={() => {
                           setSelection({ kind: "fixtures", id: f.id });
                           setModal("fixture");
-                        }}
+                        }} data-fid="L-24"
                       >
                         编辑 <ChevronRight size={13} />
                       </button>
@@ -6060,7 +6060,7 @@ export function Workspace({
                 <Lightbulb size={32} />
                 <h3>还没有灯具</h3>
                 <p>先在空间编辑器建立房间，再添加灯具。</p>
-                <Button onClick={() => setTab("plan")}>前往底图与空间</Button>
+                <Button onClick={() => setTab("plan")} fid="L-25">前往底图与空间</Button>
               </div>
             )}
           </div>
@@ -6083,7 +6083,7 @@ export function Workspace({
               </strong>
             </div>
           </div>
-          <section className="white-panel device-section">
+          <section className="white-panel device-section" data-fid="L-26">
             <div className="section-heading">
               <h2>智能设备</h2>
               <span className="subtle">设备在「底图与空间」页添加；此处仅查看与配置。</span>
@@ -6118,7 +6118,7 @@ export function Workspace({
                       n.devices.find((v) => v.id === dev.id)!.code =
                         e.target.value;
                     })
-                  }
+                  } data-fid="L-27"
                 />
                 <select
                   disabled={locked}
@@ -6140,7 +6140,7 @@ export function Workspace({
                         if (target.type === "面板") normalizePanel(target);
                         if (target.type === "传感器") normalizeSensor(target);
                       });
-                  }}
+                  }} data-fid="L-28"
                 >
                   <option value="">产品资料选型</option>
                   {products.filter((v) => v.category === "device" && v.type !== "窗帘" && !/(电机|轨道)/.test(v.name || "")).map((v) => <option key={v.id} value={v.id}>{v.name} · {v.model}</option>)}
@@ -6219,13 +6219,13 @@ export function Workspace({
                         n.devices = n.devices.filter((v) => v.id !== devId);
                       });
                     }, "该设备从本项目中移除；已关联的灯具与空间不受影响。");
-                  }}
+                  }} data-fid="L-29"
                 >
                   <Trash2 size={16} />
                 </button>
                               </div>
                 {dev.type === "面板" && (
-                  <div className="device-keys">
+                  <div className="device-keys" data-fid="L-31">
                     <PanelProductPicker dev={dev} products={products} disabled={locked}
                       onEdit={(values) => update((n) => {
                   const dv = n.devices.find((v) => v.id === dev.id)!;
@@ -6243,7 +6243,7 @@ export function Workspace({
                           dv.keys = Number(e.target.value);
                           normalizePanel(dv);
                         })
-                      }
+                      } data-fid="L-30"
                     >
                       {PANEL_KEY_COUNTS.map((k) => (
                         <option key={k} value={k}>
@@ -6287,7 +6287,7 @@ export function Workspace({
         <main className={"studio-content" + (noSmart ? "" : " scene-page")}>
           {panelEditorOpen && selection?.kind === "devices" && selected?.type === "面板" && (
             <Modal title={`面板选型与刻字 · ${selected.code}`} subtitle="按世聪官网选型；每键只刻一次（短按），长按仅做功能不刻字（TK3 / ST3 上下双刻除外）；刻字实时显示在面板预览上"
-              onClose={() => setPanelEditorOpen(false)} wide>
+              onClose={() => setPanelEditorOpen(false)} wide fid="L-41">
             <section className="panel-scene-direct">
               <strong>{selected.name} · {floorLabel(selected.floor || floor, p.basements)}</strong>
               <PanelProductPicker dev={selected} products={products} disabled={locked}
@@ -6325,7 +6325,7 @@ export function Workspace({
                     value={smart}
                     disabled={locked || busy}
                     onChange={(e) => changeSmart(e.target.value)}
-                    title="无线＝飞利浦；KNX＝总线；未设置＝灯具按回路开闭"
+                    title="无线＝飞利浦；KNX＝总线；未设置＝灯具按回路开闭" data-fid="L-42"
                   >
                     {SMART_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -6339,7 +6339,7 @@ export function Workspace({
                   onClick={() => {
                     setBackground("");
                     setTab("plan");
-                  }}
+                  }} fid="C-01"
                 >
                   <Layers3 size={15} /> 在底图上编辑
                 </Button>
@@ -6347,14 +6347,14 @@ export function Workspace({
                   <Button
                     disabled={locked}
                     title={`按房型「${p.type}」+ 本项目空间筛出可用场景后一键套用`}
-                    onClick={openSceneSetup}
+                    onClick={openSceneSetup} fid="C-02"
                   >
                     <Sun size={15} />
                     一键设置场景
                   </Button>
                 )}
                 {!noSmart && (
-                  <Button disabled={locked} onClick={buildSystemArchitecture}>
+                  <Button disabled={locked} onClick={buildSystemArchitecture} fid="C-03">
                     <Box size={15} /> 自动建立系统架构
                   </Button>
                 )}
@@ -6362,7 +6362,7 @@ export function Workspace({
                   <Button
                     variant="primary"
                     disabled={locked}
-                    onClick={() => addScene()}
+                    onClick={() => addScene()} fid="C-04"
                   >
                     <Plus size={16} />
                     新增情景
@@ -6371,7 +6371,7 @@ export function Workspace({
                 <Button
                   disabled={busy}
                   onClick={() => download("html")}
-                  title="导出业主版灯光演示 HTML：单个文件、离线可用，可直接发给业主"
+                  title="导出业主版灯光演示 HTML：单个文件、离线可用，可直接发给业主" fid="C-05"
                 >
                   <Download size={16} />
                   导出演示页 HTML
@@ -6420,7 +6420,7 @@ export function Workspace({
                           "：按住小人拖动（走进传感器范围，关联灯具亮）；再点一次「小人漫游」退出" +
                           (toPlan ? "并回到 3D 模型。" : "。"),
                       );
-                    }}
+                    }} fid="C-06"
                   >
                     <Play size={16} /> 小人漫游
                   </Button>
@@ -6552,10 +6552,10 @@ export function Workspace({
                       className="scene-rail-search"
                       placeholder="搜索情景…"
                       value={sceneQuery}
-                      onChange={(e) => setSceneQuery(e.target.value)}
+                      onChange={(e) => setSceneQuery(e.target.value)} data-fid="C-11"
                     />
                   </div>
-                  <div className="scene-rail-list">
+                  <div className="scene-rail-list" data-fid="C-07">
                     {(() => {
                       const q = sceneQuery.trim().toLowerCase();
                       const rows = d.scenes.filter(
@@ -6583,7 +6583,7 @@ export function Workspace({
                                 key={s.id}
                                 className={"scene-rail-item" + (scene?.id === s.id ? " active" : "")}
                                 onClick={() => setActiveScene(s.id)}
-                                title={`${s.name} · ${onCount} 盏点亮`}
+                                title={`${s.name} · ${onCount} 盏点亮`} data-fid="C-08"
                               >
                                 <span className="nm">{s.name}</span>
                                 <span className="n">{onCount}</span>
@@ -6597,7 +6597,7 @@ export function Workspace({
                     })()}
                   </div>
                   <div className="scene-rail-foot">
-                    <Button disabled={locked} onClick={() => addScene()}>
+                    <Button disabled={locked} onClick={() => addScene()} fid="C-09">
                       <Plus size={14} /> 新增情景
                     </Button>
                   </div>
@@ -6703,7 +6703,7 @@ export function Workspace({
                 </div>
 
                 <aside className="scene-insp">
-                  <div className="scene-insp-tabs">
+                  <div className="scene-insp-tabs" data-fid="C-10">
                     {([
                       ["scene", "情景"],
                       ["circuit", "回路"],
@@ -6722,7 +6722,7 @@ export function Workspace({
                   <div className="scene-insp-body" key={sceneInsp}>
                     {sceneInsp === "scene" && (
                       <div className="scene-insp-pane">
-                          <fieldset disabled={locked || busy}>
+                          <fieldset disabled={locked || busy} data-fid="C-12">
                             <Field label="情景名称">
                               <input
                                 value={scene.name}
@@ -6810,7 +6810,7 @@ export function Workspace({
                                     });
                                   });
                                   setFadeTick((t) => t + 1);
-                                }}
+                                }} fid="C-13"
                               >
                                 <Power size={14} />
                                 全部开启
@@ -6825,7 +6825,7 @@ export function Workspace({
                                     });
                                   });
                                   setFadeTick((t) => t + 1);
-                                }}
+                                }} fid="C-14"
                               >
                                 全部关闭
                               </Button>
@@ -6837,7 +6837,7 @@ export function Workspace({
                                   w.undo();
                                 }}
                                 disabled={!w.canUndo || locked}
-                                title="撤回上一步"
+                                title="撤回上一步" fid="C-15"
                               >
                                 <Undo2 size={14} />
                                 撤回
@@ -6848,7 +6848,7 @@ export function Workspace({
                                   w.redo();
                                 }}
                                 disabled={!w.canRedo || locked}
-                                title="恢复"
+                                title="恢复" fid="C-16"
                               >
                                 <Redo2 size={14} />
                                 恢复
@@ -6862,7 +6862,7 @@ export function Workspace({
                                   commitSceneDraft();
                                   return flush();
                                 }, "场景已保存")
-                              }
+                              } fid="C-17"
                             >
                               <Save size={14} />
                               保存场景
@@ -6878,7 +6878,7 @@ export function Workspace({
                                     );
                                   });
                                 }, "该情景的灯光状态会被移除，其他情景不受影响。");
-                              }}
+                              }} fid="C-18"
                             >
                               <Trash2 size={14} />
                               删除情景
@@ -6894,7 +6894,7 @@ export function Workspace({
                                   operation("/renders", { sceneId: scene.id, floor }),
                                 "情景示意图已生成，可在「效果与示意」查看",
                               )
-                            }
+                            } fid="C-19"
                           >
                             <Image size={16} />
                             生成此情景示意图
@@ -6926,7 +6926,7 @@ export function Workspace({
                                 aria-label={`回路 ${g.name} 开关`}
                                 disabled={locked}
                                 className={"switch " + (lit.length ? "on" : "")}
-                                onClick={() => circuitState(g, !lit.length)}
+                                onClick={() => circuitState(g, !lit.length)} data-fid="L-44"
                               >
                                 <i />
                               </button>
@@ -6943,7 +6943,7 @@ export function Workspace({
                                 value={lv}
                                 disabled={locked}
                                 aria-label={`回路 ${g.name} 亮度`}
-                                onChange={(e) => circuitBrightness(g, Number(e.target.value))}
+                                onChange={(e) => circuitBrightness(g, Number(e.target.value))} data-fid="L-45"
                               />
                             </div>
                           );
@@ -7151,7 +7151,7 @@ export function Workspace({
                 <Button
                   disabled={busy || !health.effectRenderConfigured}
                   title={health.effectRenderConfigured ? "提交至已配置的外部效果图接口" : "请先在服务端配置 EFFECT_RENDER_PROVIDER 与 EFFECT_RENDER_URL"}
-                  onClick={() => run(() => operation("/effect-renders", { floor, sceneId: activeScene || scene?.id, sourceFileId: d.baseFileId }), "效果图任务已完成")}
+                  onClick={() => run(() => operation("/effect-renders", { floor, sceneId: activeScene || scene?.id, sourceFileId: d.baseFileId }), "效果图任务已完成")} fid="V-03"
                 ><Sparkles size={16} /> 生成效果图</Button>
               </div>
             </div>
@@ -7162,16 +7162,16 @@ export function Workspace({
               ? `效果图接口已配置（${health.effectRenderProvider}）：会提交项目、场景、镜头及选定参考图，并保存接口返回的图片。`
               : "效果图接口未配置：当前只能生成二维灯光示意，不会把示意图伪装成效果图。服务端配置 EFFECT_RENDER_PROVIDER 与 EFFECT_RENDER_URL 后可直接生成。"}
           </div>
-          <div className="white-panel camera-panel">
+          <div className="white-panel camera-panel" data-fid="V-05">
             <h3>效果图 / 彩平参考底稿</h3>
             <p className="subtle">上传效果图或参考彩平后，可作为智能情景画布底图；在场景页直接调整每盏灯状态。当前本地模式叠加的是二维灯光示意，不伪装为实景渲染。</p>
             <div className="flex">
-              <Button disabled={locked || busy} onClick={() => effectUploadRef.current?.click()}><Upload size={14} /> 上传效果图 / 彩平</Button>
+              <Button disabled={locked || busy} onClick={() => effectUploadRef.current?.click()} fid="V-04"><Upload size={14} /> 上传效果图 / 彩平</Button>
               <select aria-label="选择效果图底稿" value={d.baseFileId || ""} onChange={(e) => { const fid=e.target.value; update((n) => n.baseFileId=fid || undefined); setBackground(fid ? `/api/projects/${id}/files/${fid}?preview=true` : ""); }}>
                 <option value="">不使用底稿</option>
                 {p.files.filter((f) => f.preview).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
-              <Button disabled={!d.baseFileId} onClick={() => { setBackground(`/api/projects/${id}/files/${d.baseFileId}?preview=true`); setTab("scenes"); }}>在效果图上编辑场景</Button>
+              <Button disabled={!d.baseFileId} onClick={() => { setBackground(`/api/projects/${id}/files/${d.baseFileId}?preview=true`); setTab("scenes"); }} fid="V-06">在效果图上编辑场景</Button>
             </div>
             <input ref={effectUploadRef} hidden type="file" accept="image/*" onChange={(e) => { filesUpload(e.target.files, false).then(() => notify("效果图已上传，请在下拉列表选择为编辑底稿")); e.target.value=""; }} />
           </div>
@@ -7180,7 +7180,7 @@ export function Workspace({
               镜头配置 <span className="badge gray">接口预留 · 参数可保存</span>
             </h3>
             <fieldset disabled={locked || busy}>
-              <div className="camera-fields">
+              <div className="camera-fields" data-fid="V-07">
                 {[
                   ["x", "位置 X"],
                   ["y", "位置 Y"],
@@ -7222,7 +7222,7 @@ export function Workspace({
               </div>
             </fieldset>
           </div>
-          <div className="render-grid">
+          <div className="render-grid" data-fid="V-08">
             {p.renders
               .slice()
               .reverse()
@@ -7248,7 +7248,7 @@ export function Workspace({
                     <a
                       className="text-link"
                       href={`/api/projects/${id}/renders/${r.id}`}
-                      download={`${p.code}_V${r.version}_R${r.revision}_F${r.floor || 1}_${r.id}.png`}
+                      download={`${p.code}_V${r.version}_R${r.revision}_F${r.floor || 1}_${r.id}.png`} data-fid="V-09"
                     >
                       下载示意图 <Download size={14} />
                     </a>
@@ -7261,7 +7261,7 @@ export function Workspace({
               <Image size={36} />
               <h3>还没有生成的示意图</h3>
               <p>前往智能情景生成不同灯光状态的示意。</p>
-              <Button onClick={() => setTab("scenes")}>
+              <Button onClick={() => setTab("scenes")} fid="V-10">
                 前往智能情景 <ChevronRight size={14} />
               </Button>
             </div>
@@ -7271,9 +7271,9 @@ export function Workspace({
       {tab === "deliver" && (
         <main className="studio-content">
           {shellV2 && (
-            <div className="wsv2-dmode">
-              <button className={v2Delivery === "review" ? "on" : ""} onClick={() => { setV2Delivery("review"); setV2Section("review"); }}>复核</button>
-              <button className={v2Delivery === "export" ? "on" : ""} onClick={() => { setV2Delivery("export"); setV2Section("export"); }}>交付</button>
+            <div className="wsv2-dmode" data-fid="R-01">
+              <button className={v2Delivery === "review" ? "on" : ""} onClick={() => { setV2Delivery("review"); setV2Section("review"); }} data-fid="R-02">复核</button>
+              <button className={v2Delivery === "export" ? "on" : ""} onClick={() => { setV2Delivery("export"); setV2Section("export"); }} data-fid="R-03">交付</button>
               <span>{v2Delivery === "review" ? "五道人工复核；签名后进入交付" : "导出交付文件；复核状态另见复核页"}</span>
             </div>
           )}
@@ -7290,7 +7290,7 @@ export function Workspace({
                 <Button
                   variant="primary"
                   onClick={() => setModal("export")}
-                  title="先选交付对象（给业主 / 给施工 / 内部版）和格式，一次点击打开导出抽屉"
+                  title="先选交付对象（给业主 / 给施工 / 内部版）和格式，一次点击打开导出抽屉" fid="E-11"
                 >
                   <Download size={16} />
                   导出交付文件
@@ -7309,7 +7309,7 @@ export function Workspace({
                       () => operation("/freeze"),
                       "版本已冻结，后续编辑须建立新版本",
                     )
-                  }
+                  } fid="R-04"
                 >
                   <Lock size={16} />
                   冻结当前版本
@@ -7323,12 +7323,12 @@ export function Workspace({
               </p>
             )}
           </div>
-          <div className="notice wsv2-baseline-notice">
+          <div className="notice wsv2-baseline-notice" data-fid="R-05">
             <FileText size={17} />
             <div><b>需求复核基线</b><span>冻结客户/渠道关系、图纸版本、空间确认、场景、产品与未决项，供项目负责人或复核人脱离群聊复核。</span><small>当前：{p.requirementsBaseline?.versions?.length || 0} 个版本 · {p.channelNameSnapshot ? `渠道：${p.channelNameSnapshot}` : "2C 直客"} · {p.firstOrder?.show ? "需首单资料" : "无需重复首单资料"}</small></div>
-            <Button disabled={locked || busy} onClick={() => setModal("baseline")}><FileText size={14}/>提交需求基线</Button>
+            <Button disabled={locked || busy} onClick={() => setModal("baseline")} fid="R-06"><FileText size={14}/>提交需求基线</Button>
           </div>
-          <div id="wsv2-review" className={"review-summary " + (p.approved ? "approved" : "")}>
+          <div id="wsv2-review" className={"review-summary " + (p.approved ? "approved" : "")} data-fid="R-07">
             <span className="review-icon">
               <ShieldCheck size={34} />
             </span>
@@ -7354,7 +7354,7 @@ export function Workspace({
               <small>复核完成</small>
             </strong>
           </div>
-          <div className="review-cards">
+          <div className="review-cards" data-fid="R-08">
             {/* 第 4 列＝前置条件：与后端复核门禁同口径。闸门不改（业务纪律），
                 只把「先做什么」写在卡片上，免得签名被 422 拦下却不知道出路。 */}
             {[
@@ -7404,7 +7404,7 @@ export function Workspace({
                       setModal("review:" + key);
                       setAck(false);
                       setReviewError("");
-                    }}
+                    }} fid="R-09"
                   >
                     人工复核 <ArrowUpRight size={14} />
                   </Button>
@@ -7413,24 +7413,24 @@ export function Workspace({
             ))}
           </div>
           {reviewError && reviewErrorKey === "pricing" && (
-            <div className="notice error-banner pricing-gate" role="alert">
+            <div className="notice error-banner pricing-gate" role="alert" data-fid="R-10">
               <AlertCircle size={17} />
               <div>
                 <b>价格复核被拦下</b>
                 <span>{reviewError}</span>
               </div>
-              <Button onClick={() => setModal("price-batch")}>
+              <Button onClick={() => setModal("price-batch")} fid="R-11">
                 去批量核实 <ChevronRight size={14} />
               </Button>
             </div>
           )}
-          <div id="wsv2-export" className="section-heading export-heading">
+          <div id="wsv2-export" className="section-heading export-heading" data-fid="E-25">
             <h2>交付文件（10 种格式）</h2>
             {p.floors > 1 && (
               <select
                 aria-label="导出图片楼层"
                 value={floor}
-                onChange={(e) => setFloor(+e.target.value)}
+                onChange={(e) => setFloor(+e.target.value)} data-fid="E-15"
               >
                 {floorLevels(p.floors, p.basements).map((lv) => (
                   <option key={lv.value} value={lv.value}>
@@ -7446,7 +7446,7 @@ export function Workspace({
             <button
               className="export-audience-chip"
               onClick={() => setModal("export")}
-              title="在「导出交付文件」抽屉里切换交付对象"
+              title="在「导出交付文件」抽屉里切换交付对象" data-fid="E-16"
             >
               交付对象：
               {exportAudience === "owner"
@@ -7456,14 +7456,14 @@ export function Workspace({
                   : "内部版（含参考价）"}
               <ChevronRight size={13} />
             </button>
-            <Button onClick={() => setModal("scene")}>
+            <Button onClick={() => setModal("scene")} fid="E-17">
               <QrCode size={16} />
               手机打开场景
             </Button>
           </div>
           {cctChecklist("导出前")}
           <CircuitIssueList design={d} where="导出前" onLocate={locateFixture} blockedNote />
-          <div className="export-grid">
+          <div className="export-grid" data-fid="E-13">
             {exportItems.map((e) => (
               <button
                 key={e.fmt}
@@ -7474,7 +7474,7 @@ export function Workspace({
                   const f = blocked.length && d.fixtures.find((x) => x.id === blocked[0].fixtureIds[0]);
                   if (f) locateFixture(f);
                   else void download(e.fmt, exportAudience);
-                }}
+                }} data-fid={e.fid}
               >
                 <span className={"export-icon " + e.fmt}>
                   <e.icon size={24} />
@@ -7510,7 +7510,7 @@ export function Workspace({
           </div>
         </main>
       )}
-      <footer className={shellV2 ? "studio-footer wsv2-hide" : "studio-footer"}>
+      <footer className={shellV2 ? "studio-footer wsv2-hide" : "studio-footer"} data-fid="X-17">
         <span>
           <span className="live-dot" />
           本地工作空间 <i /> {d.rooms.length} 个空间 · {d.fixtures.filter(isSceneLight).length}{" "}
@@ -7527,7 +7527,7 @@ export function Workspace({
           title="图纸与底图"
           subtitle="导入图片 / PDF 后自动识别空间，DXF 只解析几何、房间名需人工；识别结果先核对空间、门窗与家具，确认后才进入画布。"
           onClose={() => setModal("")}
-          wide
+          wide fid="D-31"
         >
           <div className="level-settings">
             <label className="inline-field">
@@ -7555,7 +7555,7 @@ export function Workspace({
             <Button
               disabled={busy || locked}
               onClick={saveLevels}
-              title="加地下层时已有图纸与空间整体上移：原来的一层仍然是 1F；地下室不用负数，按 B1、B2 显示"
+              title="加地下层时已有图纸与空间整体上移：原来的一层仍然是 1F；地下室不用负数，按 B1、B2 显示" fid="D-32"
             >
               <Layers3 size={14} />
               保存层数
@@ -7588,7 +7588,7 @@ export function Workspace({
             <Button
               variant="primary"
               disabled={busy || locked}
-              onClick={() => uploadRef.current?.click()}
+              onClick={() => uploadRef.current?.click()} fid="D-33"
             >
               <Upload size={16} />
               上传图纸
@@ -7613,7 +7613,7 @@ export function Workspace({
             上传后图纸作为画布底图，并只读取图上的空间名称文字：识别到什么空间就直接建立这些空间（别墅/复式/带地下室按文件名或所选楼层落层，地下室记作 B1/B2），不必再手输、也不需要框选边界。编号自带空间与位置（如 kc001 ＝ 客厅·茶几的 1 号灯），并据此自动同步标准情景。按文件名识别楼层：文件名里已写明楼层的图纸（1F 平面图.png、二层照明.dxf、地下一层.pdf、-2F.jpg）自动落层：写了地下层而项目还没设地下层时，会自动补齐地下层数（已有内容整体上移、标签不变，可在「楼层设置」核对）；判不出来时才用每张图纸旁的下拉框手选。PDF
             取第一页作底图，DXF 可解析基础几何。
           </div>
-          <div className="file-list">
+          <div className="file-list" data-fid="D-34">
             {p.files.map((f) => (
               <article key={f.id}>
                 <button
@@ -7716,7 +7716,7 @@ export function Workspace({
                           setModal("");
                           setTab("plan");
                         }, "已按图纸文字识别空间名称，并建到对应楼层")
-                      }
+                      } fid="D-35"
                     >
                       <Sparkles size={13} />
                       识别空间名称
@@ -7737,7 +7737,7 @@ export function Workspace({
                         notify(
                           `已设为底图${f.floor && p.floors > 1 ? `（${floorLabel(f.floor, p.basements)}）` : ""}；可直接布灯，编号自动带空间与位置（如 kc001），不需要框选空间`,
                         );
-                      }}
+                      }} fid="D-36"
                     >
                       <Layers3 size={13} />
                       设为底图（可直接放灯）
@@ -7745,7 +7745,7 @@ export function Workspace({
                     <a
                       href={`/api/projects/${id}/files/${f.id}`}
                       className="icon-btn"
-                      title="下载原始文件"
+                      title="下载原始文件" data-fid="D-37"
                     >
                       <Download size={15} />
                     </a>
@@ -7762,7 +7762,7 @@ export function Workspace({
                             "原图已删除",
                           );
                         }, "原图与本项目中的引用会被删除，已生成的设计对象保留。");
-                      }}
+                      }} data-fid="D-38"
                     >
                       <Trash2 size={15} />
                     </button>
@@ -7786,7 +7786,7 @@ export function Workspace({
                 currentRecognition.rooms.length
                   ? "detected"
                   : "")
-              }
+              } data-fid="D-39"
             >
               <h3>
                 <Layers3 size={17} />
@@ -7908,7 +7908,7 @@ export function Workspace({
                     setModal("");
                     setTab("plan");
                   }, "识别草稿已追加，原设计已保留")
-                }
+                } fid="D-40"
               >
                 {currentRecognition.replacements?.length
                   ? "已部分替换，请继续逐空间替换"
@@ -7927,7 +7927,7 @@ export function Workspace({
         <Modal
           title={`${selected.code} · 灯具配置`}
           subtitle="参数独立保存，关联产品不会合并不同位置的灯具。"
-          onClose={() => setModal("")}
+          onClose={() => setModal("")} fid="L-32"
         >
           <fieldset disabled={locked || busy}>
             {!isDecorativeLight(selected.type) && (
@@ -7938,7 +7938,7 @@ export function Workspace({
                   ? `已上传：${selected.ies.name}（预留：解析后自动按实测配光计算）`
                   : "未上传 · 当前按半角光束角理论值估算光斑"}
               </span>
-              <Button disabled={locked || busy} onClick={() => iesRef.current?.click()}>
+              <Button disabled={locked || busy} onClick={() => iesRef.current?.click()} fid="L-33">
                 <Upload size={14} /> 上传 IES
               </Button>
               <input
@@ -7979,7 +7979,7 @@ export function Workspace({
             />
           </fieldset>
           <div className="modal-foot">
-            <Button disabled={locked} onClick={copySelected}>
+            <Button disabled={locked} onClick={copySelected} fid="L-34">
               <Copy size={14} />
               复制灯具
             </Button>
@@ -7989,7 +7989,7 @@ export function Workspace({
                 !lampClipboard ||
                 (clipKind !== "fixtures" && clipKind !== "devices")
               }
-              onClick={pasteFixture}
+              onClick={pasteFixture} fid="L-35"
             >
               <Copy size={14} />
               {clipKind === "devices" ? "粘贴设备" : "粘贴灯具"}
@@ -8002,7 +8002,7 @@ export function Workspace({
                   setModal("");
                 }, "灯具参数已保存")
               }
-              disabled={busy}
+              disabled={busy} fid="L-36"
             >
               保存并关闭
             </Button>
@@ -8013,7 +8013,7 @@ export function Workspace({
         <Modal
           title="布灯 · 选择编号"
           subtitle="编号 = 空间码 + 位置码 + 职能码 + 序号，例如 kcA001 ＝ 客厅·茶几·氛围灯 1 号；确认后自动编号并按「空间×职能×位置」同步标准情景。"
-          onClose={closePlace}
+          onClose={closePlace} fid="L-37"
         >
           <p className="field-hint">
             {placePoint
@@ -8211,7 +8211,7 @@ export function Workspace({
                 // W-1：不走 closePlace()（它会把 tool 打回 select）。只关弹窗、清落点，保持布灯模式好连点。
                 setModal("");
                 setPlacePoint(null);
-              }}
+              }} fid="L-38"
             >
               <Plus size={15} /> 确认布灯
             </Button>
@@ -8222,7 +8222,7 @@ export function Workspace({
         <Modal
           title={addObject === "curtain" ? "添加窗帘 · 确认布置" : "添加设备 · 确认类型与空间"}
           subtitle={`楼层跟随当前页（${floorLabel(floor, p.basements || 0)}）；空间已按落点自动选中，仍可手动改。`}
-          onClose={exitAddMode}
+          onClose={exitAddMode} fid="L-39"
         >
           <div className="form-grid">
             {addObject === "device" ? (
@@ -8333,7 +8333,7 @@ export function Workspace({
                 // F6（批 5）：加设备确认后只关对话框、清落点、保模式好连加（同 7728 布灯 W-1）；窗帘照旧退出。
                 placeDevice();
                 setPlacePoint(null);
-              }}
+              }} fid="L-40"
             >
               <Plus size={15} /> {addObject === "curtain" ? "确认添加窗帘" : "确认添加设备"}
             </Button>
@@ -8341,11 +8341,11 @@ export function Workspace({
         </Modal>
       )}
       {modal === "baseline" && (
-        <Modal title="提交需求复核基线" subtitle="生成一个可审计版本；不替代后续人工复核。" onClose={() => setModal("")}>
+        <Modal title="提交需求复核基线" subtitle="生成一个可审计版本；不替代后续人工复核。" onClose={() => setModal("")} fid="R-19">
           <div className="notice amber"><FileText size={17}/>将记录当前客户/渠道关系、原始图纸、空间确认状态、灯具数量和场景清单。</div>
           <Field label="提交人 *"><input value={reviewer} onChange={(e) => setReviewer(e.target.value)} placeholder="请输入提交人姓名" /></Field>
           <Field label="沟通纪要 / 未决项"><textarea value={baselineNote} onChange={(e) => setBaselineNote(e.target.value)} placeholder="例如：客户确认的重点、预算约束、待确认事项及附件来源" /></Field>
-          <div className="modal-foot"><Button onClick={() => setModal("")}>取消</Button><Button variant="primary" disabled={!reviewer.trim() || busy} onClick={() => run(async () => { await operation("/requirements-baselines", {submitter: reviewer, evidence: {notes: baselineNote}}); setBaselineNote(""); setModal(""); }, "需求复核基线已冻结为新版本")}><FileText size={15}/>提交基线</Button></div>
+          <div className="modal-foot"><Button onClick={() => setModal("")}>取消</Button><Button variant="primary" disabled={!reviewer.trim() || busy} onClick={() => run(async () => { await operation("/requirements-baselines", {submitter: reviewer, evidence: {notes: baselineNote}}); setBaselineNote(""); setModal(""); }, "需求复核基线已冻结为新版本")} fid="R-14"><FileText size={15}/>提交基线</Button></div>
         </Modal>
       )}
       {modal === "export" && (
@@ -8353,9 +8353,9 @@ export function Workspace({
           title="导出交付文件"
           subtitle="先选交付对象，再点格式下载。草稿也能导出（文件带「草稿」标识）；给施工的金额字段一律为 0，给业主与内部版保留参考价。"
           onClose={() => setModal("")}
-          wide
+          wide fid="E-18"
         >
-          <div className="export-audience-pick" role="radiogroup" aria-label="交付对象">
+          <div className="export-audience-pick" role="radiogroup" aria-label="交付对象" data-fid="E-12">
             {([
               ["owner", "给业主", "外发业主：含零售价（2026-10-23 老板拍板取消去价红线）"],
               ["site", "给施工（不含价）", "给施工 / 电工：点位、回路、数量，金额全部去价"],
@@ -8383,7 +8383,7 @@ export function Workspace({
               </span>
             </div>
           </div>
-          <div className="export-grid export-grid-drawer">
+          <div className="export-grid export-grid-drawer" data-fid="E-14">
             {exportItems.map((e) => (
               <button
                 key={e.fmt}
@@ -8399,7 +8399,7 @@ export function Workspace({
                             : "内部版（含参考价）"
                       }」导出 ${e.title}`
                 }
-                onClick={() => exportWithAudience(exportAudience, e.fmt)}
+                onClick={() => exportWithAudience(exportAudience, e.fmt)} data-fid={e.fid}
               >
                 <span className={"export-icon " + e.fmt}>
                   <e.icon size={24} />
@@ -8417,7 +8417,7 @@ export function Workspace({
             ))}
           </div>
           {exportAudience === "internal" && (
-            <p className="export-internal-warn">
+            <p className="export-internal-warn" data-fid="E-19">
               内部版含零售参考价：只在本机核对用，不要直接转发业主或施工方。
             </p>
           )}
@@ -8431,7 +8431,7 @@ export function Workspace({
           title="批量核实价格"
           subtitle="标记「价格已人工核实」只记录核实状态，不修改单价；核实后回到价格复核重新签名。"
           onClose={() => setModal("")}
-          wide
+          wide fid="R-15"
         >
           <div className="notice amber">
             <ShieldCheck size={17} />
@@ -8457,7 +8457,7 @@ export function Workspace({
                     ? "纳价灯具都已标记为已核实"
                     : "把全部纳入报价的灯具标为「价格已人工核实」"
               }
-              onClick={markAllPricesVerified}
+              onClick={markAllPricesVerified} fid="R-16"
             >
               <CheckCircle2 size={15} />
               全部标记为已核实
@@ -8500,7 +8500,7 @@ export function Workspace({
             )}
           </div>
           <div className="modal-foot">
-            <Button onClick={() => { setReviewError(""); setModal("review:pricing"); }}>返回价格复核</Button>
+            <Button onClick={() => { setReviewError(""); setModal("review:pricing"); }} fid="R-17">返回价格复核</Button>
             <Button
               variant="primary"
               disabled={busy}
@@ -8509,7 +8509,7 @@ export function Workspace({
                 setReviewError("");
                 setModal("review:pricing");
                 notify("价格核实状态已保存，可以重新签名价格复核");
-              }}
+              }} fid="R-18"
             >
               保存并返回价格复核
             </Button>
@@ -8520,7 +8520,7 @@ export function Workspace({
         <Modal
           title="人工复核确认"
           subtitle="复核责任将与当前设计修订一同记录。"
-          onClose={() => setModal("")}
+          onClose={() => setModal("")} fid="R-12"
         >
           <div className="notice amber">
             <ShieldCheck size={18} />
@@ -8544,7 +8544,7 @@ export function Workspace({
             <input
               value={reviewer}
               onChange={(e) => setReviewer(e.target.value)}
-              placeholder="请输入实际复核人姓名"
+              placeholder="请输入实际复核人姓名" data-fid="R-20"
             />
           </Field>
           <label className="check-label">
@@ -8569,7 +8569,7 @@ export function Workspace({
                       ? "正在保存，稍后即可提交"
                       : ""
               }
-              onClick={() => submitReview(modal.split(":")[1])}
+              onClick={() => submitReview(modal.split(":")[1])} fid="R-13"
             >
               <ShieldCheck size={15} />
               确认复核
@@ -8581,7 +8581,7 @@ export function Workspace({
         <Modal
           title="把灯光演示交付给业主"
           subtitle="推荐发「业主版 HTML」文件：单个文件、离线可用，业主在手机或电脑上打开就能点情景触发、切楼层、看灯具分组；同 WiFi 下也可扫码直接看"
-          onClose={() => setModal("")}
+          onClose={() => setModal("")} fid="E-20"
         >
           <div className="scene-share">
             <img
@@ -8589,7 +8589,7 @@ export function Workspace({
               src={`/api/qrcode?text=${encodeURIComponent(
                 `${window.location.origin}/api/projects/${id}/scene`
               )}`}
-              alt="智能场景二维码"
+              alt="智能场景二维码" data-fid="E-21"
             />
             <div className="scene-share-meta">
               <p>
@@ -8601,7 +8601,7 @@ export function Workspace({
               <p>
                 <b>同 WiFi 现场演示：</b>也可以让业主在店里扫下面二维码直接看（此时用的是局域网地址，离开这个网络就打不开了）。
               </p>
-              <code className="scene-url">{`${window.location.origin}/api/projects/${id}/scene`}</code>
+              <code className="scene-url" data-fid="E-24">{`${window.location.origin}/api/projects/${id}/scene`}</code>
               <div className="scene-share-actions">
                 <Button
                   onClick={() => {
@@ -8610,12 +8610,12 @@ export function Workspace({
                     writeClipboard(t).then((ok) =>
                       notify(ok ? "链接已复制" : "复制失败：请手动选中链接复制"),
                     );
-                  }}
+                  }} fid="E-22"
                 >
                   <Copy size={15} />
                   复制链接
                 </Button>
-                <a href={`/api/projects/${id}/scene`} target="_blank" rel="noreferrer">
+                <a href={`/api/projects/${id}/scene`} target="_blank" rel="noreferrer" data-fid="E-23">
                   <Button>
                     <ArrowUpRight size={15} />
                     直接打开
@@ -8631,7 +8631,7 @@ export function Workspace({
           title="管理空间"
           subtitle="选择本项目有哪些空间；新增空间后，布灯编号直接按空间码生成。"
           onClose={() => setModal("")}
-          wide
+          wide fid="P-15"
         >
           <div className="space-groups">
             <div className="space-filter">
@@ -8716,7 +8716,7 @@ export function Workspace({
         <Modal
           title="新增空间"
           subtitle="先选分区，再选房间；同一分区连续新增时直接落到房间屏。空间不需要画边界，编号与情景按空间码生成。"
-          onClose={() => setAddSpaceOpen(false)}
+          onClose={() => setAddSpaceOpen(false)} fid="P-28"
         >
           {addSpaceActive ? (
             <>
@@ -8781,7 +8781,7 @@ export function Workspace({
           title="一键设置场景"
           subtitle="按房型与空间筛出本项目用得上的情景，一次套用；用不上的场景不会铺进项目。"
           onClose={() => setModal("")}
-          wide
+          wide fid="C-20"
         >
           <div className="setup-summary">
             <span className="setup-pill">房型 · {p.type}</span>
@@ -8862,14 +8862,14 @@ export function Workspace({
               <button
                 className="mini-btn"
                 disabled={locked}
-                onClick={() => setSetupSel(usableScenes.map((s) => s.code))}
+                onClick={() => setSetupSel(usableScenes.map((s) => s.code))} data-fid="C-24"
               >
                 全选
               </button>
               <button
                 className="mini-btn"
                 disabled={locked}
-                onClick={() => setSetupSel([])}
+                onClick={() => setSetupSel([])} data-fid="C-25"
               >
                 清空
               </button>
@@ -8882,7 +8882,7 @@ export function Workspace({
               onClick={() => {
                 setModal("");
                 writeScenePackage();
-              }}
+              }} fid="C-22"
             >
               写入全部 43 场景
             </Button>
@@ -8891,14 +8891,14 @@ export function Workspace({
               onClick={() => {
                 setModal("");
                 presets();
-              }}
+              }} fid="C-23"
             >
               写入标准化场景
             </Button>
             <Button
               variant="primary"
               disabled={locked}
-              onClick={applySceneSetup}
+              onClick={applySceneSetup} fid="C-21"
             >
               <Sun size={15} />
               套用 {setupSel.length} 个可用场景
@@ -8911,7 +8911,7 @@ export function Workspace({
           title="版本与操作记录"
           subtitle="每次保存保留快照；恢复历史将创建新版本，不会覆盖历史。"
           onClose={() => setModal("")}
-          wide
+          wide fid="P-25"
         >
           <div className="file-modal-actions">
             <Button
@@ -8922,7 +8922,7 @@ export function Workspace({
                   await operation("/versions");
                   setModal("");
                 }, "新版本已建立，项目编号保持不变")
-              }
+              } fid="P-26"
             >
               <Plus size={15} />
               新建版本
@@ -8954,7 +8954,7 @@ export function Workspace({
                           setModal("");
                         }, "历史设计已恢复为新版本");
                       }, "当前设计会保留在历史快照中，不会被覆盖。");
-                    }}
+                    }} fid="P-27"
                   >
                     恢复
                   </Button>
@@ -8981,7 +8981,7 @@ export function Workspace({
         </Modal>
       )}
       {busy && (
-        <div className="busy-shield" role="status">
+        <div className="busy-shield" role="status" data-fid="X-06">
           <span>
             <Loader2 className="spin" size={20} />
             正在上传 / 分析或保存，请稍候…
@@ -8993,13 +8993,13 @@ export function Workspace({
           title="图像预览"
           subtitle="示意图及识别输入均不能直接作为施工依据。"
           onClose={() => setRenderPreview("")}
-          wide
+          wide fid="V-11"
         >
           <img className="full-preview" src={renderPreview} alt="图像预览" />
         </Modal>
       )}
       {dangerAsk && (
-        <div className="confirm-modal-mask" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+        <div className="confirm-modal-mask" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" data-fid="X-03">
           <div className="confirm-modal" role="document">
             <div className="confirm-modal-head">
               <span className="confirm-modal-icon"><AlertCircle size={18} /></span>
@@ -9007,14 +9007,14 @@ export function Workspace({
             </div>
             {dangerAsk.detail && <p className="confirm-modal-detail">{dangerAsk.detail}</p>}
             <div className="confirm-modal-actions">
-              <button className="btn" onClick={() => setDangerAsk(null)}>取消</button>
+              <button className="btn" onClick={() => setDangerAsk(null)} data-fid="X-04">取消</button>
               <button
                 className="btn danger"
                 onClick={() => {
                   const runIt = dangerAsk.run;
                   setDangerAsk(null);
                   runIt();
-                }}
+                }} data-fid="X-05"
               >
                 <Trash2 size={14} />
                 确认执行

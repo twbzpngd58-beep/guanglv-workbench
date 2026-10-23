@@ -98,7 +98,7 @@ export function ProductLibrary({
             只带市场零售价，出厂价与运费不进工作台；价格与参数使用前须逐项核实。
           </p>
         </div>
-        <Button disabled={syncing} onClick={syncLibrary}>
+        <Button disabled={syncing} onClick={syncLibrary} fid="S-39">
           {syncing ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
           {syncing ? "同步中…" : "同步产品资料"}
         </Button>
@@ -119,7 +119,7 @@ export function ProductLibrary({
       </div>
 
       <div className="product-toolbar">
-        <label className="product-search">
+        <label className="product-search" data-fid="S-40">
           <Search size={15} />
           <input
             placeholder="搜产品名 / 型号 / 品牌，例：D15、射灯、世聪"
@@ -130,7 +130,7 @@ export function ProductLibrary({
         <select
           aria-label="类别筛选"
           value={category}
-          onChange={(e) => setCategory(e.target.value)}
+          onChange={(e) => setCategory(e.target.value)} data-fid="S-41"
         >
           <option value="">全部类别</option>
           <option value="light">灯具</option>
@@ -139,7 +139,7 @@ export function ProductLibrary({
         <select
           aria-label="方案筛选"
           value={scheme}
-          onChange={(e) => setScheme(e.target.value)}
+          onChange={(e) => setScheme(e.target.value)} data-fid="S-42"
         >
           <option value="">全部方案</option>
           {schemes.map((s) => (
@@ -148,7 +148,7 @@ export function ProductLibrary({
             </option>
           ))}
         </select>
-        <select aria-label="品牌筛选" value={brand} onChange={(e) => setBrand(e.target.value)}>
+        <select aria-label="品牌筛选" value={brand} onChange={(e) => setBrand(e.target.value)} data-fid="S-43">
           <option value="">全部品牌</option>
           {brands.map((b) => (
             <option key={b} value={b}>
@@ -164,7 +164,7 @@ export function ProductLibrary({
               setBrand("");
               setCategory("");
               setScheme("");
-            }}
+            }} data-fid="S-44"
           >
             清空筛选
           </button>
@@ -180,7 +180,7 @@ export function ProductLibrary({
           没有匹配的产品。产品库来自产品资料，可点右上「同步产品资料」重新灌一次。
         </p>
       ) : (
-        <div className="product-library">
+        <div className="product-library" data-fid="S-47">
           {items.slice(0, shown).map((p, i) => (
             <article key={p.id}>
               <div className={"product-visual product-" + (i % 4)}>
@@ -215,7 +215,7 @@ export function ProductLibrary({
                   onClick={() => {
                     goProjects();
                     notify("打开项目，在灯具配置中选择此产品");
-                  }}
+                  }} fid="S-45"
                 >
                   用于项目 <ArrowUpRight size={14} />
                 </Button>
@@ -230,7 +230,7 @@ export function ProductLibrary({
 
       {items.length > shown && (
         <div className="product-more">
-          <Button onClick={() => setShown(shown + PAGE)}>
+          <Button onClick={() => setShown(shown + PAGE)} fid="S-46">
             显示更多（还有 {items.length - shown} 件）
           </Button>
         </div>

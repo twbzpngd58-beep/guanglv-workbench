@@ -353,7 +353,7 @@ export function Lighting3DView({
           <button
             className="gv3d-btn"
             disabled={uploading || running}
-            onClick={() => fileRef.current?.click()}
+            onClick={() => fileRef.current?.click()} data-fid="V-32"
           >
             <Upload size={15} />
             {has3d ? "换一张 DXF" : "上传 DXF 生成三维"}
@@ -362,25 +362,25 @@ export function Lighting3DView({
             <button
               className="gv3d-btn primary"
               disabled={uploading || running}
-              onClick={() => generate(null, projectDxf.id)}
+              onClick={() => generate(null, projectDxf.id)} data-fid="V-32"
             >
               <RefreshCw size={15} />
               用项目里的图纸生成
             </button>
           ) : null}
-          <button className="gv3d-btn" disabled={!has3d} onClick={() => openDrawer("rooms")}>
+          <button className="gv3d-btn" disabled={!has3d} onClick={() => openDrawer("rooms")} data-fid="V-33">
             <PencilRuler size={15} />
             语义调整
           </button>
           <button className="gv3d-btn primary" disabled={!has3d} onClick={() => setDrawer("edit")}
-            title={spaceConfirmed ? "空间已确认：三维只读，布灯请在布灯画布改" : ""}>
+            title={spaceConfirmed ? "空间已确认：三维只读，布灯请在布灯画布改" : ""} data-fid="V-34">
             <PencilRuler size={15} /> 布灯·回路·场景{spaceConfirmed ? "（只读）" : ""}
           </button>
-          <button className="gv3d-btn" disabled={!has3d || syncing} onClick={syncDesign}>
+          <button className="gv3d-btn" disabled={!has3d || syncing} onClick={syncDesign} data-fid="V-36">
             <RefreshCw size={15} />
             {syncing ? "同步中…" : "同步灯位到灯具配置"}
           </button>
-          <button className="gv3d-btn" disabled={!has3d && !reviewed} onClick={() => openDrawer("quote")}>
+          <button className="gv3d-btn" disabled={!has3d && !reviewed} onClick={() => openDrawer("quote")} data-fid="V-35">
             <Table2 size={15} />
             一套报价
           </button>
@@ -463,7 +463,7 @@ export function Lighting3DView({
       )}
 
       {summary?.health && !running && (
-        <div className={`gv3d-health ${summary.parse_stale ? "warn" : summary.health.level}`}>
+        <div className={`gv3d-health ${summary.parse_stale ? "warn" : summary.health.level}`} data-fid="V-38">
           <div className="gv3d-health-head">
             <b>图纸体检</b>
             <span className="gv3d-hbadge">
@@ -509,15 +509,15 @@ export function Lighting3DView({
         </div>
       )}
 
-      <aside className="gv3d-panel">
+      <aside className="gv3d-panel" data-fid="V-25">
         <h1>三维空间</h1>
         <div id="pname" className="gv3d-pname" />
         <section>
           <div id="modes">
-            <button data-mode="night" className="on">
+            <button data-mode="night" className="on" data-fid="V-26">
               灯光演示
             </button>
-            <button data-mode="day">白天看图</button>
+            <button data-mode="day" data-fid="V-27">白天看图</button>
           </div>
         </section>
         <section>
@@ -527,10 +527,10 @@ export function Lighting3DView({
         <section>
           <h2>图层</h2>
           <label className="gv3d-chk">
-            <input type="checkbox" id="beams" defaultChecked /> 光锥示意
+            <input type="checkbox" id="beams" defaultChecked data-fid="V-28" /> 光锥示意
           </label>
           <label className="gv3d-chk">
-            <input type="checkbox" id="cut" defaultChecked /> 墙体剖切 1.5m
+            <input type="checkbox" id="cut" defaultChecked data-fid="V-29" /> 墙体剖切 1.5m
           </label>
         </section>
         <section>
@@ -541,14 +541,14 @@ export function Lighting3DView({
         <section>
           <h2>回路</h2>
           <div id="circuits" />
-          <button className="gv3d-ghost" id="reset">
+          <button className="gv3d-ghost" id="reset" data-fid="V-30">
             清除手动开关
           </button>
         </section>
         <section>
           <h2>场景讲解词</h2>
           <div id="script" />
-          <button className="gv3d-ghost" id="speak">
+          <button className="gv3d-ghost" id="speak" data-fid="V-31">
             🔊 念一遍
           </button>
         </section>
@@ -565,7 +565,7 @@ export function Lighting3DView({
         </div>
       )}
 
-      <aside className={"gv3d-drawer" + (drawer && !previewOnly ? " open" : "")}>
+      <aside className={"gv3d-drawer" + (drawer && !previewOnly ? " open" : "")} data-fid="V-37">
         <h3>
           <span>{drawer === "quote" ? "一套报价" : drawer === "edit" ? "布灯 · 回路 · 场景" : "空间与家具 · 语义调整"}</span>
           <button className="gv3d-btn" onClick={() => setDrawer("")}>
@@ -721,7 +721,7 @@ function LightingEditor({ id, rooms, active, readonly = false, onSaved, onError 
     </div>;
   }
   return <div className="gv3d-edit">
-    <nav>{(["lights", "circuits", "scenes"] as const).map((t) =>
+    <nav data-fid="V-39">{(["lights", "circuits", "scenes"] as const).map((t) =>
       <button key={t} className={"gv3d-btn " + (tab === t ? "primary" : "")} onClick={() => setTab(t)}>
         {{ lights: "灯具", circuits: "回路", scenes: "场景" }[t]}
       </button>)}</nav>
@@ -1062,7 +1062,7 @@ function SemanticEditor({
               ceiling: ceil.trim(),
               ceiling_net: cnet.trim(),
             })
-          }
+          } data-fid="V-40"
         >
           {saving ? <Loader2 className="spin" size={15} /> : <CheckCircle2 size={15} />}
           保存并应用

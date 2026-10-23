@@ -33,7 +33,7 @@ export function WallEvidenceReview({
   const updated =
     JSON.stringify(boxes) !== JSON.stringify(result.exclusions || []);
   return (
-    <section className="wall-evidence-review">
+    <section className="wall-evidence-review" data-fid="D-18">
       <h3>墙带候选检查 / 家具排除</h3>
       <p>
         绿色为参与空间划分的墙带候选，不代表已确认墙体。检查床、沙发、柜子是否仍被选中；若有，开启框选，在家具内部拖出红色排除区。不要框到真实墙线或门窗。
@@ -43,7 +43,7 @@ export function WallEvidenceReview({
           <input
             type="checkbox"
             checked={evidence}
-            onChange={(e) => setEvidence(e.target.checked)}
+            onChange={(e) => setEvidence(e.target.checked)} data-fid="D-18"
           />
           显示墙带候选层
         </label>
@@ -53,17 +53,17 @@ export function WallEvidenceReview({
             type="checkbox"
             disabled={busy}
             checked={draw}
-            onChange={(e) => setDraw(e.target.checked)}
+            onChange={(e) => setDraw(e.target.checked)} data-fid="D-19"
           />
           框选家具排除区
         </label>
         <Button
           disabled={busy || !boxes.length}
-          onClick={() => setBoxes((v) => v.slice(0, -1))}
+          onClick={() => setBoxes((v) => v.slice(0, -1))} fid="D-19"
         >
           撤销最后一个排除区
         </Button>
-        <Button disabled={busy || !boxes.length} onClick={() => setBoxes([])}>
+        <Button disabled={busy || !boxes.length} onClick={() => setBoxes([])} fid="D-19">
           清空排除区
         </Button>
       </div>
@@ -166,7 +166,7 @@ export function WallEvidenceReview({
           个点内可靠拟合，请人工划分。黄色虚线只是待处理范围，不是房间边界。
         </div>
       )}
-      <Button disabled={busy} onClick={() => onAnalyze(boxes)}>
+      <Button disabled={busy} onClick={() => onAnalyze(boxes)} fid="D-20">
         保存排除区并重新识别
       </Button>
       <p>

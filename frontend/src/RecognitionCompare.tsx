@@ -112,7 +112,7 @@ export function RecognitionCompare({
     );
   }
   return (
-    <section className="boundary-compare">
+    <section className="boundary-compare" data-fid="D-16">
       <h3>边界前后对比 · 确认后才替换画布</h3>
       <p>
         选择候选空间与画布房间，两侧使用相同缩放和原图。不会自动猜测并覆盖你改过的房间。
@@ -212,7 +212,7 @@ export function RecognitionCompare({
             confirmText: "确认替换",
           });
           if (ok) onReplace(candidate.id, target.id);
-        }}
+        }} fid="D-17"
       >
         {done ? "该候选已替换到画布" : "确认替换所选空间"}
       </Button>

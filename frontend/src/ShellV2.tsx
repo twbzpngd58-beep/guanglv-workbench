@@ -70,7 +70,7 @@ function LicenseIssue({ caps, onClose, onDone, notify }: {
   }
   return (
     <div className="sv2-mask sv2-licmask" onClick={onClose}>
-      <div className="sv2-licmodal" onClick={(e) => e.stopPropagation()}>
+      <div className="sv2-licmodal" onClick={(e) => e.stopPropagation()} data-fid="K-16">
         <div className="sv2-dh"><b>签发许可</b><span className="sv2-sp" /><button onClick={onClose}><X size={16} /></button></div>
         <div className="sv2-licbody">
           <p className="sv2-hint">本机签发工具：输入发行方密钥，签发后直接安装。正式发行应在离线签发机执行。</p>
@@ -92,7 +92,7 @@ function LicenseIssue({ caps, onClose, onDone, notify }: {
           </div>
           <div className="sv2-dh" style={{ height: "auto", border: 0, padding: 0, justifyContent: "flex-end" }}>
             <button className="sv2-btn" onClick={onClose}>取消</button>
-            <button className="sv2-btn gold" disabled={busy} onClick={submit}>{busy ? "签发中…" : "签发并安装"}</button>
+            <button className="sv2-btn gold" disabled={busy} onClick={submit} data-fid="K-17">{busy ? "签发中…" : "签发并安装"}</button>
           </div>
         </div>
       </div>
@@ -159,14 +159,14 @@ export function ShellV2(p: Props) {
     }
   }
   const rail = [
-    { icon: LayoutDashboard, label: "工作台", short: "工作台", active: true, act: () => {} },
-    { icon: FolderOpen, label: "全部项目", short: "全部项目", act: () => p.onNavigate("projects") },
-    { icon: Lightbulb, label: "灯具与设备库", short: "灯具库", act: () => p.onNavigate("products") },
-    { icon: Layers3, label: "场景灵感库", short: "场景库", act: () => p.onNavigate("templates") },
-    ...(isKnx ? [{ icon: Boxes, label: "KNX 工程", short: "KNX", act: () => p.notify("KNX 工程：下一批接入项目壳") }] : []),
+    { icon: LayoutDashboard, label: "工作台", short: "工作台", active: true, act: () => {}, fid: "S-51" },
+    { icon: FolderOpen, label: "全部项目", short: "全部项目", act: () => p.onNavigate("projects"), fid: "S-52" },
+    { icon: Lightbulb, label: "灯具与设备库", short: "灯具库", act: () => p.onNavigate("products"), fid: "S-53" },
+    { icon: Layers3, label: "场景灵感库", short: "场景库", act: () => p.onNavigate("templates"), fid: "S-54" },
+    ...(isKnx ? [{ icon: Boxes, label: "KNX 工程", short: "KNX", act: () => p.notify("KNX 工程：下一批接入项目壳"), fid: "S-65" }] : []),
     ...(isEnt ? [
-      { icon: Grid2X2, label: "品牌与报价", short: "品牌报价", act: () => p.notify("品牌与报价：企业包 UI 下一批接入") },
-      { icon: ShieldCheck, label: "团队与权限", short: "团队", act: () => p.notify("团队与权限：企业包 UI 下一批接入") },
+      { icon: Grid2X2, label: "品牌与报价", short: "品牌报价", act: () => p.notify("品牌与报价：企业包 UI 下一批接入"), fid: "S-66" },
+      { icon: ShieldCheck, label: "团队与权限", short: "团队", act: () => p.notify("团队与权限：企业包 UI 下一批接入"), fid: "S-67" },
     ] : []),
   ];
 
@@ -180,34 +180,34 @@ export function ShellV2(p: Props) {
         <div className="sv2-crumb">工作空间 <ChevronRight size={12} /> <b>工作台</b></div>
         <div className="sv2-search">
           <Search size={13} />
-          <input placeholder="搜索项目、客户或编号" />
+          <input placeholder="搜索项目、客户或编号" data-fid="S-49" />
           <span className="sv2-kbd"><Command size={10} /> K</span>
         </div>
         <span className="sv2-sp" />
         <span className="sv2-health"><i /> 本地服务 {p.health.ok ? "已连接" : "连接中"}</span>
         {caps?.demoEditionsAllowed !== false && <div className="sv2-ed">
           {(Object.keys(ED) as Edition[]).map((k) => (
-            <button key={k} className={edition === k ? "on" : ""} onClick={() => setEdition(k)}>
+            <button key={k} className={edition === k ? "on" : ""} onClick={() => setEdition(k)} data-fid={k === "personal" ? "A-08" : k === "knx" ? "A-09" : "A-10"}>
               {ED[k].label}<small>{ED[k].short}</small>
             </button>
           ))}
         </div>}
-        <button className="sv2-btn ghost" onClick={p.onOld}>旧版工作台</button>
+        <button className="sv2-btn ghost" onClick={p.onOld} data-fid="S-01">旧版工作台</button>
         <span className="sv2-avatar">光</span>
       </header>
 
       <div className="sv2-body">
         <nav className="sv2-rail">
           {rail.map((it, i) => (
-            <button key={i} className={"sv2-item" + (it.active ? " on" : "")} title={it.label} onClick={it.act}>
+            <button key={i} className={"sv2-item" + (it.active ? " on" : "")} title={it.label} onClick={it.act} data-fid={it.fid}>
               <it.icon size={17} /><span>{(it as any).short || it.label}</span>
             </button>
           ))}
           <span className="sv2-sp" />
-          <button className="sv2-item" title="能力与插件" onClick={() => setDrawer(true)}>
+          <button className="sv2-item" title="能力与插件" onClick={() => setDrawer(true)} data-fid="S-55">
             <PanelLeft size={17} /><span>能力</span>
           </button>
-          <button className="sv2-item" title="工作台设置" onClick={() => p.onNavigate("settings")}>
+          <button className="sv2-item" title="工作台设置" onClick={() => p.onNavigate("settings")} data-fid="S-56">
             <Settings2 size={17} /><span>设置</span>
           </button>
         </nav>
@@ -221,11 +221,11 @@ export function ShellV2(p: Props) {
             </div>
             <div className="sv2-actions">
               {isEmpty ? (
-                <button className="sv2-btn gold" onClick={p.onCreate}><Plus size={14} /> 新建第一个项目</button>
+                <button className="sv2-btn gold" onClick={p.onCreate} data-fid="S-04"><Plus size={14} /> 新建第一个项目</button>
               ) : (
                 <>
-                  <button className="sv2-btn ghost" onClick={() => p.onNavigate("projects")}>全部项目</button>
-                  <button className="sv2-btn gold" onClick={p.onCreate}><Plus size={14} /> 新建项目</button>
+                  <button className="sv2-btn ghost" onClick={() => p.onNavigate("projects")} data-fid="S-05">全部项目</button>
+                  <button className="sv2-btn gold" onClick={p.onCreate} data-fid="S-04"><Plus size={14} /> 新建项目</button>
                 </>
               )}
             </div>
@@ -248,16 +248,16 @@ export function ShellV2(p: Props) {
                 <div className="sv2-cm">
                   {last ? `V${String(last.version).padStart(2, "0")} · ${last.status} · ${last.area} ㎡ · ${last.updatedAt?.slice(0, 10) || ""}` : "新建项目后，这里会显示最近一次设计"}
                 </div>
-                <button className="sv2-next" onClick={() => (last ? p.onOpen(last.id) : p.onCreate())}>
+                <button className="sv2-next" onClick={() => (last ? p.onOpen(last.id) : p.onCreate())} data-fid="S-06">
                   {last ? "继续布灯" : "新建第一个项目"} <ArrowRight size={13} />
                 </button>
               </div>
             </section>
             <div className="sv2-quick">
-              <button className="sv2-q" onClick={p.onCreate}><Plus size={17} /><b>新建项目</b><small>DXF / 图片 / 空白</small></button>
-              <button className="sv2-q" onClick={() => p.onNavigate("products")}><Lightbulb size={17} /><b>灯具与设备库</b><small>{p.products.length || 230} 款 · 合作品牌含零售价</small></button>
-              <button className="sv2-q" onClick={() => p.onNavigate("templates")}><Layers3 size={17} /><b>场景灵感库</b><small>{p.sceneTemplates.length || 50} 个情景</small></button>
-              <button className="sv2-q" onClick={() => setDrawer(true)}><Sparkles size={17} /><b>能力与插件</b><small>{isEnt ? "KNX + 企业包" : isKnx ? "KNX 工程包" : "个人版 · 全量制图"}</small></button>
+              <button className="sv2-q" onClick={p.onCreate} data-fid="S-07"><Plus size={17} /><b>新建项目</b><small>DXF / 图片 / 空白</small></button>
+              <button className="sv2-q" onClick={() => p.onNavigate("products")} data-fid="S-08"><Lightbulb size={17} /><b>灯具与设备库</b><small>{p.products.length || 230} 款 · 合作品牌含零售价</small></button>
+              <button className="sv2-q" onClick={() => p.onNavigate("templates")} data-fid="S-09"><Layers3 size={17} /><b>场景灵感库</b><small>{p.sceneTemplates.length || 50} 个情景</small></button>
+              <button className="sv2-q" onClick={() => setDrawer(true)} data-fid="S-10"><Sparkles size={17} /><b>能力与插件</b><small>{isEnt ? "KNX + 企业包" : isKnx ? "KNX 工程包" : "个人版 · 全量制图"}</small></button>
             </div>
           </div>
 
@@ -270,9 +270,9 @@ export function ShellV2(p: Props) {
 
           <div className="sv2-listhead">
             <h2>最近项目</h2><span>按最近编辑</span><span className="sv2-sp" />
-            <button className="sv2-link" onClick={() => p.onNavigate("projects")}>查看全部 <ArrowRight size={12} /></button>
+            <button className="sv2-link" onClick={() => p.onNavigate("projects")} data-fid="S-11">查看全部 <ArrowRight size={12} /></button>
           </div>
-          <div className="sv2-table">
+          <div className="sv2-table" data-fid="S-12">
             <div className="sv2-tr head"><span>项目</span><span>状态</span><span>版本</span><span>面积</span><span>方案</span><span>更新</span></div>
             {sorted.slice(0, 6).map((x) => (
               <button className="sv2-tr" key={x.id} onClick={() => p.onOpen(x.id)}>
@@ -288,7 +288,7 @@ export function ShellV2(p: Props) {
           </>
           )}
 
-          <div className="sv2-ability" onClick={() => setDrawer(true)}>
+          <div className="sv2-ability" onClick={() => setDrawer(true)} data-fid="A-03">
             <span className="sv2-aic"><Sparkles size={16} /></span>
             <div><b>{isEnt ? "企业包已启用：客户、渠道、品牌、团队、IES 接口。" : isKnx ? "KNX 工程包已启用：刻字 / 调试 / 映射。" : "个人版：全量制图 + 合作品牌产品 / 零售价 / IES 只读。"}</b>
               <p>插件化沉到皮下；左侧图标、右栏页签、导出卡按能力出现。点此查看能力与插件。</p></div>
@@ -308,15 +308,15 @@ export function ShellV2(p: Props) {
 
       {drawer && (
         <div className="sv2-mask" onClick={() => setDrawer(false)}>
-          <aside className="sv2-drawer" onClick={(e) => e.stopPropagation()}>
-            <div className="sv2-dh"><b>能力与插件</b><span className="sv2-sp" /><button onClick={() => setDrawer(false)}><X size={16} /></button></div>
+          <aside className="sv2-drawer" onClick={(e) => e.stopPropagation()} data-fid="A-01">
+            <div className="sv2-dh"><b>能力与插件</b><span className="sv2-sp" /><button onClick={() => setDrawer(false)} data-fid="A-07"><X size={16} /></button></div>
             <div className="sv2-db">
               <div className="sv2-license">
                 <b>许可</b>
                 <span>{caps?.license?.valid ? `${caps.label} · ${caps.license.licensee || caps.license.profile}` : "未安装 · 个人版"}</span>
                 <small>{caps?.license?.valid ? (caps.license.expiresAt ? `到期 ${caps.license.expiresAt}` : "长期有效") : (caps?.license?.reason || "把 license.json 放到 data/，并在 .env 配 GUANGLV_LICENSE_SECRET")}</small>
               </div>
-              <div className="sv2-install">
+              <div className="sv2-install" data-fid="A-05">
                 <b>安装检查</b>
                 {[
                   ["许可文件", install ? (install.licenseFileExists ? "已找到" : "未安装") : "检查中", !!install?.licenseFileExists],
@@ -328,11 +328,11 @@ export function ShellV2(p: Props) {
                 ))}
                 {install && <small className="sv2-ipath">{install.licenseFile}</small>}
                 <div className="sv2-iact">
-                  <label className="sv2-iupload">安装 license.json
+                  <label className="sv2-iupload" data-fid="K-13">安装 license.json
                     <input type="file" accept=".json,application/json" hidden onChange={(e) => { installLicense(e.target.files?.[0]); e.target.value = ""; }} />
                   </label>
-                  {install?.license?.valid && <button className="sv2-iremove" onClick={removeLicense}>移除许可</button>}
-                  <button className="sv2-iremove" onClick={() => setLicOpen(true)}>签发许可</button>
+                  {install?.license?.valid && <button className="sv2-iremove" onClick={removeLicense} data-fid="K-14">移除许可</button>}
+                  <button className="sv2-iremove" onClick={() => setLicOpen(true)} data-fid="K-15">签发许可</button>
                 </div>
               </div>
               <p className="sv2-dlead">购买/授权只感知包；日常感知入口。base 是内核，不叫包。{caps ? ` 服务端能力：${caps.label} · ${(caps.modules || []).filter((m: Obj) => m.enabled).length} 个已启用模块。` : ""}</p>
@@ -358,7 +358,7 @@ export function ShellV2(p: Props) {
 function Pack(p: { name: string; id: string; on: boolean; icon: any; desc: string; mods: string[]; lock?: string; }) {
   const Icon = p.icon;
   return (
-    <div className={"sv2-pack" + (p.on ? " on" : "") + (p.lock ? " locked" : "")}>
+    <div className={"sv2-pack" + (p.on ? " on" : "") + (p.lock ? " locked" : "")} data-fid="A-06">
       <div className="sv2-pt"><span className="sv2-pi"><Icon size={14} /></span><span><b>{p.name}</b><small>{p.id}</small></span></div>
       <p>{p.desc}</p>
       <div className="sv2-pm">{p.mods.map((m) => <span key={m}>{m}</span>)}</div>

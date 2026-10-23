@@ -80,7 +80,7 @@ export function FurniturePanel({ design, floor, selected, onSelect, onChange, on
   useEffect(() => { setBoundaryError(""); }, [item?.id]);
   const polygon = item ? hasFurniturePolygon(item) : false;
   const vertices = item ? (polygon ? item.points.length : 4) : 0;
-  return <section className="space-furniture-panel">
+  return <section className="space-furniture-panel" data-fid="X-24">
     <h4>家具 · {rows.length} 件</h4>
     <p className="subtle">选类型后在空间内单击放置；拖动可移动，尺寸与朝向单独保存。</p>
     {!readonly && <select aria-label="放置家具类型" value={placing} disabled={!rooms.length}
@@ -132,20 +132,20 @@ export function FurniturePanel({ design, floor, selected, onSelect, onChange, on
       {polygon && <p className="subtle">多边形家具：二维按画的轮廓画；朝向 ° 只决定三维里那只盒子的摆向。</p>}
       {boundaryError && <p role="alert" className="task-error">{boundaryError}</p>}
       {!readonly && <div className="space-furniture-actions">
-        {onMove && <button type="button" onClick={onMove}>{moving ? "取消移动家具" : "在画布中移动家具"}</button>}
-        <button type="button" onClick={() => editBoundary(() => patch(addFurnitureMidpoint(item)))}>增加边界点</button>
+        {onMove && <button type="button" onClick={onMove} data-fid="X-25">{moving ? "取消移动家具" : "在画布中移动家具"}</button>}
+        <button type="button" onClick={() => editBoundary(() => patch(addFurnitureMidpoint(item)))} data-fid="X-26">增加边界点</button>
         <button type="button" onClick={() => editBoundary(() =>
-          patch(deleteFurniturePoint(item, (polygon ? item.points.length : 4) - 1)))}>删除边界点</button>
-        {polygon && <button type="button" onClick={() => onChange({ ...design, furniture: (design.furniture || []).map((f: Obj) => f.id === item.id ? deleteFurniturePolygon(f) : f) })}>恢复矩形边界</button>}
-        <button type="button" onClick={() => patch({ rotation: ((item.rotation || 0) + 90) % 360 })}>旋转 90°</button>
+          patch(deleteFurniturePoint(item, (polygon ? item.points.length : 4) - 1)))} data-fid="X-27">删除边界点</button>
+        {polygon && <button type="button" onClick={() => onChange({ ...design, furniture: (design.furniture || []).map((f: Obj) => f.id === item.id ? deleteFurniturePolygon(f) : f) })} data-fid="X-28">恢复矩形边界</button>}
+        <button type="button" onClick={() => patch({ rotation: ((item.rotation || 0) + 90) % 360 })} data-fid="X-29">旋转 90°</button>
         <button type="button" onClick={() => {
           const copy = translateFurniturePolygon(
             { ...item, id: uid(), x: +item.x + 5.2, y: +item.y + 5.2, source: "manual" }, 5.2, 5.2);
           onChange({ ...design, furniture: [...(design.furniture || []), copy] }); onSelect(copy.id);
-        }}>复制家具</button>
+        }} data-fid="X-30">复制家具</button>
         <button type="button" onClick={() => {
           onChange({ ...design, furniture: (design.furniture || []).filter((f: Obj) => f.id !== item.id) }); onSelect("");
-        }}>删除家具</button>
+        }} data-fid="X-31">删除家具</button>
       </div>}
     </div>}
   </section>;
