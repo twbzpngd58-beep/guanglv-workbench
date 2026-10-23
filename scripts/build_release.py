@@ -160,9 +160,31 @@ trap 'rm -rf "$TMP"' EXIT
 HELPER_URL="https://github.com/$REPO/releases/download/$TAG/apply_update.py"
 say ""
 say "下载更新助手：$HELPER_URL"
-if ! curl -fL --retry 2 --connect-timeout 15 -m 120 "$HELPER_URL" -o "$TMP/apply_update.py"; then
-  die "下载更新助手失败。请检查网络，或到 https://github.com/$REPO/releases 手动下载发行包解压覆盖。"
+say "(网络受限时可先 export GUANGLV_PROXY=http://127.0.0.1:7897 再双击本脚本)"
+
+# 优先用 python3 下载：macOS 上它能自动读系统代理，而 curl 只认环境变量。
+# 国内网络下这一步最容易卡住，所以两条路都留。
+download_helper() {
+  python3 - "$1" "$2" <<'PYEOF'
+import sys, urllib.request
+url, dest = sys.argv[1], sys.argv[2]
+req = urllib.request.Request(url, headers={"User-Agent": "guanglv-update"})
+with urllib.request.urlopen(req, timeout=60) as r, open(dest, "wb") as f:
+    f.write(r.read())
+PYEOF
+}
+GOT=0
+if download_helper "$HELPER_URL" "$TMP/apply_update.py" && [ -s "$TMP/apply_update.py" ]; then
+  GOT=1
+else
+  say "python 下载失败，改用 curl 重试…"
+  CURL_PROXY=""
+  if [ -n "${GUANGLV_PROXY:-}" ]; then CURL_PROXY="-x $GUANGLV_PROXY"; fi
+  if curl -fL --retry 3 --connect-timeout 15 -m 180 $CURL_PROXY "$HELPER_URL" -o "$TMP/apply_update.py" && [ -s "$TMP/apply_update.py" ]; then
+    GOT=1
+  fi
 fi
+[ "$GOT" = "1" ] || die "下载更新助手失败。请检查网络，或到 https://github.com/$REPO/releases 手动下载发行包解压覆盖。"
 
 # ---------- 3. 交给 helper：下载/校验/备份/覆盖/重启 ----------
 say ""
@@ -174,8 +196,10 @@ CODE=$?
 say ""
 if [ "$CODE" = "0" ]; then
   say "更新完成。若浏览器页面还是旧的，刷新一次即可。"
+elif [ "$CODE" = "2" ]; then
+  say "已经是最新版本，不需要更新。"
 else
-  say "[失败] 退出码 $CODE。日志：$DIR/data/update.log"
+  say "[失败] 退出码 ${CODE}。日志：${DIR}/data/update.log"
   say "安装目录和项目数据都没有被破坏；如需退回旧版，可在安装目录跑："
   say "  python3 scripts/apply_update.py --check     # 看线上版本"
   say "  或者直接用更新前的备份（脚本会在 versions/ 或 data/backups/ 里留下）。"
