@@ -75,6 +75,19 @@ function sizeText(n?: number) {
   return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
 }
 
+const RELOAD_KEY = "gv-update-reloaded-to";
+
+/** 更新完成后刷新一次拿到新前端；按目标版本记账，同一个版本不会刷第二次。 */
+function reloadOnce(version: string) {
+  try {
+    if (sessionStorage.getItem(RELOAD_KEY) === version) return;
+    sessionStorage.setItem(RELOAD_KEY, version);
+  } catch {
+    /* 隐私模式下存不了，也不能把页面卡死 */
+  }
+  window.setTimeout(() => location.reload(), 1200);
+}
+
 export function UpdatePanel({ notify }: { notify: (s: string) => void }) {
   const [info, setInfo] = useState<CheckInfo | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
@@ -90,15 +103,21 @@ export function UpdatePanel({ notify }: { notify: (s: string) => void }) {
     }
   };
 
-  const pollOnce = async (): Promise<Status | null> => {
+  // 只有「本次操作真的发起了更新」才自动刷新页面。
+  // 之前这里只要看到 data/update-state.json 里是 done 就 reload，
+  // 结果更新完再进设置页会被立刻刷回工作台（刷新死循环），必须用 active 区分。
+  const pollOnce = async (active: boolean): Promise<Status | null> => {
     try {
       const s = await api<Status>("/update/status");
       setStatus(s);
       if (s.phase === "done" && s.ok) {
         stopPolling();
         setApplying(false);
-        notify(`已更新到 v${s.to || s.current}，页面即将刷新`);
-        window.setTimeout(() => location.reload(), 1500);
+        if (active) {
+          const target = String(s.to || s.current || "");
+          notify(`已更新到 v${target}，页面即将刷新`);
+          reloadOnce(target);
+        }
       } else if (s.phase === "failed") {
         stopPolling();
         setApplying(false);
@@ -113,12 +132,13 @@ export function UpdatePanel({ notify }: { notify: (s: string) => void }) {
 
   const startPolling = () => {
     stopPolling();
-    timer.current = window.setInterval(() => void pollOnce(), 1000);
+    timer.current = window.setInterval(() => void pollOnce(true), 1000);
   };
 
   useEffect(() => {
+    // 挂载时只看状态、不刷新：上次更新成功过这件事不该把页面刷掉。
     void (async () => {
-      const s = await pollOnce();
+      const s = await pollOnce(false);
       if (s?.running) {
         setApplying(true);
         startPolling();
@@ -159,6 +179,11 @@ export function UpdatePanel({ notify }: { notify: (s: string) => void }) {
     setError("");
     setApplying(true);
     try {
+      try {
+        sessionStorage.removeItem(RELOAD_KEY);
+      } catch {
+        /* ignore */
+      }
       const r = await api<Obj>("/update/apply", {
         method: "POST",
         body: JSON.stringify({ confirm: true }),
