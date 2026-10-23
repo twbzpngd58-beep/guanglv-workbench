@@ -1,0 +1,38 @@
+name: version-guard
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  version-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 版本源一致（VERSION / README / package.json / baseline / RELEASE_NOTES）
+        run: python3 scripts/version_guard.py --check
+
+      - name: tag 与版本一致（仅 tag push）
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python3 scripts/version_guard.py --check --strict
+          python3 scripts/version_guard.py --check-tag "${TAG}"
+          python3 scripts/version_guard.py --check-bump

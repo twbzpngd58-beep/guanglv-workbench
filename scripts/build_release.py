@@ -22,9 +22,13 @@ import hashlib
 import os
 import shutil
 import stat
+import sys
 import tarfile
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from version_guard import check_release_files  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 NAME = "guanglv-workbench"
@@ -251,6 +255,14 @@ def main() -> int:
     args = ap.parse_args()
 
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    problems, warnings = check_release_files(ROOT, strict_build=True)
+    for item in warnings:
+        print(f"[警告] {item}", file=sys.stderr)
+    if problems:
+        print("版本号前置检查未通过，未生成任何发行文件：", file=sys.stderr)
+        for item in problems:
+            print(f"  - {item}", file=sys.stderr)
+        return 2
     tag = f"v{version}"
     out = Path(args.out).expanduser().resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -295,6 +307,8 @@ def main() -> int:
         encoding="utf-8",
     )
     command.chmod(command.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    command_ascii = out / "guanglv-update.command"
+    shutil.copy2(command, command_ascii)
 
     meta = out / "release.json"
     meta.write_text(
@@ -320,6 +334,7 @@ def main() -> int:
     print(f"校验单：{sums}")
     print(f"更新助手：{helper}")
     print(f"老用户脚本：{command}")
+    print(f"老用户脚本（ASCII 名，Release 资产）：{command_ascii}")
     return 0
 
 

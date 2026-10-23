@@ -8,7 +8,17 @@
 
 来自 **光律 GUANGLV**（晷季照明）—— 一套在真实照明项目里跑出来的出图工具，开源给你用。
 
-**当前版本 v1.3.2**：单用户免登录、空库启动；设置页可检查更新并「立即更新」到新版（下载 → 校验 → 备份 → 覆盖 → 重启，数据不动）。
+**当前版本 v1.3.3**：单用户免登录、空库启动；设置页可检查更新并「立即更新」到新版（下载 → 校验 → 备份 → 覆盖 → 重启，数据不动）。
+
+## 版本号怎么看
+
+光律的版本号是 `X.Y.Z` 三段：
+
+- **1.3.4**（第三段变）：只修问题；项目、设置、装法都不用动，点「立即更新」即可。
+- **1.4.0**（第二段变）：有新功能；旧项目照常打开，可以放心更。
+- **2.0.0**（第一段变）：数据、装法或授权有变化；更新前先读说明、先备份。
+
+发版规则见 [docs/版本号规则.md](docs/版本号规则.md)。
 
 ![三维灯光场景](docs/preview-3d.png)
 ![图纸解析与情景](docs/preview-plan.png)
@@ -204,14 +214,29 @@ python3 scripts/apply_update.py --check
 
 ## 发版（维护者）
 
+规则见 [docs/版本号规则.md](docs/版本号规则.md)：三段 `X.Y.Z`，新功能进 minor，修复进 patch，不兼容才进 major；tag 一次性、annotated、不可移动。发版前必须过版本守卫：
+
 ```bash
-python3 scripts/build_release.py            # 生成 dist-release/：发行包 + SHA256SUMS + 老用户更新脚本
-git tag v1.3.2 && git push origin main --tags
-gh release create v1.3.2 dist-release/* --notes "…"
+python3 scripts/version_guard.py --bump patch      # 或 minor / major；同步 VERSION、README、package.json
+# 手工补 backend/app_versions.py 的 RELEASE_NOTES（从 1.3.4 起每条带 category）和 GitHub Release 说明
+cd frontend && npm run build && cd ..
+python3 scripts/version_guard.py --baseline        # 前端构建后刷新 build-baseline.json
+python3 scripts/version_guard.py --check --strict  # VERSION/README/package.json/baseline/RELEASE_NOTES 一致
+python3 scripts/version_guard.py --check-bump --base v1.3.3   # 非 git 目录；发版仓库里可省 --base
+python3 scripts/build_release.py                   # 生成 dist-release/（内部再跑一次版本校验）
+git status                                          # 发版仓工作区必须是干净的，别把旧文件带回来
+git add -A && git commit -m "v$(cat VERSION)：…"
+git tag -a "v$(cat VERSION)" -m "光律 v$(cat VERSION)"
+python3 scripts/version_guard.py --check-tag "v$(cat VERSION)"
+git push origin main "v$(cat VERSION)"
+# 在 GitHub Releases 用该 tag 建正式 Release，上传 dist-release/ 的 4 个资产（不要勾 prerelease）
 ```
 
 `build_release.py` 只打包程序资产（不含 `data/`、`.env`、`.venv/`、`node_modules/`），
 前端用的是已经构建好的 `frontend/dist/`，所以发行包解压即用、不需要 Node。
+
+Release 资产固定 4 件：`guanglv-workbench-<版本>.tar.gz`、`SHA256SUMS.txt`、`apply_update.py`、
+`guanglv-update.command`。包字节一变就必须发新 patch；同一个 tag 只允许字节相同的重传。
 
 ## 数据与配置
 
