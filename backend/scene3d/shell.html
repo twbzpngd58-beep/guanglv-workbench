@@ -11,26 +11,49 @@
     font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif; color:#1c1c1e; }
   #app { position:fixed; inset:0; }
   #labels { position:fixed; inset:0; pointer-events:none; }
-  /* 空间名：从“大卡片”收成一枚小胶囊，别挡住户型和灯位（2026-10-23） */
+  /* 空间名：只留 5 枚小胶囊，可点进房间；不再铺满整张户型图。 */
   .room { position:absolute; transform:translate(-50%,-50%); text-align:center; white-space:nowrap;
-    background:rgba(255,255,255,.78); border:1px solid var(--line); border-radius:8px;
-    padding:3px 7px; box-shadow:0 1px 6px rgba(0,0,0,.07); backdrop-filter:blur(6px); }
-  .room b { display:block; font-size:10.5px; font-weight:600; letter-spacing:.2px; line-height:1.3; }
-  .room span { display:none; font-size:8.5px; color:#6b6b70; line-height:1.2; }  /* 空间名优先，面积不占标签（进空间后顶部胶囊有面积） */
+    background:rgba(253,250,244,.84); border:1px solid rgba(84,62,38,.14); border-radius:999px;
+    padding:2px 9px; box-shadow:0 2px 8px rgba(46,32,18,.10); backdrop-filter:blur(8px);
+    pointer-events:auto; cursor:pointer; transition:opacity .18s,border-color .18s,background .18s; }
+  .room:hover { border-color:var(--gold); background:#fffdf8; }
+  .room b { display:block; font-size:10px; font-weight:600; letter-spacing:.3px; line-height:1.35; color:#57452f; }
+  .room span { display:none; font-size:8.5px; color:#6b6b70; line-height:1.2; }
   .room em { display:none; font-size:8px; color:var(--gold); font-style:normal; }
-  #hud { position:fixed; left:16px; top:16px; padding:10px 13px; border-radius:12px;
+  .room.lab-hide { visibility:hidden; opacity:0; pointer-events:none; }
+  /* 家具悬停：名称 + 尺寸；桌面端跟着指针，触屏点一下也能看 */
+  #ftip { position:fixed; left:0; top:0; z-index:12; display:none; pointer-events:none;
+    max-width:210px; padding:6px 10px; border-radius:10px; white-space:nowrap;
+    background:rgba(38,29,19,.90); color:#fff; font-size:11px; line-height:1.45;
+    box-shadow:0 6px 20px rgba(0,0,0,.22); transform:translate(12px,14px); }
+  #ftip b { font-weight:600; letter-spacing:.2px; }
+  #ftip i { display:inline-block; width:6px; height:6px; margin-right:5px; border-radius:50%;
+    background:var(--gold); vertical-align:middle; font-style:normal; }
+  #ftip.show { display:block; }
+  /* 场景概览压成一条：空间数/面积/灯数一行读完，不再三行压在户型左上角。 */
+  #hud { position:fixed; left:16px; top:16px; max-width:min(470px, calc(100% - 130px));
+    display:flex; flex-wrap:wrap; align-items:center; gap:4px 9px;
+    padding:7px 11px; border-radius:12px;
     background:rgba(255,255,255,.86); border:1px solid var(--line); box-shadow:0 4px 18px rgba(0,0,0,.06);
-    font-size:12px; line-height:1.6; backdrop-filter:blur(10px); }
-  #hud b { font-size:13px; }
-  #hud .gl-mode { display:inline-flex; align-items:center; gap:4px; margin-top:6px; padding:4px 9px;
-    min-height:28px; border-radius:999px; border:1px solid var(--line); background:#fff; color:#574f44;
-    font:inherit; font-size:11px; cursor:pointer; }
+    font-size:11.5px; line-height:1.45; backdrop-filter:blur(10px); }
+  #hud b { font-size:12px; white-space:nowrap; }
+  #hud .gl-stats { color:#6b6b70; }
+  #hud .gl-mode { display:inline-flex; align-items:center; gap:4px; padding:2px 9px;
+    min-height:24px; border-radius:999px; border:1px solid var(--line); background:#fff; color:#574f44;
+    font:inherit; font-size:11px; cursor:pointer; white-space:nowrap; }
   #hud .gl-mode:hover { border-color:var(--gold); }
   #hud .gl-mode.on { background:var(--gold); border-color:var(--gold); color:#fff; }
-  #panel { position:fixed; right:16px; top:16px; width:196px; padding:12px 13px; border-radius:14px;
+  /* 视角/图层默认收起：先让户型占满画面，点右上「视角 / 图层」再展开。 */
+  #panel { position:fixed; right:16px; top:16px; width:196px; max-height:calc(100% - 32px); overflow:auto;
+    padding:12px 13px; border-radius:14px; display:none;
     background:rgba(255,255,255,.9); border:1px solid var(--line); box-shadow:0 6px 24px rgba(0,0,0,.08);
     backdrop-filter:blur(12px); }
-  #panel h4 { margin:0 0 8px; font-size:12px; font-weight:600; color:#6b6b70; letter-spacing:.4px; }
+  #panel.gl-open { display:block; }
+  #panel h4 { margin:0 0 8px; padding-right:22px; font-size:12px; font-weight:600; color:#6b6b70; letter-spacing:.4px; }
+  #glClose { position:sticky; top:0; float:right; z-index:2; width:24px; height:24px; margin:-5px -6px 0 0;
+    display:flex; align-items:center; justify-content:center; padding:0; border:0; border-radius:50%;
+    background:transparent; color:#8a8a8f; font:16px/1 -apple-system, sans-serif; cursor:pointer; }
+  #glClose:hover { background:rgba(0,0,0,.05); color:#332b1e; }
   #panel .note { font-size:11px; color:#8a8a8f; margin:-4px 0 6px; }
   #circuits { max-height:26vh; overflow:auto; margin-bottom:8px; }
   #circuits .cir { display:flex; align-items:center; gap:6px; font-size:12px; padding:5px 7px; border-radius:8px;
@@ -62,9 +85,10 @@
     max-width:calc(100% - 32px); text-align:center; }
   /* 窄容器（工作台把 3D 嵌成一条窄栏时）：浮层跟着容器走，不按桌面 px 硬撑 */
   @media (max-width:760px) {
-    #hud { font-size:10.5px; padding:7px 9px; max-width:52%; }
-    #hud b { font-size:11.5px; }
-    #panel { width:min(180px, 46%); padding:8px 9px; max-height:calc(100% - 20px); overflow:auto; }
+    #hud { left:10px; top:10px; font-size:10.5px; padding:6px 9px; max-width:min(340px, calc(100% - 104px)); }
+    #hud b { font-size:11px; }
+    #hud .gl-mode { min-height:22px; padding:2px 8px; font-size:10px; }
+    #panel { width:min(180px, 46%); top:10px; right:10px; max-height:calc(100% - 20px); padding:8px 9px; }
     #panel h4 { font-size:10px; margin:0 0 5px; }
     #panel .row { gap:4px; margin-bottom:7px; }
     #panel button { font-size:10.5px; padding:5px 7px; min-height:30px; }
@@ -115,7 +139,7 @@
   <h4>视角</h4>
   <div class="row">
     <button data-view="top">户型图</button>
-    <button data-view="bird">鸟瞰 45°</button>
+    <button data-view="bird">鸟瞰</button>
     <button data-view="inside">室内视角</button>
   </div>
   <button id="btnSpin" style="width:100%;margin-bottom:10px">自动环绕</button>
@@ -243,7 +267,16 @@
   // 外壳侧加一盏常驻环境光 + 夜间把三盏光抬到可用区间：夜里既看得见户型，也仍看得出灯亮没亮。
   // 注意：只在「灯光演示」时抬，日景完全交给内核原值，不改变白天观感。
   var fallback = null;   // { amb, hemi, dirs }
-  var FALLBACK_NIGHT = { hemi: 2.6, dirs: [2.8, 1.0], amb: 8.0, clear: 0x2a313d };
+  // 2026-10-26：旧值把整屋抬到发灰（amb 8.0 抹平明暗），光锥和家具轮廓一起糊掉。
+  // 新值保留暗环境对比：墙/地能读出材质，灯下光斑仍是全画面最亮的一块。
+  var FALLBACK_NIGHT = { hemi: 1.2, dirs: [2.2, 0.6], amb: 2.2, clear: 0x171c24 };
+
+  // 光锥/光斑的昼夜外观：白天用普通混合，避免加色叠在浅色地板上糊成一片；
+  // 夜里回到加色混合，让「灯亮着」一眼可见。数值是相对内核 n*.26 / n*1.05 的倍率。
+  var BEAM_STYLE = {
+    day:   { cone: 0xffb95e, coneMul: 1.55, pool: 0xffb45c, poolMul: 0.55, additive: false },
+    night: { cone: 0xffc47a, coneMul: 2.25, pool: 0xffc06e, poolMul: 0.85, additive: true },
+  };
 
   function collectLights() {
     var v = window.__viewer;
@@ -254,7 +287,7 @@
       if (o.isHemisphereLight) hemi = o;
       else if (o.isDirectionalLight) dirs.push(o);
     });
-    var amb = new v.THREE.AmbientLight(0xffffff, 0);
+    var amb = new v.THREE.AmbientLight(0xffeedd, 0);
     v.scene.add(amb);
     fallback = { amb: amb, hemi: hemi, dirs: dirs };
     return true;
@@ -270,9 +303,73 @@
       fallback.amb.intensity = cfg.amb;
       v.renderer.setClearColor(cfg.clear, 1);
     } else {
-      // setLightingMode(false) 已把内核光恢复成日景原值，这里只关掉兜底环境光
-      fallback.amb.intensity = 0;
+      // setLightingMode(false) 已把内核光恢复成日景原值；这里补一点暖环境光，
+      // 让背光家具不至于压成黑块（墙体另有自发光，见 applyWorldStyle）。
+      fallback.amb.intensity = 0.10;
     }
+  }
+
+  // 内核每帧/每次调亮度都会直接写 cone.material.opacity = n*.26，
+  // 外壳不改 app.js，只在材质上装一个「倍率代理」：内核照常写基准值，读出时乘昼夜倍率。
+  function scaleOpacity(mat, mul) {
+    mat.__glMul = mul;
+    if (mat.__glScaled) return;
+    var base = Number(mat.opacity) || 0;
+    Object.defineProperty(mat, 'opacity', {
+      configurable: true,
+      get: function () { return Math.min(1, base * (mat.__glMul === undefined ? 1 : mat.__glMul)); },
+      set: function (v) { base = Number(v) || 0; },
+    });
+    mat.__glScaled = true;
+  }
+
+  function applyBeamStyle(night) {
+    var v = window.__viewer;
+    if (!v || !v.THREE || !Array.isArray(v.lumList)) return;
+    var T = v.THREE;
+    var st = night ? BEAM_STYLE.night : BEAM_STYLE.day;
+    var blend = st.additive ? T.AdditiveBlending : T.NormalBlending;
+    v.lumList.forEach(function (item) {
+      var mats = [];
+      if (item.cone && item.cone.material) mats.push([item.cone.material, st.cone, st.coneMul]);
+      if (item.pool && item.pool.material) mats.push([item.pool.material, st.pool, st.poolMul]);
+      mats.forEach(function (row) {
+        var m = row[0];
+        scaleOpacity(m, row[2]);
+        if (m.color) m.color.setHex(row[1]);
+        m.depthWrite = false;
+        if (m.blending !== blend) { m.blending = blend; m.needsUpdate = true; }
+      });
+    });
+  }
+
+  // 用 JSON 里真实的安装高度 + 半角重算光锥：内核原来按灯具类型套固定光束角，
+  // 同一盏 24° 筒灯装 2.8 m 和 2.2 m 画出来一样大，客户对不上现场。
+  function fitBeams() {
+    var v = window.__viewer;
+    if (!v || !v.THREE || !Array.isArray(v.lumList) || !v.THREE.ConeGeometry) return;
+    var T = v.THREE;
+    var ceil = Number((window.__SCENE__ || {}).height_m) || 2.8;
+    v.lumList.forEach(function (item) {
+      var m = item.meta || {};
+      var half = Number(m.half);
+      if (!isFinite(half) || half <= 0) return; // 旧场景 JSON 没半角：保留内核默认光锥
+      half = Math.min(Math.max(half, 2), 85);
+      var mount = Number(m.mount);
+      if (!isFinite(mount) || mount <= 0.1) mount = Math.min(ceil - 0.05, 2.6);
+      var H = Math.max(0.25, Math.min(ceil - 0.02, mount - 0.02));
+      var R = Math.max(0.30, Math.min(1.35, H * Math.tan(half * Math.PI / 180)));
+      if (item.cone) {
+        var g = item.cone.geometry;
+        var gp = g && g.parameters;
+        if (!gp || Math.abs((gp.radius || 0) - R) > 0.01 || Math.abs((gp.height || 0) - H) > 0.01) {
+          item.cone.geometry = new T.ConeGeometry(R, H, 28, 1, true);
+          if (g) g.dispose();
+        }
+        item.cone.position.y = H / 2 + 0.02;
+      }
+      if (item.pool) item.pool.scale.set(R * 2, R * 2, 1);
+    });
   }
 
   function hudLine(extra) {
@@ -318,6 +415,10 @@
     nightMode = night;
     window.__viewer.setLightingMode(night);
     applyFallback(night);
+    applyBeamStyle(night);
+    applyFurnitureMode(night);
+    applyWorldStyle(night);
+    if (window.__viewer.applyLevels) window.__viewer.applyLevels();
     syncModeUI(night);
   }
 
@@ -326,58 +427,1151 @@
   // 内核原有的「图层 → 家具」按钮就会直接生效（不改 app.js 一行）。
   // 坐标口径与内核一致：JSON 的 x/z 是设计米坐标，世界系 z 取负；rot 已是设计旋转的负值。
   var furnGroup = null;
+  var furnItems = [];
+  var furnShadow = null;
+  var FURN_T = null, FURN_UNIT = null, FURN_CLIP = null;
+  var worldMats = { wall: null, floor: null, floorTile: null, glass: [] };
+  // 2026-10-26：原来的「体块 + 深色描边」在鸟瞰里像一堆棕色纸箱。改成一套暖木/奶白/
+  // 石材的共享材质，家具按类型拆细节；夜里不再整体压黑，保留可读的木色层次。
+  var FURN_PALETTE = {
+    wood:        { day: 0xc49a6c, night: 0x7f6247, rough: 0.72, metal: 0.02 },
+    woodDark:    { day: 0x9c744c, night: 0x6a5238, rough: 0.70, metal: 0.02 },
+    cabinet:     { day: 0xe9e1d3, night: 0x8f8474, rough: 0.58, metal: 0.02 },
+    cabinetWarm: { day: 0xd2bb96, night: 0x7c6a52, rough: 0.62, metal: 0.02 },
+    fabric:      { day: 0xd9cdb9, night: 0x998c7a, rough: 0.96, metal: 0.01 },
+    fabricDeep:  { day: 0xb99163, night: 0x7d6449, rough: 0.94, metal: 0.01 },
+    metal:       { day: 0x9b968d, night: 0x6f6a62, rough: 0.34, metal: 0.55 },
+    brass:       { day: 0xb28c52, night: 0x7e653a, rough: 0.36, metal: 0.58 },
+    stone:       { day: 0xe8e2d7, night: 0x9d968b, rough: 0.42, metal: 0.03 },
+    ceramic:     { day: 0xf4f1ea, night: 0xaca69c, rough: 0.28, metal: 0.02 },
+    screen:      { day: 0x252a2f, night: 0x14181b, rough: 0.26, metal: 0.30 },
+    dark:        { day: 0x33373b, night: 0x1d2023, rough: 0.40, metal: 0.22 },
+    plant:       { day: 0x6f8459, night: 0x4b5b3d, rough: 0.92, metal: 0.00 },
+    pot:         { day: 0xb47752, night: 0x7a5138, rough: 0.82, metal: 0.00 },
+  };
+
+  var FURN_MATS = {};
+
+  function makeFurnMat(key) {
+    if (FURN_MATS[key]) return FURN_MATS[key];
+    var p = FURN_PALETTE[key] || FURN_PALETTE.wood;
+    var m = new FURN_T.MeshStandardMaterial({
+      color: nightMode ? p.night : p.day,
+      roughness: p.rough, metalness: p.metal,
+      clippingPlanes: FURN_CLIP, clipShadows: true,
+    });
+    m.userData.glc = p;
+    FURN_MATS[key] = m;
+    return m;
+  }
+
+  function applyFurnitureMode(night) {
+    if (!furnGroup) return;
+    Object.keys(FURN_MATS).forEach(function (key) {
+      var m = FURN_MATS[key], p = m.userData.glc;
+      if (p) m.color.setHex(night ? p.night : p.day);
+    });
+    if (furnShadow && furnShadow.material) furnShadow.material.opacity = night ? 0.48 : 0.56;
+  }
+
+  // 墙/地/窗也统一成暖色木作模型：墙奶白、地面浅橡木、夜里保留可读的灰度，
+  // 窗玻璃夜里压成深蓝而不是四块发光白板。内核的昼夜切换会重写颜色，所以外壳
+  // 每次 setMode 之后再套一遍自己的色板。
+  // 白天墙面的受光面已经接近奶白，但背光面只剩半球光的一半，整屋读起来发灰。
+  // 给墙material加一点暖色自发光把暗面提亮，同时保留光锥/灯下光斑的亮度优势。
+  function roomAtPoint(x, z) {
+    var rooms = ((window.__SCENE__ || {}).rooms) || [];
+    var best = null, bestD = 1e9;
+    for (var i = 0; i < rooms.length; i++) {
+      var r = rooms[i], poly = r && r.poly;
+      if (!poly || poly.length < 3) continue;
+      var hit = false;
+      for (var a = 0, b = poly.length - 1; a < poly.length; b = a++) {
+        var xi = poly[a][0], yi = poly[a][1], xj = poly[b][0], yj = poly[b][1];
+        if ((yi > z) !== (yj > z) && x < (xj - xi) * (z - yi) / (yj - yi) + xi) hit = !hit;
+      }
+      if (hit) return r;
+      var d = Math.hypot((r.cx || 0) - x, (r.cy || 0) - z);
+      if (d < bestD) { bestD = d; best = r; }
+    }
+    return best;
+  }
+
+  function unifyWalls() {
+    var v = window.__viewer;
+    if (!v || !v.groups.wall) return;
+    var first = null, meshes = [];
+    v.groups.wall.traverse(function (o) {
+      if (o.isMesh && o.material) { meshes.push(o); if (!first) first = o.material; }
+    });
+    if (!first) return;
+    meshes.forEach(function (o) { o.material = first; });
+    worldMats.wall = first;
+  }
+
+  function makeFloorTexture() {
+    var v = window.__viewer;
+    if (!v) return null;
+    var T = v.THREE;
+    var c = document.createElement('canvas');
+    c.width = c.height = 512;
+    var g = c.getContext('2d');
+    g.fillStyle = '#d9bd93';
+    g.fillRect(0, 0, 512, 512);
+    var rows = 16, rh = 512 / rows;
+    for (var r = 0; r < rows; r++) {
+      var y = r * rh;
+      g.fillStyle = 'rgba(' + (r % 3 === 0 ? '255,240,214' : r % 3 === 1 ? '208,170,120' : '226,196,152') + ',.10)';
+      g.fillRect(0, y, 512, rh);
+      for (var k = 0; k < 10; k++) {
+        var yy = y + 2 + Math.random() * (rh - 4);
+        g.strokeStyle = 'rgba(112,76,42,' + (0.05 + Math.random() * 0.07) + ')';
+        g.lineWidth = 1;
+        g.beginPath();
+        for (var x = 0; x <= 512; x += 32) g.lineTo(x, yy + Math.sin((x + k * 37) * 0.02) * 1.2);
+        g.stroke();
+      }
+      g.fillStyle = 'rgba(88,58,30,.26)';
+      g.fillRect(0, y + rh - 1.4, 512, 1.4);
+      for (var x2 = (r % 2 ? 128 : 0); x2 < 512; x2 += 256) {
+        g.fillStyle = 'rgba(88,58,30,.20)';
+        g.fillRect(x2, y, 1.4, rh - 1.4);
+      }
+    }
+    var tex = new T.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = T.RepeatWrapping;
+    tex.repeat.set(0.24, 0.24); // ShapeGeometry 的 uv 是设计米坐标：一张贴图约 4 m
+    tex.anisotropy = Math.min(8, v.renderer.capabilities.getMaxAnisotropy());
+    tex.colorSpace = T.SRGBColorSpace;
+    return tex;
+  }
+
+  function makeTileTexture() {
+    var v = window.__viewer;
+    if (!v) return null;
+    var T = v.THREE;
+    var c = document.createElement('canvas');
+    c.width = c.height = 512;
+    var g = c.getContext('2d');
+    g.fillStyle = '#e7e0d3';
+    g.fillRect(0, 0, 512, 512);
+    var n = 4, s = 512 / n;
+    for (var i = 0; i < n; i++) {
+      for (var j = 0; j < n; j++) {
+        g.fillStyle = 'rgba(' + ((i + j) % 2 ? '206,198,184' : '255,250,240') + ',.28)';
+        g.fillRect(i * s + 1, j * s + 1, s - 2, s - 2);
+      }
+    }
+    g.strokeStyle = 'rgba(132,124,110,.34)';
+    g.lineWidth = 2;
+    for (var k = 0; k <= n; k++) {
+      g.beginPath(); g.moveTo(k * s, 0); g.lineTo(k * s, 512); g.stroke();
+      g.beginPath(); g.moveTo(0, k * s); g.lineTo(512, k * s); g.stroke();
+    }
+    var tex = new T.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = T.RepeatWrapping;
+    tex.repeat.set(0.4167, 0.4167); // 600 mm 方砖
+    tex.anisotropy = Math.min(8, v.renderer.capabilities.getMaxAnisotropy());
+    tex.colorSpace = T.SRGBColorSpace;
+    return tex;
+  }
+
+  function applyWorldStyle(night) {
+    var v = window.__viewer;
+    if (!v) return;
+    if (worldMats.wall) {
+      worldMats.wall.color.setHex(night ? 0x544d44 : 0xf0e8da);
+      worldMats.wall.emissive.setHex(night ? 0x000000 : 0xffe8cc);
+      worldMats.wall.emissiveIntensity = night ? 0 : 0.26;
+      worldMats.wall.roughness = night ? 0.78 : 0.74;
+    }
+    if (worldMats.floor) {
+      worldMats.floor.color.setHex(night ? 0x8a7258 : 0xffffff);
+      worldMats.floor.roughness = 0.82;
+    }
+    if (worldMats.floorTile) {
+      worldMats.floorTile.color.setHex(night ? 0x6f6658 : 0xffffff);
+      worldMats.floorTile.roughness = 0.56;
+    }
+    worldMats.glass.forEach(function (m) {
+      m.color.setHex(night ? 0x33475a : 0xa8cbdd);
+      m.opacity = night ? 0.34 : 0.50;
+      m.roughness = night ? 0.28 : 0.06;
+      m.transmission = night ? 0.25 : 0.80;
+      m.needsUpdate = true;
+    });
+  }
+
+  function initWorldStyle() {
+    var v = window.__viewer;
+    if (!v) return;
+    unifyWalls();
+    var T = v.THREE;
+    var wood = new T.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.82, metalness: 0, map: makeFloorTexture(),
+    });
+    var tile = new T.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.56, metalness: 0.02, map: makeTileTexture(),
+    });
+    var box = new T.Box3(), c = new T.Vector3();
+    v.groups.floor.traverse(function (o) {
+      if (!o.isMesh || !o.material) return;
+      box.setFromObject(o); box.getCenter(c);
+      var r = roomAtPoint(c.x, -c.z);
+      var wet = r && /卫|阳台|厨房/.test(String(r.name || ''));
+      o.material = wet ? tile : wood;
+    });
+    worldMats.floor = wood;
+    worldMats.floorTile = tile;
+    v.groups.open.traverse(function (o) {
+      var m = o.isMesh && o.material;
+      if (m && m.transmission > 0.2 && worldMats.glass.indexOf(m) < 0) worldMats.glass.push(m);
+    });
+    applyWorldStyle(nightMode);
+  }
+
+  // 内核把阳台 5 m 级的「门」画成一整块不透明板，鸟瞰正对着像一堵棕墙。
+  // 换成通透玻璃 + 细框（框仍在「门」图层里），既看得见阳台，也认得出这是门窗。
+  function glazeWideDoors() {
+    var v = window.__viewer;
+    if (!v || !v.groups || !v.groups.open) return;
+    var T = v.THREE;
+    var box = new T.Box3(), size = new T.Vector3();
+    var frameMat = null;
+    v.groups.open.traverse(function (o) {
+      if (!o.isMesh || !o.geometry || !o.geometry.parameters) return;
+      var p = o.geometry.parameters;
+      if (!(p.width > 4 && p.height > 2.4)) return;
+      box.setFromObject(o); box.getSize(size);
+      if (size.y < 2.4) return;
+      var clip = (o.material && o.material.clippingPlanes) || null;
+      o.material = new T.MeshStandardMaterial({
+        color: 0xdfeaf0, roughness: 0.06, metalness: 0.02,
+        transparent: true, opacity: 0.22, depthWrite: false, clippingPlanes: clip,
+      });
+      o.renderOrder = 2;
+      o.castShadow = false;
+      if (!frameMat) {
+        frameMat = new T.MeshStandardMaterial({
+          color: 0x8a8175, roughness: 0.5, metalness: 0.3, clippingPlanes: clip,
+        });
+      }
+      var W = p.width, H = p.height, Z = (p.depth || 0.05) + 0.02;
+      var g = new T.Group();
+      g.position.copy(o.position);
+      g.quaternion.copy(o.quaternion);
+      function bar(w, h, x, y) {
+        var m = new T.Mesh(new T.BoxGeometry(w, h, Z), frameMat);
+        m.position.set(x, y - H / 2, 0); // 门体几何以中心为原点
+        g.add(m);
+      }
+      bar(0.05, H, -W / 2 + 0.025, H / 2);
+      bar(0.05, H, W / 2 - 0.025, H / 2);
+      bar(W, 0.05, 0, H - 0.025);
+      bar(W, 0.05, 0, 0.025);
+      bar(W, 0.035, 0, 1.02); // 推拉门中梃在 1 m 处，剖切到墙顶以下也还认得出
+      for (var i = 1; i <= 3; i++) bar(0.04, H - 0.1, -W / 2 + i * W / 4, H / 2);
+      o.parent.add(g);
+    });
+  }
+
+  // 家具数据只有 kind + 包围盒，没有部件信息；按类型做程序化拆件：
+  // 沙发有扶手/坐垫/靠包，柜子有踢脚/门板/拉手/台面，厨卫有灶眼/水槽/龙头。
+  // 所有部件按材质合并成 1~4 个 mesh，既保住细节又不把 draw call 拉爆。
   function buildFurniture() {
     var v = window.__viewer;
     if (!v || !v.THREE || !v.scene || !v.groups) return null;
     var T = v.THREE;
     var rows = (window.__SCENE__ || {}).furniture || [];
     if (!Array.isArray(rows) || !rows.length) return null;
-    var FABRIC = ['沙发', '床', '床头', '地毯', '窗帘', '椅', '凳'];
-    var METAL = ['水槽', '灶台', '台盆', '淋浴', '浴缸', '冰箱', '洗衣', '设备'];
-    function colorOf(kind) {
-      for (var i = 0; i < METAL.length; i++) if (kind.indexOf(METAL[i]) >= 0) return [0x8f9aa3, 0.42, 0.3];
-      for (var j = 0; j < FABRIC.length; j++) if (kind.indexOf(FABRIC[j]) >= 0) return [0xb0987f, 0.96, 0.02];
-      if (kind.indexOf('柜') >= 0) return [0xd8c8ae, 0.78, 0.02];
-      return [0xb08a55, 0.85, 0.02];
+    FURN_T = T;
+    FURN_CLIP = v.clipPlane ? [v.clipPlane] : null;
+    var scene = window.__SCENE__ || {};
+    var rooms = (scene.rooms || []).filter(function (r) { return r && r.poly && r.poly.length >= 3; });
+    var walls = scene.walls || [];
+
+    function inPoly(x, y, poly) {
+      var hit = false;
+      for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        var xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+        if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) hit = !hit;
+      }
+      return hit;
     }
-    var clip = v.clipPlane ? [v.clipPlane] : null; // 跟内核剖切同一条剖面（不裁会从切面往上冒头）
-    var group = new T.Group();
-    group.name = 'furniture';
-    rows.forEach(function (f) {
-      var h = Math.max(0.08, Number(f.h) || 0.75);
-      var kind = String(f.kind || '');
-      var c = colorOf(kind);
-      var mat = new T.MeshStandardMaterial({
-        color: c[0], roughness: c[1], metalness: c[2],
-        clippingPlanes: clip, clipShadows: true,
+    function roomAt(x, z) {
+      var best = null, bestD = 1e9;
+      rooms.forEach(function (r) {
+        if (inPoly(x, z, r.poly)) { best = r; bestD = -1; }
+        else if (bestD > 0) {
+          var d = Math.hypot((r.cx || 0) - x, (r.cy || 0) - z);
+          if (d < bestD) { bestD = d; best = r; }
+        }
       });
-      var mesh;
+      return best;
+    }
+    function nearestWallDir(x, z) {
+      var best = 1e9, dir = null;
+      walls.forEach(function (w) {
+        var p = w && w.outer;
+        if (!p || p.length < 3) return;
+        var cx = 0, cz = 0;
+        p.forEach(function (q) { cx += q[0]; cz += q[1]; });
+        cx /= p.length; cz /= p.length;
+        var d = Math.hypot(cx - x, cz - z);
+        if (d < best) { best = d; dir = [x - cx, z - cz]; }
+      });
+      if (!dir) return [0, 1];
+      var n = Math.hypot(dir[0], dir[1]) || 1;
+      return [dir[0] / n, dir[1] / n];
+    }
+    // 包围盒只给长/宽，朝向靠房间中心推：正面永远朝屋里，背面靠墙。
+    // 房间中心恰好落在柜体里（整间衣帽间）时，退化成「背对最近一面墙」。
+    function chooseYaw(x, z, base) {
+      var r = roomAt(x, z);
+      var dx = r ? (r.cx || 0) - x : 0;
+      var dz = r ? (r.cy || 0) - z : 0;
+      if (Math.hypot(dx, dz) < 0.42) {
+        var n = nearestWallDir(x, z);
+        dx = n[0]; dz = n[1];
+      }
+      var fx = Math.sin(base), fz = -Math.cos(base);
+      return (fx * dx + fz * dz) >= 0 ? base : base + Math.PI;
+    }
+    function polyYaw(pts) {
+      var bestA = 0, bestL = -1;
+      for (var i = 0; i < pts.length; i++) {
+        var a = pts[i], b = pts[(i + 1) % pts.length];
+        var dx = b[0] - a[0], dy = b[1] - a[1];
+        var l = dx * dx + dy * dy;
+        if (l > bestL) { bestL = l; bestA = Math.atan2(dy, dx); }
+      }
+      return bestA;
+    }
+    function dimsOf(f) {
+      var w = Math.max(0.12, Number(f.w) || 0.6);
+      var d = Math.max(0.12, Number(f.d) || 0.6);
+      var h = Math.max(0.08, Number(f.h) || 0.75);
+      var x = Number(f.x) || 0, z = Number(f.z) || 0;
       if (Array.isArray(f.pts) && f.pts.length >= 3) {
         var xs = f.pts.map(function (p) { return p[0]; });
         var zs = f.pts.map(function (p) { return p[1]; });
-        var cx = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2;
-        var cz = (Math.min.apply(null, zs) + Math.max.apply(null, zs)) / 2;
-        var shape = new T.Shape(f.pts.map(function (p) { return new T.Vector2(p[0] - cx, p[1] - cz); }));
-        var geo = new T.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
-        geo.rotateX(-Math.PI / 2);
-        mesh = new T.Mesh(geo, mat);
-        mesh.position.set(cx, 0.004, -cz);
-      } else {
-        var w = Math.max(0.15, Number(f.w) || 0.6);
-        var d = Math.max(0.15, Number(f.d) || 0.6);
-        mesh = new T.Mesh(new T.BoxGeometry(w, h, d), mat);
-        mesh.position.set(Number(f.x) || 0, h / 2 + 0.004, -(Number(f.z) || 0));
+        var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+        var z0 = Math.min.apply(null, zs), z1 = Math.max.apply(null, zs);
+        x = (x0 + x1) / 2; z = (z0 + z1) / 2;
+        w = x1 - x0; d = z1 - z0;
       }
-      mesh.rotation.y = -(Number(f.rot) || 0) * Math.PI / 180;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.userData = { kind: 'furniture', id: f.id || '', label: kind };
-      group.add(mesh);
+      return { w: w, d: d, h: h, x: x, z: z, L: Math.max(w, d), D: Math.min(w, d) };
+    }
+    // CAD 里同一件柜子常被拆成两条几乎重合的记录；渲染前合并，避免叠面闪烁。
+    // 有些到顶柜还会被拆成「柜体 + 门板」两条——小的那条整体落在大的里面，
+    // 只按面积比合并会漏掉，所以在重合判断之前先做一次包含判断。
+    function boundsOf(d) {
+      return { x0: d.x - d.w / 2, x1: d.x + d.w / 2, z0: d.z - d.d / 2, z1: d.z + d.d / 2 };
+    }
+    function dedupe(list) {
+      var out = [];
+      list.forEach(function (f) {
+        var d = dimsOf(f), b = boundsOf(d);
+        for (var i = 0; i < out.length; i++) {
+          var o = dimsOf(out[i]);
+          if (String(out[i].kind || '') !== String(f.kind || '')) continue;
+          if (Math.abs(o.h - d.h) > 0.15) continue;
+          var ob = boundsOf(o), tol = 0.06;
+          var cInO = b.x0 >= ob.x0 - tol && b.x1 <= ob.x1 + tol && b.z0 >= ob.z0 - tol && b.z1 <= ob.z1 + tol;
+          var oInC = ob.x0 >= b.x0 - tol && ob.x1 <= b.x1 + tol && ob.z0 >= b.z0 - tol && ob.z1 <= b.z1 + tol;
+          if (cInO || oInC) {
+            if (d.w * d.d > o.w * o.d) out[i] = f;
+            return;
+          }
+          if (Math.hypot(o.x - d.x, o.z - d.z) > 0.42) continue;
+          var a1 = o.w * o.d, a2 = d.w * d.d;
+          if (Math.min(a1, a2) / Math.max(a1, a2) < 0.62) continue;
+          if (a2 > a1) out[i] = f;
+          return;
+        }
+        out.push(f);
+      });
+      return out;
+    }
+
+    function makeUnitRound() {
+      var r = 0.055, w = 1 - 2 * r, h = 1 - 2 * r;
+      var s = new T.Shape();
+      var x = -w / 2, y = -h / 2;
+      s.moveTo(x + r, y);
+      s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r);
+      s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r);
+      s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y);
+      var g = new T.ExtrudeGeometry(s, {
+        depth: 1 - 2 * r, bevelEnabled: true, bevelThickness: r, bevelSize: r,
+        bevelSegments: 2, curveSegments: 4,
+      });
+      g.translate(0, 0, -(0.5 - r));
+      g.rotateX(-Math.PI / 2);
+      return g;
+    }
+    FURN_UNIT = makeUnitRound();
+
+    function makeKit(parts) {
+      function add(geo, key, x, y, z, rx, ry, rz) {
+        var m = new T.Matrix4().compose(
+          new T.Vector3(x || 0, y || 0, z || 0),
+          new T.Quaternion().setFromEuler(new T.Euler(rx || 0, ry || 0, rz || 0)),
+          new T.Vector3(1, 1, 1));
+        parts.push({ geo: geo, key: key, matrix: m });
+      }
+      return {
+        box: function (w, h, d, key, x, y, z, ry, rx, rz) {
+          var g = new T.BoxGeometry(w, h, d);
+          if (ry || rx || rz) g.applyMatrix4(new T.Matrix4().makeRotationFromEuler(new T.Euler(rx || 0, ry || 0, rz || 0)));
+          add(g, key, x, y, z);
+        },
+        rbox: function (w, h, d, key, x, y, z, ry) {
+          var g = FURN_UNIT.clone(); g.scale(w, h, d); add(g, key, x, y, z, 0, ry || 0, 0);
+        },
+        cyl: function (r, h, key, x, y, z, seg, rx, rz) {
+          add(new T.CylinderGeometry(r, r, h, seg || 12), key, x, y, z, rx || 0, 0, rz || 0);
+        },
+        tor: function (r, tube, key, x, y, z) {
+          add(new T.TorusGeometry(r, tube, 6, 20), key, x, y, z, Math.PI / 2, 0, 0);
+        },
+        ball: function (r, key, x, y, z) {
+          add(new T.SphereGeometry(r, 10, 8), key, x, y, z);
+        },
+      };
+    }
+    function mergeInto(group, parts) {
+      var byKey = {};
+      parts.forEach(function (p) { (byKey[p.key] = byKey[p.key] || []).push(p); });
+      Object.keys(byKey).forEach(function (key) {
+        var pos = [], nor = [], uv = [], hasUv = true;
+        byKey[key].forEach(function (p) {
+          var g = p.geo;
+          if (g.index) { var ni = g.toNonIndexed(); g.dispose(); g = ni; }
+          g.applyMatrix4(p.matrix);
+          var pa = g.attributes.position.array, na = g.attributes.normal.array;
+          for (var i = 0; i < pa.length; i++) pos.push(pa[i]);
+          for (var j = 0; j < na.length; j++) nor.push(na[j]);
+          if (hasUv && g.attributes.uv) {
+            var ua = g.attributes.uv.array;
+            for (var k = 0; k < ua.length; k++) uv.push(ua[k]);
+          } else hasUv = false;
+          g.dispose();
+        });
+        var geo = new T.BufferGeometry();
+        geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3));
+        geo.setAttribute('normal', new T.Float32BufferAttribute(nor, 3));
+        if (hasUv) geo.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
+        var mesh = new T.Mesh(geo, makeFurnMat(key));
+        // 家具不打实时阴影：73 个 mesh 再进一遍阴影贴图不值，落地感交给接触阴影，
+        // 剖切高柜时也不会因为自阴影把柜内刷成一团黑。
+        mesh.castShadow = false;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      });
+    }
+    // 柜门统一按 0.55 m 左右分缝；把手成对朝中缝，像真实柜门。
+    function panelRun(kit, L, H, D, opts) {
+      var n = opts.n || Math.max(2, Math.round(L / 0.56));
+      var gap = 0.016, margin = opts.margin || 0.03;
+      var y0 = opts.y0 || 0.10;
+      var ph = Math.max(0.12, H - y0 - (opts.topGap || 0.06));
+      var span = L - margin * 2;
+      var pw = (span - gap * (n - 1)) / n;
+      for (var i = 0; i < n; i++) {
+        var x = -span / 2 + pw / 2 + i * (pw + gap);
+        var z = opts.z;
+        kit.box(pw, ph, 0.018, opts.key || 'cabinet', x, y0 + ph / 2, z);
+        var hx = x + (i % 2 ? -1 : 1) * Math.max(0.035, pw / 2 - 0.055);
+        if (opts.knob) {
+          kit.cyl(0.016, 0.022, 'brass', hx, y0 + ph * 0.62, z + Math.sign(z) * 0.012, 10, Math.PI / 2, 0);
+        } else {
+          kit.box(0.014, Math.min(0.20, ph * 0.38), 0.022, 'brass',
+            hx, y0 + ph * 0.58, z + Math.sign(z) * 0.014);
+        }
+      }
+    }
+
+    // 进深超过 1.5 m 的「到顶柜」在 CAD 里其实是一个衣帽间体量：整块渲染会变成
+    // 占满卧室的实心台子。沿三面做 0.6 m 柜体、中间留过道，才像能走进去的柜子。
+    function walkInCloset(kit, L, D, H) {
+      var rd = Math.min(0.62, D * 0.42);
+      var armD = Math.max(0.4, D - rd);
+      var armZ = rd / 2;
+      var shelfY = [0.62, 1.28, 1.94, 2.50];
+      function carcass(w, d, x, z) {
+        kit.box(Math.max(0.14, w - 0.10), 0.10, Math.max(0.14, d - 0.10), 'dark', x, 0.05, z);
+        kit.rbox(Math.max(0.16, w - 0.04), H - 0.14, Math.max(0.16, d - 0.04), 'woodDark',
+          x, 0.10 + (H - 0.14) / 2, z);
+        kit.box(w + 0.01, 0.05, d + 0.01, 'woodDark', x, H - 0.025, z);
+        if (H > 1.6) shelfY.forEach(function (y) {
+          if (y < H - 0.14) kit.box(w - 0.10, 0.028, d - 0.10, 'cabinetWarm', x, y, z);
+        });
+      }
+      // 背柜：贴墙，门朝 +Z
+      var bz = -D / 2 + rd / 2;
+      carcass(L, rd, 0, bz);
+      panelRun(kit, L, H, D, {
+        n: Math.max(2, Math.round(L / 0.56)),
+        z: -D / 2 + rd + 0.004, y0: 0.14, topGap: 0.10,
+      });
+      // 两侧柜：门朝走道内侧
+      [-1, 1].forEach(function (sx) {
+        var x = sx * (L / 2 - rd / 2);
+        carcass(rd, armD, x, armZ);
+        var faceX = sx * (L / 2 - rd) + sx * 0.004;
+        var n = Math.max(2, Math.round(armD / 0.56));
+        var gap = 0.016, span = armD - 0.10;
+        var pw = (span - gap * (n - 1)) / n;
+        var ph = H - 0.24;
+        for (var i = 0; i < n; i++) {
+          var z = armZ - span / 2 + pw / 2 + i * (pw + gap);
+          kit.box(0.018, ph, pw, 'cabinet', faceX, 0.14 + ph / 2, z);
+          var hz = z + (i % 2 ? -1 : 1) * Math.max(0.035, pw / 2 - 0.055);
+          kit.box(0.022, 0.18, 0.014, 'brass', faceX + sx * 0.014, 0.14 + ph * 0.58, hz);
+        }
+      });
+    }
+    function tallCabinet(kit, L, D, H) {
+      if (D > 1.5 && L > 2) return walkInCloset(kit, L, D, H);
+      kit.box(Math.max(0.2, L - 0.18), 0.10, Math.max(0.16, D - 0.18), 'dark', 0, 0.05, 0);
+      kit.rbox(L - 0.05, H - 0.14, D - 0.05, 'woodDark', 0, 0.10 + (H - 0.14) / 2, 0);
+      kit.box(L + 0.01, 0.05, D + 0.01, 'woodDark', 0, H - 0.025, 0);
+      // 剖切到 1.5 m 时实心柜体只剩一圈薄壳，看上去像空盒子；按 0.6 m 一层放隔板，
+      // 任何切高都能看到一块实心板，读起来才像建筑模型的实体剖切。
+      if (H > 1.6) {
+        [0.62, 1.28, 1.94, 2.50].forEach(function (y) {
+          if (y < H - 0.14) kit.box(L - 0.10, 0.028, D - 0.12, 'cabinetWarm', 0, y, 0);
+        });
+        if (L > 1.3) kit.box(0.03, H - 0.26, D - 0.14, 'cabinetWarm', 0, 0.14 + (H - 0.26) / 2, 0);
+      }
+      panelRun(kit, L, H, D, { z: D / 2 + 0.004, y0: 0.14, topGap: 0.10 });
+    }
+    function lowCabinet(kit, L, D, H) {
+      kit.box(Math.max(0.18, L - 0.22), 0.06, Math.max(0.16, D - 0.22), 'dark', 0, 0.03, 0);
+      kit.rbox(L - 0.04, H - 0.08, D - 0.04, 'woodDark', 0, 0.06 + (H - 0.08) / 2, 0);
+      kit.box(L + 0.01, 0.03, D + 0.01, 'stone', 0, H - 0.015, 0);
+      panelRun(kit, L, H, D, { z: D / 2 + 0.004, y0: 0.10, topGap: 0.08, knob: true });
+    }
+    function shoeCabinet(kit, L, D, H) {
+      kit.box(Math.max(0.16, L - 0.16), 0.08, Math.max(0.14, D - 0.16), 'dark', 0, 0.04, 0);
+      kit.rbox(L - 0.04, H - 0.12, D - 0.04, 'woodDark', 0, 0.08 + (H - 0.12) / 2, 0);
+      kit.box(L + 0.01, 0.03, D + 0.01, 'wood', 0, H - 0.015, 0);
+      panelRun(kit, L, H, D, { n: 2, z: D / 2 + 0.004, y0: 0.12, topGap: 0.08 });
+      kit.cyl(0.09, 0.035, 'ceramic', 0, H + 0.02, 0.04, 16);
+    }
+    function tvCabinet(kit, L, D, H) {
+      kit.box(Math.max(0.3, L - 0.24), 0.06, Math.max(0.2, D - 0.24), 'dark', 0, 0.03, 0);
+      kit.rbox(L - 0.04, H - 0.08, D - 0.04, 'wood', 0, 0.06 + (H - 0.08) / 2, 0);
+      kit.box(L + 0.01, 0.03, D + 0.01, 'stone', 0, H - 0.015, 0);
+      var n = Math.max(2, Math.round(L / 0.72));
+      panelRun(kit, L, H, D, { n: n, z: D / 2 + 0.004, y0: 0.10, topGap: 0.05, knob: true });
+      // 长电视柜常被当成隔断，背面也会露在视线里：一并做门板，免得看到一整块深色箱体。
+      if (D > 0.9) panelRun(kit, L, H, D, { n: n, z: -D / 2 - 0.004, y0: 0.10, topGap: 0.05 });
+    }
+    function diningTable(kit, L, D, H) {
+      kit.rbox(L - 0.02, 0.045, D - 0.02, 'wood', 0, H - 0.0225, 0);
+      kit.box(L - 0.22, 0.07, D - 0.18, 'woodDark', 0, H - 0.10, 0);
+      var lx = L / 2 - 0.10, lz = D / 2 - 0.09;
+      [-1, 1].forEach(function (sx) {
+        [-1, 1].forEach(function (sz) {
+          kit.box(0.045, H - 0.06, 0.045, 'woodDark', sx * lx, (H - 0.06) / 2, sz * lz);
+        });
+      });
+      kit.cyl(0.10, 0.035, 'ceramic', 0, H + 0.0175, 0, 20);
+      kit.cyl(0.04, 0.15, 'ceramic', L / 2 - 0.30, H + 0.075, 0, 12);
+    }
+    function cooktop(kit, L, D, H) {
+      kit.box(Math.max(0.16, L - 0.22), 0.07, Math.max(0.16, D - 0.22), 'dark', 0, 0.035, 0);
+      kit.rbox(L - 0.03, H - 0.10, D - 0.03, 'cabinet', 0, 0.07 + (H - 0.10) / 2, 0);
+      kit.box(L + 0.01, 0.03, D + 0.01, 'stone', 0, H - 0.015, 0);
+      kit.box(L - 0.14, 0.014, D - 0.16, 'screen', 0, H + 0.007, 0);
+      kit.tor(0.075, 0.008, 'metal', -L / 2 + 0.16, H + 0.018, 0.02);
+      kit.tor(0.060, 0.008, 'metal', L / 2 - 0.16, H + 0.018, 0.02);
+      for (var i = 0; i < 4; i++) {
+        kit.cyl(0.015, 0.018, 'metal', -L / 2 + 0.12 + i * 0.055, H + 0.006, D / 2 - 0.045, 10);
+      }
+      panelRun(kit, L, H, D, { n: 2, z: D / 2 + 0.004, y0: 0.10, topGap: 0.09, knob: true });
+    }
+    function sinkUnit(kit, L, D, H) {
+      kit.box(Math.max(0.16, L - 0.22), 0.07, Math.max(0.16, D - 0.22), 'dark', 0, 0.035, 0);
+      kit.rbox(L - 0.03, H - 0.10, D - 0.03, 'cabinet', 0, 0.07 + (H - 0.10) / 2, 0);
+      kit.box(L + 0.01, 0.03, D + 0.01, 'stone', 0, H - 0.015, 0);
+      var bw = L - 0.16, bd = D - 0.18;
+      kit.box(bw, 0.035, bd, 'ceramic', 0, H + 0.0175, 0);
+      kit.box(bw - 0.06, 0.02, bd - 0.06, 'dark', 0, H + 0.026, 0);
+      kit.cyl(0.016, 0.22, 'metal', 0, H + 0.11, -D / 2 + 0.10, 10);
+      kit.cyl(0.014, 0.18, 'metal', 0, H + 0.215, -D / 2 + 0.19, 10, Math.PI / 2, 0);
+      kit.cyl(0.012, 0.05, 'metal', 0, H + 0.19, -D / 2 + 0.27, 10);
+      panelRun(kit, L, H, D, { n: 2, z: D / 2 + 0.004, y0: 0.10, topGap: 0.09, knob: true });
+    }
+    function vanity(kit, L, D, H) {
+      kit.box(Math.max(0.14, L - 0.20), 0.08, Math.max(0.12, D - 0.16), 'dark', 0, 0.04, 0);
+      kit.rbox(L - 0.03, H - 0.12, D - 0.03, 'cabinet', 0, 0.08 + (H - 0.12) / 2, 0);
+      kit.box(L + 0.01, 0.035, D + 0.01, 'stone', 0, H - 0.0175, 0);
+      kit.cyl(0.145, 0.10, 'ceramic', 0, H + 0.05, 0.02, 20);
+      kit.cyl(0.118, 0.012, 'dark', 0, H + 0.102, 0.02, 20);
+      kit.cyl(0.014, 0.20, 'metal', 0, H + 0.10, -D / 2 + 0.06, 10);
+      kit.cyl(0.012, 0.14, 'metal', 0, H + 0.19, -D / 2 + 0.12, 10, Math.PI / 2, 0);
+      panelRun(kit, L, H, D, { n: 2, z: D / 2 + 0.004, y0: 0.12, topGap: 0.10 });
+    }
+    function sideTable(kit, L, D, H, ctx) {
+      var r = Math.min(L, D) / 2 - 0.02;
+      kit.cyl(r, 0.035, 'wood', 0, H - 0.0175, 0, 24);
+      for (var i = 0; i < 3; i++) {
+        var a = i * Math.PI * 2 / 3 + 0.5;
+        kit.cyl(0.013, H - 0.04, 'metal', Math.cos(a) * r * 0.62, (H - 0.04) / 2, Math.sin(a) * r * 0.62, 8);
+      }
+      if (ctx && ctx.idx % 2 === 0) {
+        kit.box(0.20, 0.025, 0.15, 'fabricDeep', -0.03, H + 0.02, 0.01, 0.2);
+        kit.box(0.17, 0.02, 0.13, 'woodDark', -0.02, H + 0.042, 0.02, -0.1);
+      }
+    }
+    function pottedPlant(kit, L, D, H) {
+      var r = Math.min(L, D) / 2 - 0.02;
+      kit.cyl(r, H * 0.48, 'pot', 0, H * 0.24, 0, 16);
+      kit.cyl(r * 0.9, 0.015, 'dark', 0, H * 0.48, 0, 16);
+      kit.ball(r * 0.95, 'plant', 0, H * 0.72, 0);
+      kit.ball(r * 0.68, 'plant', r * 0.5, H * 0.60, -r * 0.28);
+      kit.ball(r * 0.62, 'plant', -r * 0.46, H * 0.66, r * 0.34);
+    }
+    function fallbackCabinet(kit, L, D, H) {
+      if (H < 0.62) sideTable(kit, L, D, H, null);
+      else lowCabinet(kit, L, D, H);
+    }
+    function sofa(kit, L, D, H) {
+      var legH = 0.12, baseH = 0.20;
+      [-1, 1].forEach(function (sx) {
+        [-1, 1].forEach(function (sz) {
+          kit.cyl(0.026, legH, 'woodDark', sx * (L / 2 - 0.14), legH / 2, sz * (D / 2 - 0.14), 8);
+        });
+      });
+      kit.rbox(L - 0.06, baseH, D - 0.10, 'fabric', 0, legH + baseH / 2, 0.02);
+      var n = Math.max(2, Math.min(4, Math.round((L - 0.4) / 0.85)));
+      var inset = 0.20, gap = 0.05;
+      var cw = (L - inset * 2 - gap * (n - 1)) / n;
+      for (var i = 0; i < n; i++) {
+        kit.rbox(cw, 0.17, D - 0.34, 'fabric', -L / 2 + inset + cw / 2 + i * (cw + gap), 0.33, 0.10);
+      }
+      kit.rbox(L - 0.30, 0.58, 0.16, 'fabric', 0, 0.50, -D / 2 + 0.12);
+      var bw = (L - 0.46 - gap * (n - 1)) / n;
+      for (var j = 0; j < n; j++) {
+        kit.rbox(bw, 0.36, 0.12, 'fabricDeep', -L / 2 + 0.23 + bw / 2 + j * (bw + gap), 0.56, -D / 2 + 0.23);
+      }
+      kit.rbox(0.16, 0.46, D - 0.04, 'fabricDeep', -(L / 2 - 0.08), 0.30, 0);
+      kit.rbox(0.16, 0.46, D - 0.04, 'fabricDeep', (L / 2 - 0.08), 0.30, 0);
+      kit.rbox(0.30, 0.30, 0.10, 'cabinetWarm', -(L / 2 - 0.46), 0.56, -D / 2 + 0.32, 0.14);
+      kit.rbox(0.28, 0.28, 0.10, 'fabricDeep', (L / 2 - 0.48), 0.55, -D / 2 + 0.31, -0.12);
+    }
+    function buildKind(kind, L, D, H, kit, ctx) {
+      if (kind.indexOf('沙发') >= 0) return sofa(kit, L, D, H);
+      if (kind.indexOf('电视柜') >= 0) return tvCabinet(kit, L, D, H);
+      if (kind.indexOf('到顶柜') >= 0) return tallCabinet(kit, L, D, H);
+      if (kind.indexOf('鞋柜') >= 0) return shoeCabinet(kit, L, D, H);
+      if (kind.indexOf('矮柜') >= 0) return lowCabinet(kit, L, D, H);
+      if (kind.indexOf('餐桌') >= 0) return diningTable(kit, L, D, H);
+      if (kind.indexOf('灶台') >= 0) return cooktop(kit, L, D, H);
+      if (kind.indexOf('水槽') >= 0) return sinkUnit(kit, L, D, H);
+      if (kind.indexOf('台盆') >= 0) return vanity(kit, L, D, H);
+      if (kind.indexOf('边几') >= 0) return sideTable(kit, L, D, H, ctx);
+      if (kind.indexOf('通用') >= 0) return pottedPlant(kit, L, D, H);
+      return fallbackCabinet(kit, L, D, H);
+    }
+
+    function addContactShadows(group, recs) {
+      var c = document.createElement('canvas');
+      c.width = c.height = 128;
+      var g = c.getContext('2d');
+      var grd = g.createRadialGradient(64, 64, 4, 64, 64, 62);
+      grd.addColorStop(0, 'rgba(32,23,14,.40)');
+      grd.addColorStop(0.55, 'rgba(32,23,14,.18)');
+      grd.addColorStop(1, 'rgba(32,23,14,0)');
+      g.fillStyle = grd;
+      g.fillRect(0, 0, 128, 128);
+      var tex = new T.CanvasTexture(c);
+      tex.colorSpace = T.SRGBColorSpace;
+      var mat = new T.MeshBasicMaterial({
+        map: tex, transparent: true, opacity: 0.56, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -2,
+      });
+      var geo = new T.PlaneGeometry(1, 1);
+      geo.rotateX(-Math.PI / 2);
+      var inst = new T.InstancedMesh(geo, mat, Math.max(1, recs.length));
+      inst.frustumCulled = false;
+      var m = new T.Matrix4(), p = new T.Vector3(), q = new T.Quaternion();
+      var s = new T.Vector3(), e = new T.Euler();
+      recs.forEach(function (r, i) {
+        e.set(0, r.yaw || 0, 0); q.setFromEuler(e);
+        p.set(r.x, 0.006, -r.z);
+        s.set(r.L * 1.10, 1, r.D * 1.16);
+        m.compose(p, q, s);
+        inst.setMatrixAt(i, m);
+      });
+      inst.instanceMatrix.needsUpdate = true;
+      group.add(inst);
+      furnShadow = inst;
+    }
+
+    var list = dedupe(rows);
+    var group = new T.Group();
+    group.name = 'furniture';
+    var shadows = [];
+    list.forEach(function (f, idx) {
+      var d = dimsOf(f);
+      var kind = String(f.kind || '');
+      var base;
+      if (Array.isArray(f.pts) && f.pts.length >= 3) base = polyYaw(f.pts);
+      else base = (d.w >= d.d ? 0 : Math.PI / 2) - (Number(f.rot) || 0) * Math.PI / 180;
+      var yaw = chooseYaw(d.x, d.z, base);
+      var parts = [];
+      var kit = makeKit(parts);
+      buildKind(kind, d.L, d.D, d.h, kit, { f: f, d: d, idx: idx });
+      var item = new T.Group();
+      item.position.set(d.x, 0.012, -d.z);
+      item.rotation.y = yaw;
+      mergeInto(item, parts);
+      var rec = {
+        kind: kind, L: d.L, D: d.D, H: d.h, x: d.x, z: d.z, yaw: yaw,
+        group: item, meshes: [], room: '',
+      };
+      var r = roomAt(d.x, d.z);
+      if (r) rec.room = r.name || '';
+      item.traverse(function (o) {
+        if (o.isMesh) { o.userData.furn = rec; rec.meshes.push(o); }
+      });
+      item.userData.furn = rec;
+      furnItems.push(rec);
+      group.add(item);
+      shadows.push({ x: d.x, z: d.z, L: d.L, D: d.D, yaw: yaw });
     });
-    group.visible = true; // 家具是设计的一部分：默认开，「家具」按钮可关（2026-10-23）
+    addContactShadows(group, shadows);
+    group.visible = true;
     v.scene.add(group);
     v.groups.furniture = group;
+    furnGroup = group;
     return group;
+  }
+
+  // 2026-10-26：内核鸟瞰按固定系数摆机位，宽屏下整屋只占画面一半、窄屏又会切边。
+  // 这里按地面包围盒做一次二分取景：八个角都落进 NDC 安全框，取最近的那个距离。
+  // 用户自己转过/切过视角后不再抢镜头（只对默认鸟瞰和「鸟瞰 45°」按钮生效）。
+  var viewTouched = false;
+  var birdView = true;
+
+  function fitCamera(force) {
+    var v = window.__viewer;
+    if (!v || !v.camera || !v.controls || !v.groups || !v.groups.floor) return;
+    if (!force && viewTouched && !birdView) return;
+    var T = v.THREE;
+    var box = new T.Box3().setFromObject(v.groups.floor);
+    if (box.isEmpty()) return;
+    var scene = window.__SCENE__ || {};
+    var ceil = Number(scene.height_m) || 2.8;
+    box.min.y = 0;
+    box.max.y = Math.max(ceil, box.max.y);
+
+    var target = new T.Vector3(
+      (box.min.x + box.max.x) / 2,
+      (box.max.y - box.min.y) * 0.20,
+      (box.min.z + box.max.z) / 2
+    );
+    var cam = v.camera;
+    var ctl = v.controls;
+    var portrait = window.innerWidth < 460 && window.innerHeight > window.innerWidth * 1.5;
+    // 2026-10-26：45° 对角机位把 14×10 m 的户型投成 1.27:1，16:9 画布左右各空 20%。
+    // 收到 25°/38°：投影接近 1.5:1，整屋能占到七成以上宽度，同时保留斜看进房间的深度。
+    // 竖屏手机反过来：从东侧看，让 14 m 长边竖着落在画面里，否则整屋只有一条窄带。
+    var dir = portrait
+      ? new T.Vector3(0.809, 0.588, 0).normalize()
+      : new T.Vector3(0.333, 0.616, 0.714).normalize();
+    cam.fov = portrait ? 48 : 42;
+    cam.near = 0.1;
+    cam.far = 500;
+    cam.up.set(0, 1, 0);
+
+    // 取景用真实地面轮廓，而不是 floor 的 bbox 角：L 形户型的外接矩形有不少空角，
+    // 那些空角会把镜头顶远，实际户型只占画面一半。墙顶按当前剖切高度算（剖切以上不渲染）。
+    var pts = [];
+    var wallTop = v.clipPlane ? Number(v.clipPlane.constant) : ceil;
+    if (!isFinite(wallTop) || wallTop <= 0.1) wallTop = ceil;
+    wallTop = Math.min(ceil, wallTop);
+    (scene.floor || []).forEach(function (poly) {
+      (poly.outer || []).forEach(function (q) {
+        pts.push(new T.Vector3(q[0], 0, -q[1]));
+        pts.push(new T.Vector3(q[0], wallTop, -q[1]));
+      });
+    });
+    if (!pts.length) {
+      [box.min.x, box.max.x].forEach(function (x) {
+        [box.min.y, box.max.y].forEach(function (y) {
+          [box.min.z, box.max.z].forEach(function (z) { pts.push(new T.Vector3(x, y, z)); });
+        });
+      });
+    }
+    var p = new T.Vector3();
+    var margin = 1 / 1.14; // 户型最多占画面 ~88%，留出 HUD/面板和家具外沿
+    function fits(d) {
+      cam.position.copy(target).addScaledVector(dir, d);
+      cam.lookAt(target);
+      cam.updateMatrixWorld(true);
+      cam.updateProjectionMatrix();
+      for (var i = 0; i < pts.length; i++) {
+        p.copy(pts[i]).project(cam);
+        if (p.z > 1 || Math.abs(p.x) > margin || Math.abs(p.y) > margin) return false;
+      }
+      return true;
+    }
+    var lo = 3, hi = 200;
+    if (!fits(hi)) return;
+    for (var i = 0; i < 26; i++) {
+      var mid = (lo + hi) / 2;
+      if (fits(mid)) hi = mid; else lo = mid;
+    }
+    cam.position.copy(target).addScaledVector(dir, hi);
+    cam.updateProjectionMatrix();
+    ctl.target.copy(target);
+    ctl.update();
+  }
+
+  // 2026-10-26：内核「室内视角」把机位放在休闲阳台贴着门板，画面里只有门和地面，
+  // 家具全被挡住。外壳改成落到最大一间房（客厅）的南侧、朝北看整间房。
+  // 只在用户点「室内视角」时接管，点回鸟瞰/户型图后交给内核和 fitCamera。
+  function insideView() {
+    var v = window.__viewer;
+    if (!v || !v.camera || !v.controls) return;
+    var scene = window.__SCENE__ || {};
+    var rooms = scene.rooms || [];
+    var room = null;
+    rooms.forEach(function (r) {
+      if (!r || !r.poly || !r.poly.length) return;
+      if (!room || (r.area_m2 || 0) > (room.area_m2 || 0)) room = r;
+    });
+    if (!room) return;
+    var poly = room.poly;
+    function inPoly(x, y) {
+      var hit = false;
+      for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        var xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+        if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) hit = !hit;
+      }
+      return hit;
+    }
+    var xs = poly.map(function (p) { return p[0]; });
+    var ys = poly.map(function (p) { return p[1]; });
+    var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+    var y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
+    var inset = Math.min(0.6, Math.min(x1 - x0, y1 - y0) * 0.12);
+    // 家具中心（设计坐标）；有 pts 的取多边形均值，没有的取 x/z。
+    var furn = (scene.furniture || []).map(function (f) {
+      if (Array.isArray(f.pts) && f.pts.length) {
+        var sx = 0, sy = 0;
+        f.pts.forEach(function (p) { sx += p[0]; sy += p[1]; });
+        return [sx / f.pts.length, sy / f.pts.length, Number(f.h) || 0.6];
+      }
+      return [Number(f.x) || 0, Number(f.z) || 0, Number(f.h) || 0.6];
+    }).filter(function (f) { return f[2] > 0.1 && inPoly(f[0], f[1]); });
+
+    // 房间四角里挑离家具最远、且确实落在地面内的那个：站得开，才看得清家具。
+    var corners = [
+      [x0 + inset, y0 + inset], [x1 - inset, y0 + inset],
+      [x0 + inset, y1 - inset], [x1 - inset, y1 - inset],
+    ];
+    var best = null, bestGap = -1;
+    corners.forEach(function (c) {
+      if (!inPoly(c[0], c[1])) return;
+      var gap = 1e9;
+      furn.forEach(function (f) {
+        var dx = f[0] - c[0], dy = f[1] - c[1];
+        gap = Math.min(gap, dx * dx + dy * dy);
+      });
+      if (gap > bestGap) { bestGap = gap; best = c; }
+    });
+    if (!best) best = [room.cx, room.cy];
+
+    // 看向房间里的家具；没有家具就看房间中心。
+    var tx = room.cx, tz = room.cy;
+    if (furn.length) {
+      tx = 0; tz = 0;
+      furn.forEach(function (f) { tx += f[0]; tz += f[1]; });
+      tx /= furn.length; tz /= furn.length;
+    }
+    // 竖屏横向视场只有约 31°，3.3 m 的沙发会被裁掉一半；放宽视场并抬高机位才装得下整间客厅。
+    var portrait = window.innerHeight > window.innerWidth * 1.15;
+    v.camera.fov = portrait ? 74 : 62;
+    v.camera.position.set(best[0], portrait ? 1.75 : 1.55, -best[1]);
+    v.controls.target.set(tx, portrait ? 0.80 : 0.95, -tz);
+    v.camera.updateProjectionMatrix();
+    v.controls.update();
+  }
+
+  // ===== 易用性：点空间名/家具聚焦，悬停看名称尺寸 =====================
+  var camTween = null;
+  var viewMode = 'bird';
+
+  function cancelTween() {
+    if (camTween) { cancelAnimationFrame(camTween.raf); camTween = null; }
+  }
+
+  function tweenCamera(pos, target, ms) {
+    var v = window.__viewer;
+    if (!v || !v.camera || !v.controls) return;
+    cancelTween();
+    var c = v.camera, ctl = v.controls;
+    var p0 = c.position.clone(), t0 = ctl.target.clone();
+    var p1 = pos.clone(), t1 = target.clone();
+    var start = performance.now();
+    camTween = { raf: 0 };
+    function step(now) {
+      var k = Math.min(1, (now - start) / ms);
+      var e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      c.position.lerpVectors(p0, p1, e);
+      ctl.target.lerpVectors(t0, t1, e);
+      c.updateProjectionMatrix();
+      ctl.update();
+      if (k < 1) camTween.raf = requestAnimationFrame(step);
+      else camTween = null;
+    }
+    camTween.raf = requestAnimationFrame(step);
+  }
+
+  function obliqueDir() {
+    var v = window.__viewer;
+    var d = new v.THREE.Vector3().subVectors(v.camera.position, v.controls.target);
+    d.y = 0;
+    if (d.lengthSq() < 0.01) d.set(0.5, 0, 0.8);
+    d.normalize();
+    d.y = 0.78;
+    return d.normalize();
+  }
+
+  function hideFurnTip() {
+    var t = document.getElementById('ftip');
+    if (t) t.classList.remove('show');
+  }
+
+  function focusRoom(room) {
+    var v = window.__viewer;
+    if (!v || !room || !room.poly || !room.poly.length) return;
+    hideFurnTip();
+    var T = v.THREE;
+    var xs = room.poly.map(function (p) { return p[0]; });
+    var zs = room.poly.map(function (p) { return p[1]; });
+    var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+    var z0 = Math.min.apply(null, zs), z1 = Math.max.apply(null, zs);
+    var ceil = Number((window.__SCENE__ || {}).height_m) || 2.7;
+    var target = new T.Vector3((x0 + x1) / 2, Math.min(1.15, ceil * 0.42), -(z0 + z1) / 2);
+    var diag = Math.max(2.4, Math.hypot(x1 - x0, z1 - z0));
+    var dist = Math.min(17, Math.max(5.2, diag * 1.22));
+    tweenCamera(target.clone().addScaledVector(obliqueDir(), dist), target, 620);
+    viewTouched = true;
+    birdView = false;
+    viewMode = 'room';
+  }
+
+  function focusFurniture(rec) {
+    var v = window.__viewer;
+    if (!v || !rec) return;
+    hideFurnTip();
+    var T = v.THREE;
+    var target = new T.Vector3(rec.x, Math.min(1.05, Math.max(0.25, rec.H * 0.6)), -rec.z);
+    var diag = Math.max(1.2, Math.hypot(rec.L, rec.D));
+    var dist = Math.min(12, Math.max(3.4, diag * 1.55));
+    tweenCamera(target.clone().addScaledVector(obliqueDir(), dist), target, 560);
+    viewTouched = true;
+    birdView = false;
+    viewMode = 'room';
+  }
+
+  function setupLabels() {
+    var v = window.__viewer;
+    var labelsEl = document.getElementById('labels');
+    if (!v || !labelsEl || !v.roomEls) return;
+    var rooms = (window.__SCENE__ || {}).rooms || [];
+    var order = rooms.map(function (r, i) { return { i: i, a: Number(r && r.area_m2) || 0 }; })
+      .sort(function (x, y) { return y.a - x.a; });
+    var rank = {};
+    order.forEach(function (o, k) { rank[o.i] = k; });
+    v.roomEls.forEach(function (row, i) {
+      var rm = rooms[i];
+      if (rm) row.el.title = (rm.name || '') + ' · ' + (rm.area_m2 || '') + ' ㎡ · 点击聚焦';
+    });
+    labelsEl.addEventListener('click', function (e) {
+      var el = e.target;
+      while (el && el !== labelsEl && !/room/.test(el.className || '')) el = el.parentNode;
+      if (!el || el === labelsEl) return;
+      var idx = Array.prototype.indexOf.call(labelsEl.children, el);
+      if (idx >= 0 && rooms[idx]) focusRoom(rooms[idx]);
+    });
+    function cap() {
+      if (viewMode === 'inside') return 0;
+      var w = window.innerWidth;
+      return w <= 430 ? 3 : (w <= 760 ? 4 : 5);
+    }
+    var last = 0;
+    function tick(now) {
+      requestAnimationFrame(tick);
+      if (labelsEl.style.display === 'none') return;
+      var vw = window.innerWidth, vh = window.innerHeight;
+      // 内核每帧先写 left/top；这里只把还没收起的标签夹回视口（每帧，避免跳）。
+      for (var i = 0; i < v.roomEls.length; i++) {
+        var el = v.roomEls[i].el;
+        if (el.classList.contains('lab-hide') || el.style.display === 'none') continue;
+        var l = parseFloat(el.style.left), t = parseFloat(el.style.top);
+        if (!isFinite(l) || !isFinite(t)) continue;
+        var ew = el.offsetWidth || 34, eh = el.offsetHeight || 16;
+        var nl = Math.min(Math.max(l, ew / 2 + 4), Math.max(ew / 2 + 4, vw - ew / 2 - 4));
+        var nt = Math.min(Math.max(t, eh / 2 + 4), Math.max(eh / 2 + 4, vh - eh / 2 - 4));
+        if (Math.abs(nl - l) > 0.5) el.style.left = nl + 'px';
+        if (Math.abs(nt - t) > 0.5) el.style.top = nt + 'px';
+      }
+      if (now - last < 120) return;
+      last = now;
+      var max = cap(), shown = [];
+      for (var j = 0; j < v.roomEls.length; j++) {
+        var row = v.roomEls[j], node = row.el;
+        var hidden = node.style.display === 'none';
+        var l2 = parseFloat(node.style.left), t2 = parseFloat(node.style.top);
+        var outside = hidden || !isFinite(l2) || !isFinite(t2) ||
+          l2 < -6 || l2 > vw + 6 || t2 < -6 || t2 > vh + 6;
+        var hide = outside || rank[j] === undefined || rank[j] >= max;
+        var w2 = node.offsetWidth || 34, h2 = node.offsetHeight || 16;
+        var nl2 = Math.min(Math.max(l2 || 0, w2 / 2 + 4), Math.max(w2 / 2 + 4, vw - w2 / 2 - 4));
+        var nt2 = Math.min(Math.max(t2 || 0, h2 / 2 + 4), Math.max(h2 / 2 + 4, vh - h2 / 2 - 4));
+        if (!hide) {
+          for (var k = 0; k < shown.length; k++) {
+            var s = shown[k];
+            if (Math.abs(nl2 - s.l) < (w2 + s.w) / 2 + 6 &&
+                Math.abs(nt2 - s.t) < (h2 + s.h) / 2 + 4) { hide = true; break; }
+          }
+        }
+        if (!hide) shown.push({ l: nl2, t: nt2, w: w2, h: h2 });
+        node.classList.toggle('lab-hide', hide);
+        if (!hide) {
+          if (Math.abs(nl2 - l2) > 0.5) node.style.left = nl2 + 'px';
+          if (Math.abs(nt2 - t2) > 0.5) node.style.top = nt2 + 'px';
+        }
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function setupFurnitureHover() {
+    var v = window.__viewer;
+    if (!v || !furnItems.length) return;
+    var tip = document.createElement('div');
+    tip.id = 'ftip';
+    tip.style.transform = 'none';
+    document.body.appendChild(tip);
+    var canvas = v.renderer.domElement;
+    var ray = new v.THREE.Raycaster();
+    var ndc = new v.THREE.Vector2();
+    var meshes = [];
+    furnItems.forEach(function (it) { it.meshes.forEach(function (m) { meshes.push(m); }); });
+    var hover = null, pending = false, lastEv = null, down = null;
+
+    function esc(s) {
+      return String(s).replace(/[&<>"]/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+      });
+    }
+    function place(ev) {
+      var x = ev.clientX + 14, y = ev.clientY + 14;
+      var w = tip.offsetWidth || 150, h = tip.offsetHeight || 28;
+      if (x + w > window.innerWidth - 8) x = ev.clientX - w - 18;
+      if (y + h > window.innerHeight - 8) y = ev.clientY - h - 18;
+      tip.style.left = x + 'px';
+      tip.style.top = y + 'px';
+    }
+    function setHover(rec, ev) {
+      if (hover === rec) { if (rec && ev) place(ev); return; }
+      if (hover) {
+        hover.meshes.forEach(function (m) {
+          if (m.material && m.material.emissive) {
+            m.material.emissive.setHex(0x000000);
+            m.material.emissiveIntensity = 0;
+          }
+        });
+      }
+      hover = rec;
+      if (!rec) { tip.classList.remove('show'); return; }
+      rec.meshes.forEach(function (m) {
+        if (m.material && m.material.emissive) {
+          m.material.emissive.setHex(0x8a6636);
+          m.material.emissiveIntensity = nightMode ? 0.55 : 0.30;
+        }
+      });
+      tip.innerHTML = '<i></i><b>' + esc(rec.kind || '家具') + '</b>　' +
+        rec.L.toFixed(1) + ' × ' + rec.D.toFixed(1) + ' m' +
+        (rec.room ? ' · ' + esc(rec.room) : '');
+      tip.classList.add('show');
+      if (ev) place(ev);
+    }
+    function pick(ev) {
+      var r = canvas.getBoundingClientRect();
+      ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+      ray.setFromCamera(ndc, v.camera);
+      var hits = ray.intersectObjects(meshes, false);
+      return hits.length ? hits[0].object.userData.furn : null;
+    }
+    canvas.addEventListener('pointermove', function (ev) {
+      if (ev.pointerType === 'touch' || ev.buttons) return;
+      lastEv = ev;
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(function () {
+        pending = false;
+        if (!lastEv) return;
+        setHover(pick(lastEv), lastEv);
+      });
+    });
+    canvas.addEventListener('pointerleave', function () { setHover(null); });
+    canvas.addEventListener('pointerdown', function (ev) {
+      down = { x: ev.clientX, y: ev.clientY, t: Date.now() };
+    });
+    canvas.addEventListener('pointerup', function (ev) {
+      if (!down) return;
+      var moved = Math.hypot(ev.clientX - down.x, ev.clientY - down.y);
+      var held = Date.now() - down.t;
+      down = null;
+      if (moved > 7 || held > 650) return;
+      var rec = pick(ev);
+      if (!rec) return;
+      if (ev.pointerType === 'touch') {
+        setHover(rec, ev);
+        setTimeout(function () { if (hover === rec) setHover(null); }, 1500);
+      }
+      focusFurniture(rec);
+    });
+  }
+
+  function setupCeilLine() {
+    var v = window.__viewer;
+    if (!v || !v.groups || !v.groups.ceilLine) return;
+    var g = v.groups.ceilLine;
+    g.visible = false; // 默认收起：吊顶线和家具轮廓线是“图纸信息”，不是情景本身
+    g.traverse(function (o) {
+      if (o.isLineSegments && o.material) {
+        o.material.color.setHex(0x93a3b4);
+        o.material.opacity = 0.42;
+        o.material.clippingPlanes = [v.clipPlane];
+        o.material.needsUpdate = true;
+      }
+    });
+    var btn = document.querySelector('[data-toggle="ceilLine"]');
+    if (btn) {
+      btn.classList.remove('on');
+      btn.title = '吊顶线默认收起；把剖切抬到墙顶以上再看';
+    }
+  }
+
+  function syncLayerButtons() {
+    var v = window.__viewer;
+    if (!v || !v.groups) return;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-toggle]'), function (b) {
+      var g = v.groups[b.getAttribute('data-toggle')];
+      if (g) b.classList.toggle('on', !!g.visible);
+    });
   }
 
   function boot(scene) {
@@ -429,8 +1623,15 @@
       chipEl = chip;
       syncModeUI(false); // hudLine 会把 chipEl 补回 #hud（append 后不会被 innerHTML 冲掉）
 
-      // 3D 家具：内核不画家具，外壳补一层体块（默认开，跟「图层 → 家具」按钮联动）
+      // 3D 家具：内核不画家具，外壳按类型搭；默认开，跟「图层 → 家具」按钮联动。
       furnGroup = buildFurniture();
+      initWorldStyle();
+      glazeWideDoors();
+      applyWorldStyle(nightMode);
+      applyFurnitureMode(nightMode);
+      setupCeilLine();
+      setupFurnitureHover();
+      setupLabels();
       (function () {
         var fbtn = document.querySelector('[data-toggle="furniture"]');
         if (!fbtn) return;
@@ -440,10 +1641,59 @@
           fbtn.style.opacity = '.45';
           fbtn.style.cursor = 'default';
         } else {
-          fbtn.title = '显示这一层的 ' + furnGroup.children.length + ' 件家具（体块占位，可开关）';
-          if (furnGroup.visible) fbtn.classList.add('on');
+          fbtn.title = '显示这一层的 ' + furnItems.length + ' 件家具（可开关）';
         }
       })();
+      syncLayerButtons();
+
+      // 光束按真实安装高度/半角重算一次，再套昼夜外观；日景默认也要能看见光锥。
+      fitBeams();
+      applyBeamStyle(nightMode);
+      if (window.__viewer.applyLevels) window.__viewer.applyLevels();
+
+      // 相机取景：默认鸟瞰自动适配；用户动过视角之后不再抢镜头。
+      (function () {
+        var v = window.__viewer;
+        if (v.controls && v.controls.addEventListener) {
+          v.controls.addEventListener('start', function () {
+            viewTouched = true;
+            birdView = false;
+            cancelTween();
+          });
+        }
+        Array.prototype.forEach.call(document.querySelectorAll('[data-view]'), function (btn) {
+          btn.addEventListener('click', function () {
+            var mode = btn.getAttribute('data-view');
+            viewTouched = true;
+            birdView = mode === 'bird';
+            viewMode = mode;
+            hideFurnTip();
+            if (mode === 'inside') {
+              Array.prototype.forEach.call(document.querySelectorAll('#labels .room'), function (el) {
+                el.classList.add('lab-hide');
+              });
+            }
+            if (birdView) setTimeout(function () { fitCamera(true); }, 60);
+            if (mode === 'inside') setTimeout(insideView, 30);
+            // 手机上选完视角先收起面板，别让控件压住刚聚焦的场景。
+            if (window.matchMedia('(max-width: 430px)').matches) setPanelOpen(false);
+          });
+        });
+        var resizeTimer = 0;
+        window.addEventListener('resize', function () {
+          clearTimeout(resizeTimer);
+          resizeTimer = setTimeout(function () { if (birdView) fitCamera(true); }, 180);
+        });
+        // 剖切高度变了，可见墙顶跟着变；鸟瞰下重新取景，避免切高后户型缩在画面一角。
+        var cutEl = document.getElementById('cut');
+        if (cutEl) cutEl.addEventListener('input', function () {
+          if (birdView) setTimeout(function () { fitCamera(true); }, 60);
+        });
+        fitCamera(true);
+        setTimeout(function () { if (!viewTouched) fitCamera(true); }, 700);
+      })();
+
+      if (q.get('night') === '1') { userMode = true; setMode(true); }
 
       // 内核面板里的「灯光演示」按钮与 HUD 开关保持同一状态（否则两个入口各切各的）
       var btnLight = document.getElementById('btnLight');
@@ -454,10 +1704,13 @@
       // 面板收起态（手机宽度）：用右下「工具」按钮打开
       var tools = document.getElementById('glTools');
       var panel = document.getElementById('panel');
-      tools.addEventListener('click', function () {
-        var open = panel.classList.toggle('gl-open');
+      function setPanelOpen(open) {
+        panel.classList.toggle('gl-open', open);
         tools.classList.toggle('on', open);
         tools.textContent = open ? '收起' : '工具';
+      }
+      tools.addEventListener('click', function () {
+        setPanelOpen(!panel.classList.contains('gl-open'));
       });
 
       // 就绪握手：告诉工作台「可以推亮度了」，避免它靠猜时间补发
@@ -470,30 +1723,6 @@
         cv.setAttribute('role', 'img');
         cv.setAttribute('aria-label', '户型三维灯光场景，可拖动旋转、滚轮缩放');
       }
-
-      // D-05 房间标签：内核按投影写 left/top，窄屏下会落到视口外被裁（旧实测 390 下
-      // 休闲阳台 x=-21、主卧 x=-30）。这里在内核每帧写完之后把标签夹回视口内，
-      // 不改内核投影/判定逻辑（儿童房 display:none 属 P1，保持不修）。
-      var labelsEl = document.getElementById('labels');
-      (function clampLabels() {
-        if (labelsEl && labelsEl.style.display !== 'none') {
-          var vw = window.innerWidth, vh = window.innerHeight;
-          var els = labelsEl.children;
-          for (var i = 0; i < els.length; i++) {
-            var el = els[i];
-            if (el.style.display === 'none') continue;
-            var l = parseFloat(el.style.left), t = parseFloat(el.style.top);
-            if (!isFinite(l) || !isFinite(t)) continue;
-            var ew = el.offsetWidth, eh = el.offsetHeight;
-            if (!ew || !eh) continue;
-            var nl = Math.min(Math.max(l, ew / 2 + 4), Math.max(ew / 2 + 4, vw - ew / 2 - 4));
-            var nt = Math.min(Math.max(t, eh / 2 + 4), Math.max(eh / 2 + 4, vh - eh / 2 - 4));
-            if (Math.abs(nl - l) > 0.5) el.style.left = nl + 'px';
-            if (Math.abs(nt - t) > 0.5) el.style.top = nt + 'px';
-          }
-        }
-        window.requestAnimationFrame(clampLabels);
-      })();
 
       // 竖屏全屏手机（iframe 又窄又高，如 390×768）时，内核默认 42° 竖向视场会把左右两侧
       // 房间挤出标签候选窗（实测 390×768 下「主卧」display:none，只剩 8 个标签）。

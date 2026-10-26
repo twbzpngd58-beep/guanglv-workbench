@@ -71,8 +71,18 @@ def drivers(members):
     return n + len(supplies)
 
 
+def fixture_watts(f) -> float:
+    """灯带 power 是 W/m，按 length 折算；其它灯具 power 就是单灯功率。"""
+    w = float(f.get("power") or 0)
+    if f.get("type") == "灯带":
+        length = float(f.get("length") or 0)
+        if length > 0:
+            w *= length
+    return w
+
+
 def watts(members):
-    return sum(float(f.get("power") or 0) for f in members)
+    return sum(fixture_watts(f) for f in members)
 
 
 def controls(members):

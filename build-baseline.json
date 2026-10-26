@@ -1,8 +1,8 @@
 {
   "version": "1.3.3",
-  "buildId": "eda4330a6f29",
-  "asset": "index-cK4CaQqz.js",
-  "asset_sha256": "7619bec2eb4ade6974ffe046f6a37d870f32d6fac58b5111402f1119d2b89697",
-  "built_at": "2026-10-23T10:30:54Z",
-  "source_commit": "direct-edit-20261023-fix-update-panel-reload"
+  "buildId": "a87d072adc5d",
+  "asset": "index-B1dvSXn9.js",
+  "asset_sha256": "fd18e6ea9a4e4d0d2d86e18105677e635221d48cf9863332955ba0386c183b66",
+  "built_at": "2026-10-26T05:00:41Z",
+  "source_commit": "direct-edit-20261026-130041"
 }

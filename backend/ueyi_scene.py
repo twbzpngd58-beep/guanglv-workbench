@@ -32,8 +32,8 @@ DEFAULT_LIGHT_R = 0.09        # 灯具外径（米），它用来画天花板上
 DEFAULT_THICKNESS = 0.12
 
 
-def _kind_of(light: dict, ceiling: float) -> str:
-    """我们的灯 → 它的四档灯。有半角按半角，没半角按安装高度推。"""
+def _half_mount(light: dict, ceiling: float) -> tuple[float, float]:
+    """灯的半角（度）与安装高度（米）；缺数据时半角 0、高度按层高。"""
     half = light.get("half")
     try:
         half = float(half) if half not in (None, "") else 0.0
@@ -44,6 +44,12 @@ def _kind_of(light: dict, ceiling: float) -> str:
         mount = float(mount) if mount not in (None, "") else ceiling
     except (TypeError, ValueError):
         mount = ceiling
+    return half, mount
+
+
+def _kind_of(light: dict, ceiling: float) -> str:
+    """我们的灯 → 它的四档灯。有半角按半角，没半角按安装高度推。"""
+    half, mount = _half_mount(light, ceiling)
     # 吊下来的才是吊线灯（60° 大光锥）。贴顶的灯只能落在筒灯/天花灯两档：
     # 数据里的半角有 25°/30° 这种超宽值，硬按角度归到「壁灯 45°」会把贴顶筒灯
     # 画成一大团白球——不是它渲染错了，是归类错了。
@@ -243,6 +249,7 @@ def build(view: dict, floor: int = 1) -> dict:
         except (KeyError, TypeError, ValueError):
             continue
         kind = _kind_of(light, ceiling)
+        half, mount = _half_mount(light, ceiling)
         circuit = circuits_by_id.get(light.get("c")) or {}
         # 回路名是给人看的、也是情景预置的匹配依据（会客=客厅餐厅全亮…），
         # 图纸里的回路常常只有一个 C01，所以按灯落在哪个房间来命名
@@ -253,7 +260,8 @@ def build(view: dict, floor: int = 1) -> dict:
         r = round(DEFAULT_LIGHT_R, 3)
         lights.append([round(x, 4), round(z, 4), r])
         lights_meta.append({"x": round(x, 4), "y": round(z, 4), "r": r,
-                            "room": room, "kind": kind, "circuit": name})
+                            "room": room, "kind": kind, "circuit": name,
+                            "half": round(half, 1), "mount": round(mount, 3)})
         # 工作台的灯具 id → 内核的回路名。前端切情景/拖回路时按这张表发亮度，
         # 三维才会跟着变（否则内核只按它自己的预置亮灯，跟设计没关系）。
         if light.get("id"):

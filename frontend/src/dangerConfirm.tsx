@@ -33,7 +33,7 @@ function DangerConfirmDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-modal-title"
-      onClick={() => onResolve(false)} data-fid="X-21"
+      onClick={() => onResolve(false)}
     >
       <div
         className="confirm-modal"
@@ -46,8 +46,8 @@ function DangerConfirmDialog({
         </div>
         {detail && <p className="confirm-modal-detail">{detail}</p>}
         <div className="confirm-modal-actions">
-          <button className="btn" onClick={() => onResolve(false)} data-fid="X-23">{cancelText}</button>
-          <button className="btn danger" onClick={() => onResolve(true)} data-fid="X-22">
+          <button className="btn" onClick={() => onResolve(false)}>{cancelText}</button>
+          <button className="btn danger" onClick={() => onResolve(true)}>
             <Trash2 size={14} />
             {confirmText}
           </button>

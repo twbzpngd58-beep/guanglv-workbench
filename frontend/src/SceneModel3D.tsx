@@ -1003,12 +1003,12 @@ export function SceneModel3D({
       data-fixtures={design.fixtures.filter((f) => (f.floor || 1) === floor).length}
       data-devices={design.devices.filter((d) => (d.floor || 1) === floor).length} />
     <button type="button" className="scene-model-top" onClick={() => topViewRef.current?.()}
-      disabled={!ready} aria-label={topView ? "返回立体角度" : "一键进入俯视图"} data-fid="V-21">
+      disabled={!ready} aria-label={topView ? "返回立体角度" : "一键进入俯视图"}>
       {topView ? "返回立体角度" : "一键俯视图"}
     </button>
     <div className="scene-model-light-tools">
-      <button type="button" aria-label={night ? '切换白天' : '切换夜间'} onClick={()=>setNight(!night)} data-fid="V-22">{night ? '夜间 · 切换白天' : '白天 · 切换夜间'}</button>
-      <label><input type="checkbox" checked={beams} onChange={e=>setBeams(e.target.checked)} data-fid="V-23"/>光锥示意</label>
+      <button type="button" aria-label={night ? '切换白天' : '切换夜间'} onClick={()=>setNight(!night)}>{night ? '夜间 · 切换白天' : '白天 · 切换夜间'}</button>
+      <label><input type="checkbox" checked={beams} onChange={e=>setBeams(e.target.checked)}/>光锥示意</label>
     </div>
     <div className="scene-model-caption">
       {`${layoutCount} · `}{error ? `模型提示：${error} · 仍显示已确认的空间与设备` :

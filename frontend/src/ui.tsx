@@ -10,7 +10,6 @@ export function Button({
   disabled = false,
   type = "button",
   title,
-  fid,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
@@ -19,8 +18,6 @@ export function Button({
   disabled?: boolean;
   type?: "button" | "submit";
   title?: string;
-  /** 功能编号（见 features.ts）：会渲染成 data-fid，供编号徽标与隐藏使用。 */
-  fid?: string;
 }) {
   return (
     <button
@@ -29,7 +26,6 @@ export function Button({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      data-fid={fid}
     >
       {children}
     </button>
@@ -41,15 +37,12 @@ export function Modal({
   children,
   onClose,
   wide = false,
-  fid,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   onClose: () => void;
   wide?: boolean;
-  /** 功能编号（见 features.ts）：会渲染成 data-fid。 */
-  fid?: string;
 }) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -70,7 +63,6 @@ export function Modal({
         aria-modal="true"
         aria-label={title}
         className={"modal " + (wide ? "wide" : "")}
-        data-fid={fid}
       >
         <div className="modal-head">
           <div>

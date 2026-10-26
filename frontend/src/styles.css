@@ -1830,6 +1830,14 @@ hr {
   flex-shrink: 0;
   color: #b9b1a6;
 }
+/* 失败提示不能再挂绿勾：换暗红底 + 感叹号，和「已保存」一眼区分。 */
+.toast.error {
+  background: #6f3429ed;
+  border-color: #ffffff26;
+}
+.toast.error > svg {
+  color: #f2b6a3;
+}
 /* 新版就绪提示：只提示不自动跳转，避免页面自己重载/被当成新开的网页。 */
 .update-banner {
   position: fixed;
@@ -2961,9 +2969,10 @@ hr {
 .scene-tabs > button.active b {
   color: #b38a4e;
 }
+/* 右栏（旧 scene-settings）已经不存在，只剩画布一个子项：单列铺满，别留一条空的深色竖带。 */
 .scene-workspace {
   display: grid;
-  grid-template-columns: minmax(400px, 1fr) 265px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 22px;
 }
 .scene-canvas {
@@ -3910,9 +3919,6 @@ hr {
   .scene-tabs > button {
     min-width: 180px;
   }
-  .scene-workspace {
-    grid-template-columns: minmax(300px, 1fr) 250px;
-  }
   .draft-note {
     font-size: 8px;
   }
@@ -4154,10 +4160,6 @@ hr {
   }
   .scene-tabs {
     gap: 8px;
-  }
-  .scene-workspace {
-    grid-template-columns: minmax(270px, 1fr) 220px;
-    gap: 15px;
   }
   .scene-settings {
     padding: 18px 15px;

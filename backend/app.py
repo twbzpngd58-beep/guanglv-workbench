@@ -868,6 +868,8 @@ def health():
         planVisionConfigured=semantic_plan_configured(),
         authentication="single-user",
         knowledgeBase={"root": "", "available": False, "syncedAt": None},
+        # 本机扩展（可选）是否已加载：扩展代码不在仓库里，GitHub 用户为 False。
+        localExt=bool(globals().get("LOCAL_FEATURE_LOADED")),
     )
 
 
@@ -1464,15 +1466,22 @@ async def upload_fixture_ies(pid: str, fid: str, file: UploadFile = File(...)):
                 out.write(chunk)
         from . import ies as ies_mod
         parsed = ies_mod.parse(target.read_bytes())
+        ok = bool(parsed.get("ok"))
+        status = parsed.get("status") or ("parsed" if ok else "parse_failed")
+        notes = {
+            "parsed": "已解析配光参考；光斑仍按光束角理论值，不做正式照度计算",
+            "unsupported": "文件已留存，但配光不能按 C 平面半角使用；光斑仍按理论值",
+            "parse_failed": "文件已留存，但解析失败；光斑仍按理论值",
+        }
         fixture["ies"] = {
             "file": stored,
             "name": name,
             "bytes": size,
             "uploadedAt": now(),
-            "status": "parsed" if parsed.get("ok") else "parse-failed",
-            "parsed": parsed.get("data") if parsed.get("ok") else None,
-            "parseError": "" if parsed.get("ok") else parsed.get("error", ""),
-            "note": "已解析配光参考；光斑仍按光束角理论值，不做正式照度计算",
+            "status": status,
+            "parsed": parsed.get("data") if ok else None,
+            "parseError": parsed.get("error", "") if status == "parse_failed" else "",
+            "note": notes.get(status, notes["parse_failed"]),
         }
         commit(c, p, "上传 IES 光度文件", f"{fixture.get('code') or fixture['id']}：{name}")
     return p
@@ -3391,9 +3400,26 @@ lighting3d_mod.register(app)
 from . import app_versions as app_versions_mod  # noqa: E402
 app_versions_mod.register(app)
 
-# 功能改动记录（功能清单里查作用 / 改动次数 / 回退）——同样必须在 SPA 兜底路由之前
-from . import feature_history as feature_history_mod  # noqa: E402
-feature_history_mod.register(app)
+# 本机扩展（可选）——代码不在仓库里，放在部署目录旁的本地扩展目录。
+# 有该目录时动态加载；GitHub 用户没有这个目录，自动跳过，不影响工作台启动。
+LOCAL_FEATURE_LOADED = False
+LOCAL_FEATURES_DIR = Path(os.getenv("GUANGLV_LOCAL_DIR", str(ROOT.parent / "光律本地功能"))).resolve()
+LOCAL_FEATURE_FILE = LOCAL_FEATURES_DIR / "local_ext.py"
+if LOCAL_FEATURE_FILE.is_file():
+    try:
+        import importlib.util
+
+        _spec = importlib.util.spec_from_file_location("guanglv_local_feature_history", LOCAL_FEATURE_FILE)
+        if _spec and _spec.loader:
+            _local_feature_mod = importlib.util.module_from_spec(_spec)
+            _spec.loader.exec_module(_local_feature_mod)  # type: ignore[union-attr]
+            # 把运行目录与数据目录注入本地模块（它不在项目包内，不能靠 __file__ 推项目根）。
+            _local_feature_mod.APP_ROOT = ROOT
+            _local_feature_mod.DATA = DATA
+            _local_feature_mod.register(app)
+            LOCAL_FEATURE_LOADED = True
+    except Exception:  # noqa: BLE001 - 本地扩展坏了也不能拖垮工作台
+        LOCAL_FEATURE_LOADED = False
 
 
 DIST = ROOT / "frontend" / "dist"

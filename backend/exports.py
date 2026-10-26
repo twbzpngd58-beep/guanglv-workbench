@@ -433,6 +433,16 @@ def lights(p):
     return [f for f in p["design"]["fixtures"] if is_light(f)]
 
 
+def fixture_watts(f):
+    """灯带 power 是 W/m，按 length 折算；其它灯具 power 就是单灯功率。"""
+    w = float(f.get("power") or 0)
+    if f.get("type") == "灯带":
+        length = float(f.get("length") or 0)
+        if length > 0:
+            w *= length
+    return round(w, 1)
+
+
 def cct_reason(f):
     """「原因」列：待核灯标「色温待核」；偏离单色 3000K 的写设计师原因（未填标出）。"""
     if not is_light(f):
@@ -456,7 +466,7 @@ def rows(p, include_price=True):
             f.get("position", ""),
             floor_label(f.get("floor", 1), p.get("basements", 0)),
             f.get("circuit", ""),
-            f.get("power", 0),
+            fixture_watts(f),
             f.get("price", 0) if include_price else 0,
             (
                 ("已核实" if f.get("priceVerified") else "模拟/待核实")
@@ -524,7 +534,7 @@ def circuit_row(p, key, members):
             missing.append("地址")
     # 超出 D3 默认上限、无线跨空间，接在缺项文字后面。
     missing += circuit_rules.flags(members, room_names, circuit_rules.circuit_key({"circuit": key}))
-    return [key, len(members), sum(f.get("power", 0) for f in members),
+    return [key, len(members), round(sum(fixture_watts(f) for f in members), 1),
             space, control, module, channel, address, "、".join(missing)]
 
 def spreadsheet(p, include_price=True):
@@ -666,14 +676,16 @@ def spreadsheet(p, include_price=True):
     quotes.append(["不含人工、安装、税费、运费、独立电源及智能设备；需人工核定范围。"])
     room_names = {r["id"]: r["name"] for r in p["design"]["rooms"]}
     strips = wb.create_sheet("灯带与电源交付")
-    strips.append(["灯带编号", "空间", "长度 m", "独立电源", "控制器 / 通道", "功率 W", "备注"])
+    strips.append(["灯带编号", "空间", "长度 m", "独立电源", "控制器 / 通道", "功率 W（按长度）", "备注"])
     total_strip_length = 0
+    total_strip_watts = 0
     for f in p["design"]["fixtures"]:
         if f.get("type") == "灯带":
             length = f.get("length", 0)
             total_strip_length += length
-            strips.append([f.get("code", ""), room_names.get(f.get("roomId"), "未分配"), length, f.get("powerSupply", ""), f.get("controller", ""), f.get("power", 0), f.get("notes", "")])
-    strips.append(["灯带总长度", "", round(total_strip_length, 2), "", "", "", "交付前须核对电源容量、压降与驱动兼容性"])
+            total_strip_watts += fixture_watts(f)
+            strips.append([f.get("code", ""), room_names.get(f.get("roomId"), "未分配"), length, f.get("powerSupply", ""), f.get("controller", ""), fixture_watts(f), f.get("notes", "")])
+    strips.append(["灯带总长度", "", round(total_strip_length, 2), "", "", round(total_strip_watts, 1), "交付前须核对电源容量、压降与驱动兼容性"])
     devices = wb.create_sheet("智能设备")
     devices.append(["编号", "名称", "类型", "型号", "所属空间", "位置", "协议", "地址", "按键数", "按键刻字（短按刻字 / 长按仅功能）", "备注"])
     for dev in p["design"].get("devices", []):

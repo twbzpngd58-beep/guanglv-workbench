@@ -9,7 +9,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "test:e2e": "playwright test",
     "check:floors": "node scripts/check-floor-detect.mjs",
-    "check:positions": "node scripts/check-positions.mjs"
+    "check:positions": "node scripts/check-positions.mjs",
+    "build:public": "GUANGLV_PUBLIC_BUILD=1 tsc -b && GUANGLV_PUBLIC_BUILD=1 vite build"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

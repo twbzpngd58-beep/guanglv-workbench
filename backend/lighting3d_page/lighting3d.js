@@ -810,11 +810,11 @@
         o.cone.material.color.copy(tint); o.pool.material.color.copy(tint);
       }
       o.lv = lv;
-      o.cone.material.opacity = lv * 0.34;
+      o.cone.material.opacity = lv * (mode === "day" ? 0.16 : 0.34);
       // 现场 2026-10-16「白天晚上可以手动切换」：光锥是**独立开关**，白天勾了也要看得见
       // （原来限定 mode === "night"，白天勾「光锥示意」等于没反应）。
       o.cone.visible = beamsOn && lv > 0.01;
-      o.pool.material.opacity = lv * 0.78;
+      o.pool.material.opacity = lv * (mode === "day" ? 0.28 : 0.78);
       o.pool.visible = lv > 0.01;
       o.disc.material.opacity = 0.18 + lv * 0.82;
     });

@@ -50,7 +50,7 @@ import { Workspace } from "./Workspace";
 import { ShellV2 } from "./ShellV2";
 import { AppVersionPanel } from "./AppVersionPanel";
 import { UpdatePanel } from "./UpdatePanel";
-import { FeatureAdminCard, FeatureRuntime } from "./featureFlags";
+import { LocalExtAdminCard, LocalExtRuntime } from "@local/ext";
 import { ProductLibrary } from "./ProductLibrary";
 import "./styles.css";
 import { Button, Modal, Badge, Field, STATUS_MATCH } from "./ui";
@@ -81,7 +81,7 @@ function App() {
     [loaded, setLoaded] = useState(false),
     [error, setError] = useState(""),
     [modal, setModal] = useState(""),
-    [toast, setToast] = useState(""),
+    [toast, setToast] = useState<{ text: string; kind: "ok" | "error" } | null>(null),
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState("全部项目"),
     [view, setView] = useState("grid"),
@@ -96,10 +96,10 @@ function App() {
     [updateAsset, setUpdateAsset] = useState("");
   const toastTimer = useRef<any>(null);
   const importRef = useRef<HTMLInputElement>(null);
-  const notify = useCallback((s: string) => {
-    setToast(s);
+  const notify = useCallback((s: string, kind: "ok" | "error" = "ok") => {
+    setToast({ text: s, kind });
     clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(""), 4500);
+    toastTimer.current = setTimeout(() => setToast(null), kind === "error" ? 6500 : 4500);
   }, []);
   const refresh = useCallback(async () => {
     try {
@@ -295,9 +295,9 @@ function App() {
           />
         )}
         {toast && (
-          <div className="toast">
-            <CheckCircle2 size={18} />
-            {toast}
+          <div className={"toast" + (toast.kind === "error" ? " error" : "")}>
+            {toast.kind === "error" ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+            {toast.text}
           </div>
         )}
       </>
@@ -317,9 +317,9 @@ function App() {
           shellV2={shellV2}
         />
         {toast && (
-          <div className="toast">
-            <CheckCircle2 size={18} />
-            {toast}
+          <div className={"toast" + (toast.kind === "error" ? " error" : "")}>
+            {toast.kind === "error" ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+            {toast.text}
           </div>
         )}
         {updateAsset && (
@@ -336,7 +336,7 @@ function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a className="brand" onClick={() => setPage("dashboard")} data-fid="S-50">
+        <a className="brand" onClick={() => setPage("dashboard")}>
           <span className="brand-mark">
             <i />
             <b />
@@ -359,10 +359,10 @@ function App() {
         </div>
         <nav>
           {[
-            { key: "dashboard", label: "工作台", icon: LayoutDashboard, fid: "S-51" },
-            { key: "projects", label: "全部项目", icon: FolderOpen, fid: "S-52" },
-            { key: "products", label: "灯具与设备库", icon: Lightbulb, fid: "S-53" },
-            { key: "templates", label: "场景灵感库", icon: Layers3, fid: "S-54" },
+            { key: "dashboard", label: "工作台", icon: LayoutDashboard },
+            { key: "projects", label: "全部项目", icon: FolderOpen },
+            { key: "products", label: "灯具与设备库", icon: Lightbulb },
+            { key: "templates", label: "场景灵感库", icon: Layers3 },
           ].map((n) => (
             <button
               key={n.key}
@@ -371,7 +371,7 @@ function App() {
               onClick={() => {
                 setPage(n.key);
                 setFilter("全部项目");
-              }} data-fid={n.fid}
+              }}
             >
               <n.icon size={19} />
               <span>{n.label}</span>
@@ -382,19 +382,19 @@ function App() {
         <div className="nav-divider" />
         <div className="nav-caption">工具与支持</div>
         <nav>
-          <button onClick={() => { location.href = "?shell=v2"; }} data-fid="S-14">
+          <button onClick={() => { location.href = "?shell=v2"; }}>
             <Sparkles size={18} />
             <span>新版工作台</span>
             <ArrowUpRight size={14} />
           </button>
-          <button onClick={() => setModal("guide")} data-fid="S-15">
+          <button onClick={() => setModal("guide")}>
             <BookOpen size={18} />
             <span>使用指南</span>
             <ArrowUpRight size={14} />
           </button>
           <button
             className={page === "settings" ? "active" : ""}
-            onClick={() => setPage("settings")} data-fid="S-16"
+            onClick={() => setPage("settings")}
           >
             <Settings2 size={18} />
             <span>工作台设置</span>
@@ -416,7 +416,7 @@ function App() {
               SQLite 持久化存储 <ShieldCheck size={13} />
             </small>
           </div>
-          <button className="user-profile" onClick={() => setPage("settings")} data-fid="S-17">
+          <button className="user-profile" onClick={() => setPage("settings")}>
             <span className="avatar">设</span>
             <span>
               <b>本机工作空间</b>
@@ -451,7 +451,7 @@ function App() {
             <button
               className="icon-btn"
               aria-label="使用帮助"
-              onClick={() => setModal("guide")} data-fid="S-15"
+              onClick={() => setModal("guide")}
             >
               <HelpCircle size={18} />
             </button>
@@ -486,7 +486,7 @@ function App() {
                       : "管理你的项目、设计版本与交付进度。"}
                   </p>
                 </div>
-                <Button variant="primary" onClick={() => setModal("create")} fid="S-18">
+                <Button variant="primary" onClick={() => setModal("create")}>
                   <Plus size={17} />
                   新建项目
                 </Button>
@@ -505,12 +505,12 @@ function App() {
                         在一个工作台里，完成从想法到交付的每一步。
                       </p>
                       <div>
-                        <Button onClick={() => setModal("create")} fid="S-19">
+                        <Button onClick={() => setModal("create")}>
                           开启新的设计 <ArrowUpRight size={16} />
                         </Button>
                         <button
                           className="text-link"
-                          onClick={() => setModal("guide")} data-fid="S-20"
+                          onClick={() => setModal("guide")}
                         >
                           了解设计流程 <ArrowRight size={14} />
                         </button>
@@ -538,7 +538,7 @@ function App() {
                       </div>
                     </div>
                   </section>
-                  <div className="stats-grid" data-fid="S-21">
+                  <div className="stats-grid">
                     {stats.map((s, i) => (
                       <button
                         className="stat-card"
@@ -585,7 +585,7 @@ function App() {
                   </h2>
                   <button
                     className="text-link"
-                    onClick={() => importRef.current?.click()} data-fid="S-22"
+                    onClick={() => importRef.current?.click()}
                   >
                     <Upload size={14} />
                     导入项目
@@ -603,7 +603,7 @@ function App() {
                 </div>
                 <div className="project-toolbar">
                   <div className="tabs-row">
-                    <div className="project-tabs" data-fid="S-23">
+                    <div className="project-tabs">
                       {["全部项目", "未开始", "进行中", "待确认", "已完成"].map(
                         (s) => (
                           <button
@@ -620,13 +620,13 @@ function App() {
                     <button
                       className={"tab-arch" + (filter === "归档" ? " on" : "")}
                       aria-pressed={filter === "归档"}
-                      onClick={() => setFilter("归档")} data-fid="S-24"
+                      onClick={() => setFilter("归档")}
                     >
                       归档 {loaded ? projects.filter((p) => p.status === "已归档").length : "…"} ›
                     </button>
                   </div>
                   <div className="filter-tools">
-                    <div className="search-field" data-fid="S-25">
+                    <div className="search-field">
                       <Search size={15} />
                       <input
                         placeholder="搜索项目、客户或编号"
@@ -646,7 +646,7 @@ function App() {
                     <select
                       aria-label="更多状态筛选"
                       value={["识别中", "已确认", "已导出"].includes(filter) ? filter : ""}
-                      onChange={(e) => e.target.value && setFilter(e.target.value)} data-fid="S-26"
+                      onChange={(e) => e.target.value && setFilter(e.target.value)}
                     >
                       <option value="">更多状态 ›</option>
                       <option value="识别中">识别中</option>
@@ -657,14 +657,14 @@ function App() {
                       <button
                         className={view === "grid" ? "active" : ""}
                         aria-label="卡片视图"
-                        onClick={() => setView("grid")} data-fid="S-27"
+                        onClick={() => setView("grid")}
                       >
                         <Grid2X2 size={16} />
                       </button>
                       <button
                         className={view === "list" ? "active" : ""}
                         aria-label="列表视图"
-                        onClick={() => setView("list")} data-fid="S-28"
+                        onClick={() => setView("list")}
                       >
                         <List size={17} />
                       </button>
@@ -728,7 +728,7 @@ function App() {
               </section>
               {page === "dashboard" && (
                 <div className="bottom-grid">
-                  <section className="activity-panel" data-fid="S-48">
+                  <section className="activity-panel">
                     <div className="section-heading">
                       <h2>工作动态</h2>
                       <span className="subtle">最近的设计足迹</span>
@@ -789,7 +789,7 @@ function App() {
                     </div>
                     <button
                       className="text-link"
-                      onClick={() => setModal("guide")} data-fid="S-32"
+                      onClick={() => setModal("guide")}
                     >
                       查看完整工作流程 <ArrowUpRight size={14} />
                     </button>
@@ -812,7 +812,7 @@ function App() {
                   </p>
                 </div>
               </div>
-              <div className="scene-inspiration" data-fid="S-38">
+              <div className="scene-inspiration">
                 {[
                   {
                     n: "日常照明",
@@ -908,11 +908,11 @@ function App() {
                     替换模型请在后端 Provider
                     注册适配器并配置环境变量。图纸与设计数据都只存在你自己的机器上。
                   </p>
-                  <Button onClick={() => setModal("guide")} fid="K-05">
+                  <Button onClick={() => setModal("guide")}>
                     阅读使用指南 <ArrowRight size={15} />
                   </Button>
                 </section>
-                <section className="white-panel" data-fid="K-01">
+                <section className="white-panel">
                   <h3>版本与更新</h3>
                   <div className="setting-row">
                     <span>当前版本</span>
@@ -926,7 +926,7 @@ function App() {
                   <p className="body-copy">
                     光律 Guanglv Workbench · MIT 开源。图纸解析、三维渲染与情景规则来自真实照明项目的打磨；数据全部留在你自己的机器上。
                   </p>
-                  <div className="contact-cards compact" data-fid="K-06">
+                  <div className="contact-cards compact">
                     <a className="contact-card" href="/wechat-support.jpg" target="_blank" rel="noreferrer">
                       <img src="/wechat-support.jpg" alt="技术咨询微信二维码" />
                       <b>技术咨询</b>
@@ -941,7 +941,7 @@ function App() {
                     </a>
                   </div>
                 </section>
-                <FeatureAdminCard />
+                <LocalExtAdminCard />
               </div>
             </>
           )}
@@ -971,7 +971,7 @@ function App() {
         <Modal
           title="从空间，到恰好的光"
           subtitle="光律工作台 · 第一版使用指南"
-          onClose={() => setModal("")} fid="S-36"
+          onClose={() => setModal("")}
         >
           <div className="guide-list">
             {[
@@ -1032,16 +1032,16 @@ function App() {
             </div>
           </div>
           <div className="modal-foot">
-            <Button variant="primary" onClick={() => setModal("")} fid="S-37">
+            <Button variant="primary" onClick={() => setModal("")}>
               开始设计 <ArrowRight size={16} />
             </Button>
           </div>
         </Modal>
       )}
       {toast && (
-        <div className="toast">
-          <CheckCircle2 size={18} />
-          {toast}
+        <div className={"toast" + (toast.kind === "error" ? " error" : "")}>
+          {toast.kind === "error" ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+          {toast.text}
         </div>
       )}
       {updateAsset && (
@@ -1068,7 +1068,7 @@ function ProjectCard({
   const [menu, setMenu] = useState(false);
   return (
     <article className="project-card">
-      <button className="project-preview" onClick={onOpen} data-fid="S-29">
+      <button className="project-preview" onClick={onOpen}>
         <div className="preview-badges">
           <Badge status={p.status} />
           {p.isDemo && <span className="draft-label">示例项目</span>}
@@ -1098,7 +1098,7 @@ function ProjectCard({
             <button
               className="icon-btn"
               aria-label={`${p.name} 更多操作`}
-              onClick={() => setMenu(!menu)} data-fid="S-30"
+              onClick={() => setMenu(!menu)}
             >
               <MoreHorizontal size={19} />
             </button>
@@ -1120,7 +1120,7 @@ function ProjectCard({
                       onClick={() => {
                         setMenu(false);
                         onAction(k);
-                      }} data-fid={k === "duplicate" ? "S-58" : k === "versions" ? "S-57" : k === "delete" ? "S-60" : "S-59"}
+                      }}
                     >
                       <I size={14} />
                       {t}
@@ -1131,7 +1131,7 @@ function ProjectCard({
             )}
           </div>
         </div>
-        <button className="project-title" onClick={onOpen} data-fid="S-29">
+        <button className="project-title" onClick={onOpen}>
           {p.name}
           <ArrowUpRight size={17} />
         </button>
@@ -1291,7 +1291,7 @@ function CreateProject({
       onClose={() => {
         if (!saving) onClose();
       }}
-      wide fid="S-33"
+      wide
     >
       <form onSubmit={submit}>
         <div className="form-section-label">
@@ -1422,7 +1422,7 @@ function CreateProject({
           onDrop={(e) => {
             e.preventDefault();
             setFiles([...files, ...Array.from(e.dataTransfer.files)]);
-          }} data-fid="S-34"
+          }}
         >
           <span>
             <FileUp size={24} />
@@ -1506,7 +1506,7 @@ function CreateProject({
               <Button onClick={onClose} disabled={saving}>
                 取消
               </Button>
-              <Button type="submit" variant="primary" disabled={saving} fid="S-35">
+              <Button type="submit" variant="primary" disabled={saving}>
                 {saving ? (
                   <Loader2 size={16} className="spin" />
                 ) : (
@@ -1523,7 +1523,7 @@ function CreateProject({
 }
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <FeatureRuntime />
+    <LocalExtRuntime />
     <App />
   </React.StrictMode>,
 );

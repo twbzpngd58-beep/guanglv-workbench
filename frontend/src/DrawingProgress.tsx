@@ -45,17 +45,17 @@ export function DrawingProgress({ project, design, job, phase, confirmed, onStep
   return <section className="drawing-progress" aria-label="导图建模流程" data-current-step={current}>
     <div className="drawing-progress-heading">
       <b>导图建模进度</b>
-      <span role="status" data-fid="D-14">{current === "canvas" ? "已进入画布" : `当前：${DRAWING_STEPS[index].label}`} · {percent}%</span>
+      <span role="status">{current === "canvas" ? "已进入画布" : `当前：${DRAWING_STEPS[index].label}`} · {percent}%</span>
     </div>
     <div className="drawing-progress-track" role="progressbar" aria-label="导图建模进度"
-      aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} data-fid="D-14">
+      aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
       <i style={{width:`${percent}%`}} />
     </div>
     <ol>{DRAWING_STEPS.map((s, i) => {
       const done = i < completed, active = s.id === current;
       return <li key={s.id} data-step={s.id} data-state={done ? "completed" : active ? "current" : "pending"}>
         <button type="button" disabled={!onStep || i > index || !!blockedSteps?.includes(s.id)} onClick={() => onStep?.(s.id)}
-          aria-current={active ? "step" : undefined} data-fid="D-15">
+          aria-current={active ? "step" : undefined}>
           {active && recognizing ? <Loader2 className="spin" size={14} /> : done ? <CheckCircle2 size={14} /> : <Circle size={14} />}
           <span>{i + 1} · {s.label}</span>
         </button>

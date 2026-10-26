@@ -30,7 +30,7 @@ export function CircuitIssueList({
   if (!issues.length) return null;
   const first = (x: CircuitIssue) => design.fixtures.find((f: Obj) => f.id === x.fixtureIds[0]);
   return (
-    <div className="notice circuit-warn" role="alert" aria-label={"回路问题 · " + where} data-fid="X-32">
+    <div className="notice circuit-warn" role="alert" aria-label={"回路问题 · " + where}>
       <AlertCircle size={17} />
       <div>
         <b>回路问题 {issues.length} 条</b>
@@ -62,7 +62,7 @@ export function CircuitBoard({ design }: { design: Obj }) {
   const list = [...groups(design)];
   if (!list.length) return null;
   return (
-    <section className="circuit-board" aria-label="按回路看" data-fid="X-33">
+    <section className="circuit-board" aria-label="按回路看">
       <h3>按回路看</h3>
       <table>
         <thead>

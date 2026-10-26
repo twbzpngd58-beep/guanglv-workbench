@@ -329,7 +329,7 @@ export function SpacePreviewLayer({
   };
 
   return (
-    <div className="space-preview-overlay" role="dialog" aria-label="空间预览" data-fid="V-46">
+    <div className="space-preview-overlay" role="dialog" aria-label="空间预览">
       <div className="space-preview-panel" data-phase={phase}>
         <header>
           <div>
@@ -345,23 +345,23 @@ export function SpacePreviewLayer({
             <button
               className={tab === "preview" ? "on" : ""}
               onClick={async () => { try { await beforeReview?.(); setTab("preview"); } catch (e: any) { notify(`保存失败：${e.message}`); } }}
-              disabled={state !== "done"} data-fid="V-41"
+              disabled={state !== "done"}
             >
               三维预览
             </button>
             <button
               className={tab === "edit" && phase === "spaces" ? "on" : ""}
               onClick={editSpaces}
-              disabled={state !== "done"} data-fid="D-01"
+              disabled={state !== "done"}
             >
               修改空间
             </button>
             <button className={tab === "edit" && phase === "openings" ? "on" : ""}
               disabled={state !== "done" || (phase !== "openings" && !alreadyConfirmed)}
-              onClick={() => { setPhase("openings"); setTab("edit"); setTool("select"); }} data-fid="D-02">绘制门窗</button>
+              onClick={() => { setPhase("openings"); setTab("edit"); setTool("select"); }}>绘制门窗</button>
             <button className={tab === "furniture" ? "on" : ""}
               disabled={state !== "done" || (phase !== "furniture" && !alreadyConfirmed)}
-              onClick={() => { setPhase("furniture"); setTab("furniture"); setTool("select"); setPlacingFurn(""); setMovingFurn(false); }} data-fid="D-03">修改家具</button>
+              onClick={() => { setPhase("furniture"); setTab("furniture"); setTool("select"); setPlacingFurn(""); setMovingFurn(false); }}>修改家具</button>
           </div>
         </header>
         <DrawingProgress project={project} design={design} job={job} phase={phase} confirmed={alreadyConfirmed}
@@ -373,9 +373,9 @@ export function SpacePreviewLayer({
 
         {legacyLoading && state === "done" ? (
           <div className="space-preview-progress"><p><Loader2 size={14} /> 正在载入已有家具…</p>
-            <Button onClick={() => setLegacyRetry(v => v + 1)} fid="V-45">重新载入已有家具</Button></div>
+            <Button onClick={() => setLegacyRetry(v => v + 1)}>重新载入已有家具</Button></div>
         ) : state === "running" || state === "idle" ? (
-          <div className="space-preview-progress" data-fid="V-44">
+          <div className="space-preview-progress">
             <p><Loader2 size={14} /> {job.recognizing === false ? "正在载入当前步骤…" : `图纸识别与三维生成中… ${pct}%`}　{job?.stage || ""}</p>
             <div className="bar"><i style={{ width: `${pct}%` }} /></div>
             <p className="subtle">
@@ -383,12 +383,12 @@ export function SpacePreviewLayer({
             </p>
           </div>
         ) : state === "error" ? (
-          <div className="space-preview-progress" data-fid="V-44">
+          <div className="space-preview-progress">
             <p className="task-error"><AlertCircle size={14} /> 生成失败：{job?.error || job?.message || "未知原因"}</p>
             <p className="subtle">可以在项目里「图纸与底图」重新导入，或到三维页重试。</p>
           </div>
         ) : tab === "preview" ? (
-          <div className="space-preview-view" data-fid="V-43">
+          <div className="space-preview-view">
             {previewContent || <SceneModel3D
               key={`preview-${visit}`}
               projectId={id}
@@ -401,57 +401,57 @@ export function SpacePreviewLayer({
           <div className="space-preview-edit">
             <div className="space-preview-canvas">
               <div className="space-preview-canvas-tools">
-                <Button variant={tool === "select" ? "primary" : ""} onClick={() => { if (tab === "furniture") { setPlacingFurn(""); setMovingFurn(false); } setTool("select"); }} fid="D-04">
+                <Button variant={tool === "select" ? "primary" : ""} onClick={() => { if (tab === "furniture") { setPlacingFurn(""); setMovingFurn(false); } setTool("select"); }}>
                   <MousePointer2 size={14} /> {tab === "furniture" ? "选择家具" : phase === "spaces" ? "选择 / 移动边界" : "选择门窗"}
                 </Button>
                 {tab === "furniture" && <>
                 <Button disabled={!furnSel} variant={tool === "add-furn-point" ? "primary" : ""}
-                  onClick={() => { setTool(tool === "add-furn-point" ? "select" : "add-furn-point"); setPlacingFurn(""); setMovingFurn(false); }} fid="D-05">
+                  onClick={() => { setTool(tool === "add-furn-point" ? "select" : "add-furn-point"); setPlacingFurn(""); setMovingFurn(false); }}>
                   <Plus size={12} /> 增加边界点
                 </Button>
                 <Button disabled={!furnSel} variant={tool === "delete-furn-point" ? "primary" : ""}
-                  onClick={() => { setTool(tool === "delete-furn-point" ? "select" : "delete-furn-point"); setPlacingFurn(""); setMovingFurn(false); }} fid="D-05">
+                  onClick={() => { setTool(tool === "delete-furn-point" ? "select" : "delete-furn-point"); setPlacingFurn(""); setMovingFurn(false); }}>
                   <Trash2 size={12} /> 删除边界点
                 </Button>
                 <Button variant={tool === "draw-furn-poly" ? "primary" : ""}
-                  onClick={() => { setTool(tool === "draw-furn-poly" ? "select" : "draw-furn-poly"); setPlacingFurn(""); setMovingFurn(false); }} fid="D-05">
+                  onClick={() => { setTool(tool === "draw-furn-poly" ? "select" : "draw-furn-poly"); setPlacingFurn(""); setMovingFurn(false); }}>
                   <MousePointer2 size={12} />
                   {tool === "draw-furn-poly" ? "取消绘制" : furnSel ? "重画选中家具轮廓（多边形）" : "画新家具轮廓（多边形）"}
                 </Button>
                 <Button disabled={!furnSel} onClick={() => { const row = (editorDesign.furniture || []).find((f: Obj) => f.id === furnSel);
                   if (!row || !row.points) return;
                   commitDesign({ ...editorDesign, furniture: (editorDesign.furniture || []).map((f: Obj) => f.id === furnSel ? deleteFurniturePolygon(f) : f) });
-                  notify(`已把「${row.kind}」恢复成矩形边界（宽深可继续调）`); }} fid="D-05">恢复矩形边界</Button>
+                  notify(`已把「${row.kind}」恢复成矩形边界（宽深可继续调）`); }}>恢复矩形边界</Button>
                 </>}
                 {tab === "edit" && phase === "spaces" && <>
                 <Button disabled={selection?.kind !== "rooms"} variant={tool === "add-room-point" ? "primary" : ""}
-                  onClick={() => setTool("add-room-point")} fid="D-06"><Plus size={12} /> 增加边界点</Button>
+                  onClick={() => setTool("add-room-point")}><Plus size={12} /> 增加边界点</Button>
                 <Button disabled={selection?.kind !== "rooms"} variant={tool === "delete-room-point" ? "primary" : ""}
-                  onClick={() => setTool("delete-room-point")} fid="D-06"><Trash2 size={12} /> 删除边界点</Button>
+                  onClick={() => setTool("delete-room-point")}><Trash2 size={12} /> 删除边界点</Button>
                 <Button
                   variant={tool === "draw-poly" ? "primary" : ""}
-                  onClick={() => beginDrawing()} fid="D-06"
+                  onClick={() => beginDrawing()}
                 >
                   <MousePointer2 size={12} />
                   {tool === "draw-poly"
                     ? "取消绘制"
                     : "按底图新建空间（多边形）"}
                 </Button>
-                <Button disabled={selection?.kind !== "rooms"} onClick={() => beginDrawing(true)} fid="D-06">重画选中空间</Button>
-                <select aria-label="合并目标空间" value={mergeTarget} onChange={e => setMergeTarget(e.target.value)} data-fid="D-07">
+                <Button disabled={selection?.kind !== "rooms"} onClick={() => beginDrawing(true)}>重画选中空间</Button>
+                <select aria-label="合并目标空间" value={mergeTarget} onChange={e => setMergeTarget(e.target.value)}>
                   <option value="">选择合并目标</option>
                   {rooms.filter(r => r.id !== selection?.id).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
-                <Button disabled={selection?.kind !== "rooms" || !mergeTarget || geometryBusy} onClick={() => alterGeometry("merge")} fid="D-07">合并空间</Button>
-                <Button disabled={selection?.kind !== "rooms" || geometryBusy} onClick={() => alterGeometry("split")} fid="D-07">拆分空间</Button>
+                <Button disabled={selection?.kind !== "rooms" || !mergeTarget || geometryBusy} onClick={() => alterGeometry("merge")}>合并空间</Button>
+                <Button disabled={selection?.kind !== "rooms" || geometryBusy} onClick={() => alterGeometry("split")}>拆分空间</Button>
                 </>}
                 {tab === "edit" && phase === "openings" && <>
-                <Button disabled={!rooms.length} variant={tool === "draw-door" ? "primary" : ""} onClick={() => { setTool("draw-door"); notify("在同一条空间边界上依次单击门洞两端"); }} fid="D-08">绘制门</Button>
-                <Button disabled={!rooms.length} variant={tool === "draw-window" ? "primary" : ""} onClick={() => { setTool("draw-window"); notify("在同一条空间边界上依次单击窗洞两端"); }} fid="D-08">绘制窗</Button>
+                <Button disabled={!rooms.length} variant={tool === "draw-door" ? "primary" : ""} onClick={() => { setTool("draw-door"); notify("在同一条空间边界上依次单击门洞两端"); }}>绘制门</Button>
+                <Button disabled={!rooms.length} variant={tool === "draw-window" ? "primary" : ""} onClick={() => { setTool("draw-window"); notify("在同一条空间边界上依次单击窗洞两端"); }}>绘制窗</Button>
                 </>}
                 <span className="space-preview-zoom" data-testid="draw-zoom">
                   {Math.round(viewZoom * 100)}%
-                  <Button onClick={() => setViewReset(v => v + 1)} disabled={viewZoom === 1} fid="D-09">适应画布</Button>
+                  <Button onClick={() => setViewReset(v => v + 1)} disabled={viewZoom === 1}>适应画布</Button>
                 </span>
                 <span className="subtle">
                   {tab === "furniture" ? (movingFurn ? "移动家具：在空间内单击新位置 · Esc 取消"
@@ -520,7 +520,7 @@ export function SpacePreviewLayer({
                 planMasked={false}
               />
             </div>
-            <aside className="space-preview-rooms" data-fid="D-10">
+            <aside className="space-preview-rooms">
               {tab === "furniture" ? <FurniturePanel design={editorDesign as Obj} floor={floor} selected={furnSel}
                 onSelect={setFurnSel} onChange={(v: Obj) => commitDesign(v as Obj)}
                 placing={placingFurn} moving={movingFurn}
@@ -573,25 +573,25 @@ export function SpacePreviewLayer({
         <footer>
           {confirmError && <p role="alert" className="task-error">{confirmError}</p>}
           {state === "done" && tab === "edit" ? (
-            <Button onClick={async () => { try { await beforeReview?.(); setTab("preview"); } catch (e: any) { notify(`保存失败：${e.message}`); } }} fid="V-42">
+            <Button onClick={async () => { try { await beforeReview?.(); setTab("preview"); } catch (e: any) { notify(`保存失败：${e.message}`); } }}>
               <PencilRuler size={14} /> 看三维预览
             </Button>
           ) : state === "done" ? (
-            <Button onClick={phase === "openings" ? () => setTab("edit") : editSpaces} fid="D-12">
+            <Button onClick={phase === "openings" ? () => setTab("edit") : editSpaces}>
               <PencilRuler size={14} /> {phase === "review" ? "空间不正确，修改空间" : phase === "openings" ? "返回门窗绘制" : "返回空间修改"}
             </Button>
           ) : null}
-          {phase === "openings" && <Button disabled={confirming} onClick={editSpaces} fid="D-12">返回修改空间</Button>}
-          {phase === "furniture" && <Button disabled={confirming} onClick={() => { setPhase("openings"); setTab("edit"); setTool("select"); }} fid="D-12">返回绘制门窗</Button>}
+          {phase === "openings" && <Button disabled={confirming} onClick={editSpaces}>返回修改空间</Button>}
+          {phase === "furniture" && <Button disabled={confirming} onClick={() => { setPhase("openings"); setTab("edit"); setTool("select"); }}>返回绘制门窗</Button>}
           {phase === "review" && <Button disabled={state !== "done" || confirming || legacyLoading}
-            onClick={() => void confirm(true)} fid="D-13">空间和门窗正确，直接去修改家具</Button>}
-          <Button variant="primary" disabled={state !== "done" || confirming || legacyLoading} onClick={() => void confirm()} fid="D-13">
+            onClick={() => void confirm(true)}>空间和门窗正确，直接去修改家具</Button>}
+          <Button variant="primary" disabled={state !== "done" || confirming || legacyLoading} onClick={() => void confirm()}>
             <CheckCircle2 size={14} /> {confirming ? "确认中…" : phase === "furniture" ? "确认家具，进入画布" : phase === "openings" ? "确认门窗，下一步修改家具" : "确认空间，下一步绘制门窗"}
           </Button>
-          <Button onClick={onClose} fid="D-12">{state === "done" ? "稍后再确认" : "关闭"}</Button>
+          <Button onClick={onClose}>{state === "done" ? "稍后再确认" : "关闭"}</Button>
         </footer>
       </div>
-      {heightRoom && <div className="space-height-backdrop" data-fid="D-11">
+      {heightRoom && <div className="space-height-backdrop">
         <form role="dialog" aria-label="标定空间层高" className="space-height-dialog" onSubmit={e => { e.preventDefault(); saveHeight(); }}>
           <h3>标定空间层高</h3>
           <label>空间名称<input aria-label="空间名称" list="space-preview-names" value={heightRoom.name} onChange={e => setHeightRoom({ ...heightRoom, name: e.target.value })} /></label>
@@ -601,8 +601,8 @@ export function SpacePreviewLayer({
             onChange={e => setHeightRoom({ ...heightRoom, heightM: +e.target.value })} /></label>
           <p>原始层高默认 3 米；完成面层高用于生成该空间的墙体和门窗。</p>
           {heightError && <p role="alert">{heightError}</p>}
-          <Button type="submit" variant="primary" fid="D-11">保存空间与层高</Button>
-          <Button onClick={() => setHeightRoom(null)} fid="D-11">取消</Button>
+          <Button type="submit" variant="primary">保存空间与层高</Button>
+          <Button onClick={() => setHeightRoom(null)}>取消</Button>
         </form>
       </div>}
     </div>

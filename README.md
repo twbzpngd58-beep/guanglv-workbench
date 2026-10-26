@@ -151,22 +151,6 @@ python3 start.py --host 0.0.0.0     # 允许局域网访问（默认只监听本
 python3 start.py --rebuild          # 改了前端源码后重建
 ```
 
-## 功能编号与隐藏
-
-工作台里每个功能都有一个固定编号（模块码 + 序号，如 `L-07`），方便沟通某个功能的迭代与修复：
-
-- **右下角「功能清单」**（或快捷键 `Shift + F`）：按编号 / 名称 / 说明搜索，一键定位、隐藏或恢复功能
-- **点任一功能**：查看它具体做什么、被改过几次、每次改动对应哪个本机快照，并可按某次改动回退到之前的整版快照
-- **「编号」开关**：在界面每个功能旁显示编号徽标，直接点徽标也能查这个功能（徽标上的编号就是沟通用的编号）
-- 隐藏后底部会弹出提示（可直接点「恢复」），左下角常驻「已隐藏 N 个功能 / 全部恢复」；隐藏用内联样式落到元素上，切页或重新渲染后仍然生效
-- 隐藏只保存在本机当前浏览器，随时可「全部恢复」；右下角入口按钮可收起来，`Shift + F` 仍可打开
-
-功能改动记录在 `data/feature-history.json`（回退程序/前端也不会丢），每次改动用
-`python3 scripts/feature_change.py --ids L-01 --title "改了什么" --before <改前快照> --after <改后快照>` 登记一条；
-不登记也能用，只是详情里不会出现这次改动、也不能按它回退。
-
-完整清单见 [`docs/功能编号清单.md`](docs/功能编号清单.md)。新增功能时在 `frontend/src/features.ts` 登记编号，并在元素上写 `data-fid="L-07"`（按钮组件用 `fid="L-07"`）。
-
 ## 检查更新 / 一键更新
 
 工作台「设置 → 版本与更新」点「检查更新」，后端去 GitHub 问一次版本，三种口径依次回退：
@@ -218,7 +202,7 @@ python3 scripts/apply_update.py --check
 
 ```bash
 python3 scripts/version_guard.py --bump patch      # 或 minor / major；同步 VERSION、README、package.json、package-lock.json
-# 手工补 backend/app_versions.py 的 RELEASE_NOTES（从 1.3.4 起每条带 category）和 GitHub Release 说明
+# 手工补 backend/app_versions.py 的 RELEASE_NOTES（每条带 category）和 GitHub Release 说明
 cd frontend && npm run build && cd ..
 python3 scripts/version_guard.py --baseline        # 前端构建后刷新 build-baseline.json
 python3 scripts/version_guard.py --check --strict  # VERSION/README/package.json/lock/baseline/RELEASE_NOTES 一致
