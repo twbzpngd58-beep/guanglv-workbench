@@ -20,6 +20,15 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      # actions/checkout 在 tag 触发时会把 annotated tag 的本地 ref 重写成 peeled commit
+      # （日志里的 git fetch +<commit>:refs/tags/<tag>），守卫会误判成 lightweight；
+      # 这里按远端真实引用还原一次，再做 tag 校验。
+      - name: 还原 annotated tag 引用（仅 tag push）
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: git fetch --force origin "refs/tags/${TAG}:refs/tags/${TAG}"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
