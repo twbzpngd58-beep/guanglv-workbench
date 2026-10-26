@@ -1,8 +1,8 @@
 {
-  "version": "1.3.3",
-  "buildId": "a87d072adc5d",
-  "asset": "index-B1dvSXn9.js",
-  "asset_sha256": "fd18e6ea9a4e4d0d2d86e18105677e635221d48cf9863332955ba0386c183b66",
-  "built_at": "2026-10-26T05:00:41Z",
-  "source_commit": "direct-edit-20261026-130041"
+  "version": "1.3.4",
+  "buildId": "772b4fba4a52",
+  "asset": "index-DBIA5RdD.js",
+  "asset_sha256": "b6c065618d9847144288bab931a3ad71b84af3c87411ff24594fad6c12893698",
+  "built_at": "2026-10-26T05:21:38Z",
+  "source_commit": "direct-edit-20261026-132138"
 }
