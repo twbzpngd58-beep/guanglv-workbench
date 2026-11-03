@@ -5,7 +5,8 @@
   · 价格复核 pricing  ← 单价、核价、报价单、产品型号/品牌、数量（增删灯具设备、灯带长度）
   · 交付复核 delivery ← 以上任何一道失效都跟着失效（交付资料由它们汇总而来）
   · 需求复核 requirements 只看协作资料，设计改动不影响它。
-色调、相机这类纯展示参数不让任何签名失效。
+色调、相机这类纯展示参数不让任何签名失效；colorPlan（彩平图生成标记）、siteCheck（现场核对勾选）
+同样不撤签；source3dHash/source3dGeneration 是灯位依据的锁定值，变了就撤布置与灯光。
 """
 from __future__ import annotations
 
@@ -23,6 +24,12 @@ LAYOUT_FIELDS = {"baseFileId": "底图", "spaceDefinition": "空间定义", "pla
 PRICE_ONLY = {"price", "priceVerified", "quote"}
 PRICE_AND_PRODUCT = {"model", "brand", "length"}  # 型号/品牌换了产品也变；灯带长度＝数量
 COSMETIC = {"palette", "camera"}
+# 纯展示/核对状态：改变它不改变空间、灯位、配光或价格，签名继续有效。
+# colorPlan 只是空间确认时写的「彩平图已生成」标记；siteCheck 是前端现场核对勾选。
+NO_INVALIDATE = {"colorPlan", "siteCheck"}
+# 三维源版本是灯位与空间依据的锁定值：换源/重解析后宁可多撤一次，
+# 也不让旧签名挂在新源上（F03/F09）。显式列出，避免落进未知键的兜底。
+SOURCE_PROVENANCE = {"source3dHash": "三维源文件", "source3dGeneration": "三维源解析"}
 
 
 def _by_id(items):
@@ -69,6 +76,13 @@ def design_impact(before: dict | None, after: dict | None) -> dict[str, list[str
         added, removed, changed = _diff(before.get(key), after.get(key))
         if added or removed or changed:
             hit("layout", _count(label, added, removed, changed))
+        # 层高/洞口净高改了，灯位高度与照度口径跟着变，不能只撤布置复核
+        fields = {"rooms": {"heightM", "originalHeightM"},
+                  "openings": {"heightM", "sillHeight"}}.get(key) or set()
+        if fields:
+            touched = [f for f in changed if f & fields or "*" in f]
+            if touched:
+                hit("lighting", f"{label}高度修改 {len(touched)}")
     for key, label in LAYOUT_FIELDS.items():
         if before.get(key) != after.get(key):
             hit("layout", f"{label}变更")
@@ -93,7 +107,13 @@ def design_impact(before: dict | None, after: dict | None) -> dict[str, list[str
     if added or removed or changed:
         hit("lighting", _count("情景", added, removed, changed))
 
-    known = set(LAYOUT_LISTS) | set(LAYOUT_FIELDS) | {"fixtures", "devices", "scenes"} | COSMETIC
+    for key, label in SOURCE_PROVENANCE.items():
+        if before.get(key) != after.get(key):
+            hit("layout", f"{label}变更")
+            hit("lighting", f"{label}变更（灯位与空间依据变化）")
+
+    known = (set(LAYOUT_LISTS) | set(LAYOUT_FIELDS) | {"fixtures", "devices", "scenes"}
+             | COSMETIC | NO_INVALIDATE | set(SOURCE_PROVENANCE))
     for key in (before.keys() | after.keys()) - known:
         if before.get(key) != after.get(key):
             # 没归类的新字段宁可多失效，也不能让签名悄悄留着

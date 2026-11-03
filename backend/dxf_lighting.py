@@ -36,6 +36,77 @@ except Exception as e:  # pragma: no cover
     ezdxf = None
     _import_err = e
 
+# ---------------------------------------------------------------- 单位（D02）
+# $INSUNITS 是声明，不是事实：缺失或 0 时只能推定，推定不升级成「已核」。
+UNIT_MM = {1: 25.4, 2: 304.8, 3: 1609344.0, 4: 1.0, 5: 10.0, 6: 1000.0, 7: 1e6,
+           8: 2.54e-5, 9: 0.0254, 10: 914.4, 11: 1e-7, 12: 1e-6, 13: 1e-3,
+           14: 100.0, 15: 1e4, 16: 1e5}
+UNIT_NAMES = {1: "inch", 2: "ft", 4: "mm", 5: "cm", 6: "m"}
+UNIT_NAMES_BY_MM = {1.0: "mm", 10.0: "cm", 1000.0: "m", 25.4: "inch", 304.8: "ft"}
+
+
+def unit_scheme(doc, raw_bbox) -> dict:
+    """四态：declared / probable / unverified / conflict。factor = 图纸单位 → mm。"""
+    try:
+        code = int(doc.header.get("$INSUNITS", 0) or 0)
+    except Exception:
+        code = 0
+    declared = UNIT_MM.get(code)
+    rw = max(0.0, float(raw_bbox[2]) - float(raw_bbox[0]))
+    rh = max(0.0, float(raw_bbox[3]) - float(raw_bbox[1]))
+
+    def ext_m(f):
+        return rw * f / 1000.0, rh * f / 1000.0
+
+    def plausible(f):
+        w, h = ext_m(f)
+        return 3.0 <= max(w, h) <= 40.0 and min(w, h) >= 1.2
+
+    if declared:
+        w, h = ext_m(declared)
+        name = UNIT_NAMES.get(code, f"unit{code}")
+        if max(w, h) > 60.0 or max(w, h) < 2.0:
+            # 声明与图纸总体尺寸对不上时不按声明换算：换算会把整张图放大/缩小 1000 倍，
+            # 比保持原值更糟。原值可看，但尺度标冲突、须用已知尺寸校准。
+            return {"status": "conflict", "code": code, "unit": name, "factor": 1.0,
+                    "declaredFactor": declared,
+                    "basis": f"图纸声明 {name}，但按声明读总尺寸约 {max(w, h):.1f}×{min(w, h):.1f} m，"
+                             "与住宅尺度冲突；按原值读，未换算，须用已知尺寸校准"}
+        return {"status": "declared", "code": code, "unit": name, "factor": declared,
+                "basis": f"$INSUNITS={code} 声明 {name}；未做独立尺寸交叉核"}
+    cands = [f for f in (1.0, 10.0, 1000.0, 25.4, 304.8) if plausible(f)]
+    if len(cands) == 1:
+        f = cands[0]
+        return {"status": "probable", "code": code, "unit": UNIT_NAMES_BY_MM[f], "factor": f,
+                "basis": f"没有单位声明；按住宅尺度只剩 {UNIT_NAMES_BY_MM[f]} 一种读法（推定，未核）"}
+    if cands:
+        return {"status": "unverified", "code": code, "unit": "unknown", "factor": 1.0,
+                "basis": "没有单位声明；候选 " + "、".join(UNIT_NAMES_BY_MM[f] for f in cands)
+                         + " 都能解释这张图，无法推定"}
+    return {"status": "unverified", "code": code, "unit": "unknown", "factor": 1.0,
+            "basis": "没有单位声明；图纸总尺寸不在住宅尺度内，无法推定，请用已知尺寸校准"}
+
+
+def _scale_data(data, k):
+    """把已收集的图元坐标换成 mm。同一个 rec 可能挂在两个键下，按对象身份去重。"""
+    seen = set()
+    for recs in data.values():
+        for r in recs:
+            if id(r) in seen:
+                continue
+            seen.add(id(r))
+            for key in ("x", "y"):
+                if isinstance(r.get(key), (int, float)):
+                    r[key] = r[key] * k
+            if r.get("bbox"):
+                r["bbox"] = tuple(v * k for v in r["bbox"])
+            if r.get("pts"):
+                r["pts"] = [(x * k, y * k) for x, y in r["pts"]]
+            if isinstance(r.get("length"), (int, float)):
+                r["length"] = r["length"] * k
+    return data
+
+
 # ---------------------------------------------------------------- 图层语义
 WALL_KW = ("墙体", "P-A01", "原始结构", "0-通用完成面粗线", "结构墙",
            "砌墙", "剪力墙", "承重墙", "隔墙", "新建墙", "原墙")
@@ -86,7 +157,7 @@ ROOM_OVERLAP_TOLERANCE = 0.035  # 两个空间的重叠超过较小者的这个�
 # 解析器版本：**改了解析逻辑就要 +1**。工作台拿它跟存档里的版本比，
 # 不一致就在三维页提示「解析已过期，请重新生成」——踩过：改了解析器但老项目不重生成，
 # 用户看到的还是旧的错结果，还以为是没修好。
-PARSER_VERSION = "2026-10-16.1"
+PARSER_VERSION = "2026-10-27.2"
 
 WALL_T = 0.12             # 墙厚（米，出 3D 用）
 DOOR_SEAL_T = 0.30        # 门扇线加粗用来封住门洞（米）
@@ -362,14 +433,17 @@ def collect(doc, layers_only=None):
             except Exception:
                 p = None
             if v and p is not None:
-                texts.append({"layer": layer, "text": v, "x": p.x, "y": p.y})
+                texts.append({"layer": layer, "text": v, "x": p.x, "y": p.y,
+                              "handle": getattr(e.dxf, "handle", "") or ""})
             if kind == "code":
                 continue
         if t == "INSERT":
             bb = _block_bbox(e)
             ip = e.dxf.insert
             rec = {"type": "INSERT", "layer": layer, "x": ip.x, "y": ip.y, "bbox": bb,
-                   "block": dec(getattr(e.dxf, "name", ""))}
+                   "block": dec(getattr(e.dxf, "name", "")),
+                   "handle": getattr(e.dxf, "handle", "") or "", "layout": "Model",
+                   "blockPath": [dec(getattr(e.dxf, "name", ""))]}
             out[kind].append(rec)
             if kind == "lamp" and bb:
                 out["lamp_shape"].append(rec)
@@ -384,7 +458,8 @@ def collect(doc, layers_only=None):
                 closed = bool(e.closed) if t == "LWPOLYLINE" else (bool(e.is_closed) if t == "POLYLINE" else False)
             except Exception:
                 closed = False
-            rec = {"type": t, "layer": layer, "pts": pts, "bbox": bb, "closed": closed}
+            rec = {"type": t, "layer": layer, "pts": pts, "bbox": bb, "closed": closed,
+                   "handle": getattr(e.dxf, "handle", "") or "", "layout": "Model"}
             out[kind].append(rec)
             if kind == "lamp" and t in ("LINE", "LWPOLYLINE", "POLYLINE"):
                 ln = sum(math.dist(a, b) for a, b in zip(pts, pts[1:])) / 1000.0
@@ -443,6 +518,55 @@ def _wall_boxes_for_frame(data):
             continue
         out.append(bb)
     return out
+
+
+def _subject_extent_raw(data):
+    """换算之前量总体尺寸，分箱步长按图元自身跨度取，不假设单位是毫米。
+
+    locate_subject 的 2 m 分箱与墙厚阈值都是毫米口径：拿它量米制/英寸图纸，
+    会把 4 m 读成 197 m，单位判定随即误报「声明与尺寸冲突」并按原值不换算。
+    这里只供 unit_scheme 判断量级，最终取景仍走 locate_subject。
+    """
+    pts = []
+    for recs in data.values():
+        for rec in recs:
+            bb = rec.get("bbox")
+            if bb and all(isinstance(v, (int, float)) for v in bb):
+                pts.append(((bb[0] + bb[2]) / 2.0, (bb[1] + bb[3]) / 2.0))
+            elif isinstance(rec.get("x"), (int, float)) and isinstance(rec.get("y"), (int, float)):
+                pts.append((rec["x"], rec["y"]))
+            for p in rec.get("pts") or []:
+                if isinstance(p, (list, tuple)) and len(p) >= 2:
+                    pts.append((p[0], p[1]))
+    pts = [p for p in pts if math.isfinite(p[0]) and math.isfinite(p[1])]
+    if not pts:
+        return None
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    bx, by = min(xs), min(ys)
+    span = max(max(xs) - bx, max(ys) - by)
+    if span <= 0:
+        return (bx, by, bx, by)
+    step = span / 12.0
+    cnt = Counter((int((p[0] - bx) / step), int((p[1] - by) / step)) for p in pts)
+    peak = max(cnt, key=lambda k: cnt[k])
+    occ = set(cnt)
+    seen, stack = {peak}, [peak]
+    while stack:
+        cx_, cy_ = stack.pop()
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                n = (cx_ + dx, cy_ + dy)
+                if n in occ and n not in seen:
+                    seen.add(n)
+                    stack.append(n)
+    kept = [p for p in pts if (int((p[0] - bx) / step), int((p[1] - by) / step)) in seen]
+    # 零散点铺满全图时连通区会只剩一小撮，量级判断交给全图外框，不硬框成一小间
+    if len(kept) < 0.5 * len(pts):
+        return (bx, by, max(xs), max(ys))
+    kx = [p[0] for p in kept]
+    ky = [p[1] for p in kept]
+    return (min(kx), min(ky), max(kx), max(ky))
 
 
 def locate_subject(data, bin_m=2.0):
@@ -1074,6 +1198,80 @@ def walls_from_rooms(rooms, t=WALL_T):
     return out
 
 
+# ---------------------------------------------------------------- 0 图层图纸：按画法反推
+# 整张画在 '0' 层、一个语义图层名都没有的图纸（现场导出的常见画法）。这类图在三维链路里
+# 两条认房的路都走不通——吊顶闭合环不存在、墙线连通域散成一团——最后落到「按整张图纸范围
+# 兜一个空间」，用户在三维和画布里看到的就是「只有一个框架」；主体定位又按图元密度切，
+# 半张户型会被裁掉。识别链路（providers.recognize_layer0）早就用 dxf_plan 反推出正确的
+# 墙与空间了，三维链路必须走同一套，否则改一边、另一边还是坏的。
+LAYER0_NON_SEMANTIC = {"", "0", "DEFPOINTS"}
+
+
+def layer0_geometry(data):
+    """图纸确实没有语义图层时，按画法反推墙与空间。
+
+    返回 {"rooms", "walls", "extent"}，坐标全是图纸毫米；图纸有语义图层或反推不出
+    两个以上空间时返回 None（维持原有解析）。
+    """
+    recs = [r for kind in ("wall", "door", "window", "ceiling", "furniture", "lamp", "other")
+            for r in (data.get(kind) or [])]
+    layers = {str(r.get("layer") or "").strip().upper() for r in recs}
+    if layers - LAYER0_NON_SEMANTIC:
+        return None
+    # 只用直线与多段线成墙：ARC/CIRCLE 在这里是被折成小段的，混进来会多出几根「墙」，
+    # 把空间切得和识别链路不一样（实测 玄关 那间会被并成一条 6.5m 高的通间）。
+    segs = [((a, b), (c, d)) for r in recs if r.get("type") in ("LINE", "LWPOLYLINE", "POLYLINE")
+            for (a, b, c, d) in _poly_segs(r)]
+    if len(segs) < 8:
+        return None
+    try:
+        from .dxf_plan import grid_spaces, merge_walls, pair_walls
+    except ImportError:                      # 本文件也能当脚本直接跑（文件尾 __main__）
+        from dxf_plan import grid_spaces, merge_walls, pair_walls
+    walls = merge_walls(pair_walls(segs))
+    if not walls:
+        return None
+    rooms = grid_spaces(walls, [(t["x"], t["y"], t["text"]) for t in (data.get("text") or [])])
+    if len(rooms) < 2:
+        return None
+    pts = [(w["axis"], w["s"]) if w["ori"] == "V" else (w["s"], w["axis"]) for w in walls]
+    pts += [(w["axis"], w["e"]) if w["ori"] == "V" else (w["e"], w["axis"]) for w in walls]
+    pts += [p for r in rooms for p in r["points"]]
+    return {"rooms": rooms, "walls": walls,
+            "extent": (min(p[0] for p in pts), min(p[1] for p in pts),
+                       max(p[0] for p in pts), max(p[1] for p in pts))}
+
+
+def layer0_rooms(geo, T):
+    """反推出的空间 → 三维用的房间（米、y 翻转），字段与吊顶/连通域那套一致。"""
+    out = []
+    for r in geo["rooms"]:
+        poly = [list(T(px, py)) for px, py in r["points"]]
+        xs = [p[0] for p in poly]
+        zs = [p[1] for p in poly]
+        out.append({"poly": poly, "rects": [], "area": round(r["areaMm2"] / 1e6, 2),
+                    "source": "layer0", "name": r["name"] or "",
+                    "labels": r.get("labels") or [],
+                    "bbox": [round(min(xs), 3), round(min(zs), 3),
+                             round(max(xs), 3), round(max(zs), 3)],
+                    "cx": round((min(xs) + max(xs)) / 2, 3),
+                    "cz": round((min(zs) + max(zs)) / 2, 3)})
+    return out
+
+
+def layer0_walls(geo, T):
+    """反推出的墙段 → 三维用的墙（米），厚度取双线实测间距。"""
+    out = []
+    for w in geo["walls"]:
+        if w["ori"] == "H":
+            a, b = T(w["s"], w["axis"]), T(w["e"], w["axis"])
+        else:
+            a, b = T(w["axis"], w["s"]), T(w["axis"], w["e"])
+        out.append({"x0": a[0], "z0": a[1], "x1": b[0], "z1": b[1],
+                    "t": round(w["t"] / 1000.0, 3)})
+    return out
+
+
 # ---------------------------------------------------------------- 家具：碎线并件 + 类型
 # 真图纸里家具是怎么画的（实测两套住宅图都没有「一件家具一个块」这种好事）：
 #   · 大件（床/沙发/衣柜）常整套塞在一个块里，块包框跨几米甚至十几米；
@@ -1415,7 +1613,28 @@ def _merge_same_names(rooms, gap=1.2):
                         max(host["bbox"][2], r["bbox"][2]), max(host["bbox"][3], r["bbox"][3])]
         host["cx"] = round((host["bbox"][0] + host["bbox"][2]) / 2, 3)
         host["cz"] = round((host["bbox"][1] + host["bbox"][3]) / 2, 3)
+        _sync_room_poly(host)
     return out
+
+
+def _sync_room_poly(r):
+    """rects 变了就重算轮廓与面积：画出来的边界和报出来的面积必须是同一块地。
+
+    同名空间并成一间后，老代码只累加 rects/area/bbox，轮廓还是第一块的样子，
+    二维画布照 poly 画 → 报 40㎡ 只画出一半；rects 房间原本 poly 为空，
+    下游（_cad_rooms）只能退回外接矩形，把隔壁一并框进来。
+    """
+    if not r.get("rects"):
+        return
+    try:
+        from .dxf_plan import rects_poly, ring_area
+    except ImportError:                      # 本文件也能当脚本直接跑（文件尾 __main__）
+        from dxf_plan import rects_poly, ring_area
+    poly = [[a, b] for a, b in rects_poly(r["rects"])]
+    if len(poly) < 3:
+        return
+    r["poly"] = poly
+    r["area"] = round(abs(ring_area(poly)), 2)
 
 
 def _rect_room_to_frame(r, x0, y1, source):
@@ -1431,6 +1650,7 @@ def _rect_room_to_frame(r, x0, y1, source):
     r["cz"] = round((r["bbox"][1] + r["bbox"][3]) / 2, 3)
     r["poly"] = r.get("poly") or []
     r["source"] = source
+    _sync_room_poly(r)
     return r
 
 
@@ -1541,8 +1761,22 @@ def parse(path, opts=None, progress=None):
     data = collect(doc)
     _p(0.22, "整理图元")
     bbox_mm, nseg = locate_subject(data)
+    # 单位是声明：先按原始单位量一遍总体尺寸，再决定换算，不默认毫米。
+    # 量级必须用不假设单位的外框，否则米制/英寸图纸会被毫米口径的量法误判成冲突。
+    scheme = unit_scheme(doc, _subject_extent_raw(data) or bbox_mm or (0.0, 0.0, 1000.0, 1000.0))
+    unit_factor = float(scheme.get("factor") or 1.0)
+    if unit_factor != 1.0:
+        _scale_data(data, unit_factor)
+        bbox_mm, nseg = locate_subject(data)
     _p(0.34, "定位住宅主体")
     warnings = []
+    if scheme.get("status") != "declared" and scheme.get("status") != "verified":
+        warnings.append("尺度：" + scheme.get("basis", "") +
+                        "；草稿可看，定位/开孔/加工尺寸不得称为已核")
+    layer0 = layer0_geometry(data)
+    if layer0:
+        # 0 层图纸按图元密度定位会把半张户型裁掉；反推出墙后按墙与空间的范围重新框定。
+        bbox_mm = layer0["extent"]
     if not bbox_mm:
         warnings.append("没找到墙线，无法定位住宅主体")
         bbox_mm = (0, 0, 1, 1)
@@ -1562,43 +1796,49 @@ def parse(path, opts=None, progress=None):
     def T(px, py):
         return (round((px - x0) / 1000.0, 3), round((y1 - py) / 1000.0, 3))
 
-    # 房间：优先用吊顶轮廓（闭合环 = 一个房间），不够两个再退化到墙线连通域
-    poly_rooms = rooms_from_ceiling(data, (x0, y0, x1, y1), min_area=float(opts.get("min_room", 2.5)))
+    # 房间：0 图层图纸按双线墙围合反推（和识别链路同一套口径）；其余优先吊顶轮廓
+    # （闭合环 = 一个房间），不够两个再退化到墙线连通域。
     rooms = []
-    for r in poly_rooms:
-        poly = [list(T(px, py)) for px, py in r["poly_mm"]]
-        xs = [p[0] for p in poly]; zs = [p[1] for p in poly]
-        rooms.append({"poly": poly, "rects": [], "area": r["area"], "source": "ceiling",
-                      "bbox": [round(min(xs), 3), round(min(zs), 3), round(max(xs), 3), round(max(zs), 3)],
-                      "cx": round((min(xs) + max(xs)) / 2, 3), "cz": round((min(zs) + max(zs)) / 2, 3)})
-    if len(rooms) < 2:
-        rooms = [_rect_room_to_frame(r, x0, y1, "walls")
-                 for r in rasterize_rooms(walls, doors, (x0, y0, x1, y1),
-                                          cell=float(opts.get("cell", 0.05)))]
-        if not rooms:
-            warnings.append("没识别出房间：吊顶轮廓和墙线连通域都没成型")
-        else:
-            warnings.append(f"房间来自墙线连通域 {len(rooms)} 个（这张图没有可用的吊顶轮廓）")
-    else:
-        warnings.append(f"房间来自吊顶轮廓 {len(rooms)} 个闭合环，请确认房间名与合并关系")
-        # 吊顶常一层套一层（灯槽/叠级/同一间画了两圈）→ 被别的环压住的小环，不单独当房间。
-        # 判定按面积（见 _loop_overlap），门槛与确认空间的硬闸对齐：解析出来的空间必须过得了那道闸，
-        # 否则「导入图纸 → 确认空间」必然卡在重叠上（实测 2026-10-16 那张图：3 对环正好压住 100%）。
-        kept, dropped = [], []
-        for r in sorted(rooms, key=lambda x: -x["area"]):
-            host, ratio = None, 0.0
-            for k in kept:
-                ratio = _loop_overlap(k["poly"], r["poly"])
-                if ratio > ROOM_OVERLAP_TOLERANCE:
-                    host = k; break
-            if host:
-                dropped.append(f'{r["area"]}㎡(被 {host["area"]}㎡ 的环压住 {round(ratio * 100)}%)')
+    if layer0:
+        rooms = layer0_rooms(layer0, T)
+        warnings.append(f"这张图整张画在 0 层，没有语义图层：按墙线围合反推出 {len(rooms)} 个空间，"
+                        "名称取自图内文字，边界与面积需按比例人工核对")
+    if not rooms:
+        poly_rooms = rooms_from_ceiling(data, (x0, y0, x1, y1), min_area=float(opts.get("min_room", 2.5)))
+        for r in poly_rooms:
+            poly = [list(T(px, py)) for px, py in r["poly_mm"]]
+            xs = [p[0] for p in poly]; zs = [p[1] for p in poly]
+            rooms.append({"poly": poly, "rects": [], "area": r["area"], "source": "ceiling",
+                          "bbox": [round(min(xs), 3), round(min(zs), 3), round(max(xs), 3), round(max(zs), 3)],
+                          "cx": round((min(xs) + max(xs)) / 2, 3), "cz": round((min(zs) + max(zs)) / 2, 3)})
+        if len(rooms) < 2:
+            rooms = [_rect_room_to_frame(r, x0, y1, "walls")
+                     for r in rasterize_rooms(walls, doors, (x0, y0, x1, y1),
+                                              cell=float(opts.get("cell", 0.05)))]
+            if not rooms:
+                warnings.append("没识别出房间：吊顶轮廓和墙线连通域都没成型")
             else:
-                kept.append(r)
-        if dropped:
-            warnings.append("已剔除与相邻空间重叠的吊顶环（同一间的灯槽/叠级或重复环，只留大的那个）："
-                            + "、".join(dropped))
-        rooms = kept
+                warnings.append(f"房间来自墙线连通域 {len(rooms)} 个（这张图没有可用的吊顶轮廓）")
+        else:
+            warnings.append(f"房间来自吊顶轮廓 {len(rooms)} 个闭合环，请确认房间名与合并关系")
+            # 吊顶常一层套一层（灯槽/叠级/同一间画了两圈）→ 被别的环压住的小环，不单独当房间。
+            # 判定按面积（见 _loop_overlap），门槛与确认空间的硬闸对齐：解析出来的空间必须过得了那道闸，
+            # 否则「导入图纸 → 确认空间」必然卡在重叠上（实测 2026-10-16 那张图：3 对环正好压住 100%）。
+            kept, dropped = [], []
+            for r in sorted(rooms, key=lambda x: -x["area"]):
+                host, ratio = None, 0.0
+                for k in kept:
+                    ratio = _loop_overlap(k["poly"], r["poly"])
+                    if ratio > ROOM_OVERLAP_TOLERANCE:
+                        host = k; break
+                if host:
+                    dropped.append(f'{r["area"]}㎡(被 {host["area"]}㎡ 的环压住 {round(ratio * 100)}%)')
+                else:
+                    kept.append(r)
+            if dropped:
+                warnings.append("已剔除与相邻空间重叠的吊顶环（同一间的灯槽/叠级或重复环，只留大的那个）："
+                                + "、".join(dropped))
+            rooms = kept
     if not rooms:
         # 认不出房间：按整张图纸范围兜一个「空间1」，别让三维页一片空。
         W0 = max(1.0, (x1 - x0) / 1000.0)
@@ -1611,7 +1851,11 @@ def parse(path, opts=None, progress=None):
     # 墙：图纸墙图层 / 双线反推（墙画在 '0' 层这类图纸靠它）/ 房间轮廓兜底。
     # 只从房间轮廓反推的话，吊顶轮廓没盖到的地方就没有墙——三维里看着就是「墙丢了」。
     _p(0.58, "识别墙体")
-    wall_list, wall_note = wall_source_of(data, inbox, T, walls, rooms)
+    if layer0:
+        wall_list = layer0_walls(layer0, T)
+        wall_note = f"墙来自 0 层图纸的双线反推（{len(wall_list)} 段，厚度取双线实测间距）"
+    else:
+        wall_list, wall_note = wall_source_of(data, inbox, T, walls, rooms)
     warnings.append(wall_note)
 
     # 空间名：图纸上写着「客厅/主卧…」就照用。名字比房间多（或墙是断的、几个空间并成一片）
@@ -1620,13 +1864,16 @@ def parse(path, opts=None, progress=None):
     txt_names = space_texts(data, doc, inbox)
     if txt_names:
         for r in rooms:
+            if layer0 and r.get("name"):
+                # 反推时名字已按格内标注取好（几处标注并成一间），别再挑最长的一条盖掉
+                continue
             inside = [t for t in txt_names if _in_room(r, *T(t["x"], t["y"]))]
             if inside:
                 inside.sort(key=lambda t: -len(t["text"]))
                 r["name"] = inside[0]["text"]
         named_ok = sum(1 for r in rooms if not re.fullmatch(r"房间\d+", r.get("name") or ""))
-        if len(txt_names) >= 2 and (len(rooms) < 2 or named_ok < len(rooms)
-                                    or len(txt_names) > len(rooms)):
+        if not layer0 and len(txt_names) >= 2 and (len(rooms) < 2 or named_ok < len(rooms)
+                                                   or len(txt_names) > len(rooms)):
             wall_recs = walls or [{"pts": [(x0 + w["x0"] * 1000, y1 - w["z0"] * 1000),
                                           (x0 + w["x1"] * 1000, y1 - w["z1"] * 1000)],
                                    "closed": False, "type": "LINE", "t": w.get("t"),
@@ -1675,7 +1922,9 @@ def parse(path, opts=None, progress=None):
         if not inbox((cx, cy)):
             continue
         x, z = T(cx, cy)
-        lamps.append({"x": x, "z": z, "_mm": (cx, cy), "source": rec.get("block") or rec["type"]})
+        lamps.append({"x": x, "z": z, "_mm": (cx, cy), "source": rec.get("block") or rec["type"],
+                      "handle": rec.get("handle", ""), "block": rec.get("block", ""),
+                      "layer": rec.get("layer", ""), "layout": "Model"})
     for rec in data.get("lamp", []):
         if rec["type"] != "CIRCLE":
             continue
@@ -1684,7 +1933,9 @@ def parse(path, opts=None, progress=None):
         if not inbox((cx, cy)):
             continue
         x, z = T(cx, cy)
-        lamps.append({"x": x, "z": z, "_mm": (cx, cy), "source": "CIRCLE"})
+        lamps.append({"x": x, "z": z, "_mm": (cx, cy), "source": "CIRCLE",
+                      "handle": rec.get("handle", ""), "bucket": "circle",
+                      "layer": rec.get("layer", ""), "layout": "Model"})
     lamp_source = "layer"
     if not lamps:
         # 灯具图层一个都没命中 → 几何兜底（档 B）。认灯只认图层名是致命伤：设计师把灯具画在
@@ -1791,7 +2042,11 @@ def parse(path, opts=None, progress=None):
     return {
         "parser_version": PARSER_VERSION,
         "source": {"file": os.path.basename(path), "dxf": doc.dxfversion,
-                   "source_unit": "mm", "source_scale": 0.001,
+                   # 只有真正按声明/推定换算过才写单位；冲突/未核时原值读入，单位如实写 unknown
+                   "source_unit": (scheme.get("unit")
+                                   if scheme.get("status") in ("declared", "probable") else "unknown"),
+                   "source_scale": round(unit_factor / 1000.0, 9),
+                   "unit_scheme": scheme,
                    "source_base_xy": [x0, y1], "source_y_flip": True,
                    "lamp_layer": "GUANGLV_修改灯位",
                    "layers": sorted({dec(getattr(e.dxf, "layer", "")) for e in doc.modelspace()}),

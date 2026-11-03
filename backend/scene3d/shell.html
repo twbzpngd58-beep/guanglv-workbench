@@ -30,6 +30,24 @@
   #ftip i { display:inline-block; width:6px; height:6px; margin-right:5px; border-radius:50%;
     background:var(--gold); vertical-align:middle; font-style:normal; }
   #ftip.show { display:block; }
+  /* 灯位详情卡：点一盏灯摊开 §7.5/§7.6 四组字段（回路／开孔／SKU／驱动）＋缺件清单 */
+  #lampCard { position:fixed; z-index:26; display:none; width:min(336px,calc(100% - 24px));
+    max-height:min(54vh,430px); overflow:auto; padding:10px 12px 11px; border-radius:12px;
+    background:rgba(28,24,19,.93); color:#f4efe6; border:1px solid rgba(201,169,110,.35);
+    box-shadow:0 10px 30px rgba(0,0,0,.3); backdrop-filter:blur(10px); font-size:11.5px; line-height:1.55; }
+  #lampCard.show { display:block; }
+  #lampCard h5 { margin:0 0 2px; padding-right:22px; font-size:12.5px; font-weight:600; }
+  #lampCard .lc-sub { color:#bdb3a3; font-size:10.5px; margin-bottom:6px; }
+  #lampCard .lc-grp { margin:9px 0 2px; font-size:10px; font-weight:600; letter-spacing:.4px; color:#c9a96e; }
+  #lampCard .lc-row { display:flex; gap:8px; padding:1px 0; border-bottom:1px solid rgba(255,255,255,.07); }
+  #lampCard .lc-k { flex:0 0 106px; color:#bdb3a3; }
+  #lampCard .lc-v { flex:1 1 auto; word-break:break-word; }
+  #lampCard .lc-miss { margin:7px 0; padding:7px 9px; border-radius:9px;
+    background:rgba(214,86,66,.16); border:1px solid rgba(214,86,66,.4); color:#ffd9d2; font-size:11px; }
+  #lampCard .lc-miss ul { margin:2px 0 0; padding-left:15px; }
+  #lampCard .lc-foot { margin-top:7px; font-size:10.5px; color:#bdb3a3; }
+  #lampCard .lc-x { position:absolute; right:7px; top:6px; width:21px; height:21px; border:0;
+    border-radius:50%; background:rgba(255,255,255,.12); color:#f4efe6; font:14px/1 sans-serif; cursor:pointer; }
   /* 场景概览压成一条：空间数/面积/灯数一行读完，不再三行压在户型左上角。 */
   #hud { position:fixed; left:16px; top:16px; max-width:min(470px, calc(100% - 130px));
     display:flex; flex-wrap:wrap; align-items:center; gap:4px 9px;
@@ -49,6 +67,8 @@
     background:rgba(255,255,255,.9); border:1px solid var(--line); box-shadow:0 6px 24px rgba(0,0,0,.08);
     backdrop-filter:blur(12px); }
   #panel.gl-open { display:block; }
+  /* 面板打开时收起「视角/图层」按钮，别压住面板的 × */
+  body:has(#panel.gl-open) #glTools { display:none!important; }
   #panel h4 { margin:0 0 8px; padding-right:22px; font-size:12px; font-weight:600; color:#6b6b70; letter-spacing:.4px; }
   #glClose { position:sticky; top:0; float:right; z-index:2; width:24px; height:24px; margin:-5px -6px 0 0;
     display:flex; align-items:center; justify-content:center; padding:0; border:0; border-radius:50%;
@@ -82,7 +102,9 @@
   #legend i { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:middle; }
   .hint { position:fixed; left:50%; bottom:16px; transform:translateX(-50%); font-size:11px; color:#6b6b70;
     background:rgba(255,255,255,.78); border:1px solid var(--line); border-radius:999px; padding:5px 12px;
-    max-width:calc(100% - 32px); text-align:center; }
+    max-width:calc(100% - 32px); text-align:center; transition:opacity .9s; }
+  /* 操作提示看过一次就够了，7 秒后自己淡出，不长期占画面下方。 */
+  .hint.gl-fade { opacity:0; pointer-events:none; }
   /* 窄容器（工作台把 3D 嵌成一条窄栏时）：浮层跟着容器走，不按桌面 px 硬撑 */
   @media (max-width:760px) {
     #hud { left:10px; top:10px; font-size:10.5px; padding:6px 9px; max-width:min(340px, calc(100% - 104px)); }
@@ -97,22 +119,21 @@
     .room b { font-size:10px } .room span { font-size:8px } .room { padding:2px 6px }
     .hint { display:none }
   }
-  /* 手机宽度：右面板默认收起，用右下「工具」打开；HUD 独占一行，不压画面。
-     注意顺序：.gl-tools 基础样式必须写在 @media 前面，否则 display:none 会把
-     @media 里的 display:inline-flex 覆盖掉（旧版顺序 bug → 手机工具按钮永远不出现）。 */
-  .gl-tools { display:none; position:fixed; right:10px; bottom:10px; z-index:20; align-items:center;
-    min-height:40px; padding:0 16px; border-radius:999px; border:1px solid var(--line);
-    background:rgba(255,255,255,.94); color:#332b1e; font:inherit; font-size:13px; cursor:pointer;
-    box-shadow:0 6px 20px rgba(0,0,0,.12); }
-  .gl-tools.on { background:var(--gold); border-color:var(--gold); color:#fff; }
+  /* 控件入口：面板收起时挂在右上（手机挂右下，避免压住「场景预览」那条），展开后自身隐藏，
+     由面板里的 × 收起。基础样式必须写在 @media 之前，否则 media 里的 display 会被盖掉。 */
+  .gl-tools { display:inline-flex; position:fixed; right:16px; top:16px; z-index:22; align-items:center;
+    min-height:34px; padding:0 13px; border-radius:999px; border:1px solid var(--line);
+    background:rgba(255,255,255,.94); color:#332b1e; font:inherit; font-size:12px; cursor:pointer;
+    box-shadow:0 4px 16px rgba(0,0,0,.10); }
+  .gl-tools[hidden] { display:none !important; }
+  @media (max-width:760px) { .gl-tools { right:10px; top:10px; min-height:32px; padding:0 11px; font-size:11.5px; } }
   @media (max-width:430px) {
     #hud { max-width:calc(100% - 24px); font-size:10px; padding:6px 9px; border-radius:10px; }
     #hud b { font-size:11px; }
-    #hud .gl-mode { min-height:26px; margin-top:4px; padding:3px 8px; font-size:10.5px; }
-    #panel { display:none; }
-    #panel.gl-open { display:block; left:10px; right:10px; top:auto; bottom:54px; width:auto;
-      max-height:62%; overflow:auto; }
-    .gl-tools { display:inline-flex; }
+    #hud .gl-mode { min-height:24px; padding:2px 8px; font-size:10.5px; }
+    #panel.gl-open { left:10px; right:10px; top:auto; bottom:10px; width:auto; max-height:66%; }
+    /* 右下让位：工作台的「编号 / 功能清单」悬浮条就压在右下角 */
+    .gl-tools { right:auto; left:10px; top:auto; bottom:10px; }
   }
   .gl-fail { position:fixed; left:50%; top:16px; transform:translateX(-50%); max-width:min(460px, calc(100% - 24px));
     padding:16px 20px; background:#fffdf9; border:1px solid #e4e1db; border-radius:12px;
@@ -128,9 +149,10 @@
 <div id="app"></div>
 <div id="labels"></div>
 <div id="hud">加载中…</div>
-<button class="gl-tools" id="glTools" type="button">工具</button>
+<button class="gl-tools" id="glTools" type="button" aria-controls="panel" aria-expanded="false">视角 / 图层</button>
 
 <div id="panel">
+  <button id="glClose" type="button" aria-label="收起控件">×</button>
   <h4 id="scenesH">灯光场景（点一下真的亮灭）</h4>
   <div class="row" id="scenes"></div>
   <div id="sceneNote" class="note"></div>
@@ -269,7 +291,7 @@
   var fallback = null;   // { amb, hemi, dirs }
   // 2026-10-26：旧值把整屋抬到发灰（amb 8.0 抹平明暗），光锥和家具轮廓一起糊掉。
   // 新值保留暗环境对比：墙/地能读出材质，灯下光斑仍是全画面最亮的一块。
-  var FALLBACK_NIGHT = { hemi: 1.2, dirs: [2.2, 0.6], amb: 2.2, clear: 0x171c24 };
+  var FALLBACK_NIGHT = { hemi: 0.9, dirs: [1.2, 0.4], amb: 1.0, clear: 0x0d0e12 };
 
   // 光锥/光斑的昼夜外观：白天用普通混合，避免加色叠在浅色地板上糊成一片；
   // 夜里回到加色混合，让「灯亮着」一眼可见。数值是相对内核 n*.26 / n*1.05 的倍率。
@@ -317,7 +339,12 @@
     var base = Number(mat.opacity) || 0;
     Object.defineProperty(mat, 'opacity', {
       configurable: true,
-      get: function () { return Math.min(1, base * (mat.__glMul === undefined ? 1 : mat.__glMul)); },
+      get: function () {
+        // 未实测的灯（IES 解析失败／剖面不能用）不画光斑与光锥：§5.1 不许拿理论值冒充实测。
+        // 内核每帧照常写 opacity，这里读成 0 就行，不改内核一行代码。
+        if (mat.__glNoPool) return 0;
+        return Math.min(1, base * (mat.__glMul === undefined ? 1 : mat.__glMul));
+      },
       set: function (v) { base = Number(v) || 0; },
     });
     mat.__glScaled = true;
@@ -343,8 +370,9 @@
     });
   }
 
-  // 用 JSON 里真实的安装高度 + 半角重算光锥：内核原来按灯具类型套固定光束角，
-  // 同一盏 24° 筒灯装 2.8 m 和 2.2 m 画出来一样大，客户对不上现场。
+  // 光锥/光斑尺寸只认接口给的那一个口径：poolR＝θ_cut 外缘半径（backend/ies.py pool_radius_m）。
+  // 外壳不再按半角重算一遍——两条各算各的，换 SKU、上实测 IES 在这条渲染路径上就永远是假的
+  // （阶段 1.5 验收③）。内核原来还按灯具类型套固定光束角，同一盏灯装 2.8 m 和 2.2 m 画一样大。
   function fitBeams() {
     var v = window.__viewer;
     if (!v || !v.THREE || !Array.isArray(v.lumList) || !v.THREE.ConeGeometry) return;
@@ -352,13 +380,20 @@
     var ceil = Number((window.__SCENE__ || {}).height_m) || 2.8;
     v.lumList.forEach(function (item) {
       var m = item.meta || {};
-      var half = Number(m.half);
-      if (!isFinite(half) || half <= 0) return; // 旧场景 JSON 没半角：保留内核默认光锥
-      half = Math.min(Math.max(half, 2), 85);
       var mount = Number(m.mount);
       if (!isFinite(mount) || mount <= 0.1) mount = Math.min(ceil - 0.05, 2.6);
       var H = Math.max(0.25, Math.min(ceil - 0.02, mount - 0.02));
-      var R = Math.max(0.30, Math.min(1.35, H * Math.tan(half * Math.PI / 180)));
+      var apiR = Number(m.poolR);
+      var R;
+      if (isFinite(apiR) && apiR > 0) {
+        R = apiR;                       // 接口算好的就不夹：宽角灯 2 米光斑是真实结果，不是越界
+      } else {
+        var half = Number(m.half);
+        if (!isFinite(half) || half <= 0) return;  // 旧场景 JSON 什么都没给：保留内核默认光锥
+        half = Math.min(Math.max(half, 2), 85);
+        R = Math.max(0.30, Math.min(1.35, H * Math.tan(half * Math.PI / 180)));
+      }
+      var noPool = m.unverified === true;
       if (item.cone) {
         var g = item.cone.geometry;
         var gp = g && g.parameters;
@@ -367,8 +402,12 @@
           if (g) g.dispose();
         }
         item.cone.position.y = H / 2 + 0.02;
+        if (item.cone.material) item.cone.material.__glNoPool = noPool;
       }
-      if (item.pool) item.pool.scale.set(R * 2, R * 2, 1);
+      if (item.pool) {
+        item.pool.scale.set(R * 2, R * 2, 1);
+        if (item.pool.material) item.pool.material.__glNoPool = noPool;
+      }
     });
   }
 
@@ -378,22 +417,17 @@
     var lights = (re.lights_meta || []).length || (re.lights || []).length;
     var circuits = (re.circuits || []).length;
     var parts = [];
-    if (rooms) parts.push(rooms + ' 个空间');
+    if (rooms) parts.push(rooms + ' 空间');
     if (re.area_total_m2) parts.push(re.area_total_m2 + ' ㎡');
     if (lights) parts.push(lights + ' 盏灯');
-    if (circuits) parts.push(circuits + ' 条回路');
+    if (circuits) parts.push(circuits + ' 回路');
     var text = parts.join(' · ') || '户型三维';
-    hudEl.innerHTML = '<b>场景预览</b><br>' + text +
-      (extra ? '<br><span style="color:#8a8a8f">' + extra + '</span>' : '');
-    // 「看灯光演示」开关是 HUD 的常驻子节点：hudLine 每次重建 HUD 后要把它补回来，
-    // 否则 append 完立刻被 innerHTML 冲掉，用户根本看不到/点不到这个开关。
-    if (chipEl) {
-      hudEl.appendChild(document.createElement('br'));
-      hudEl.appendChild(chipEl);
-    }
-    hudEl.title = (re.source || '') + ' · 层高 ' + ((re.height_m || 2.8) * 1000).toFixed(0) +
+    // 一行读完：标题 + 概览 + 昼夜开关。「日景/灯光演示」的说明放进 title，不再单独占一行。
+    hudEl.innerHTML = '<b>场景预览</b><span class="gl-stats">' + text + '</span>';
+    if (chipEl) hudEl.appendChild(chipEl); // innerHTML 会冲掉常驻开关，每次重建都要补回
+    hudEl.title = ((re.source || '') + ' · 层高 ' + ((re.height_m || 2.8) * 1000).toFixed(0) +
       ' mm · 墙厚 ' + ((re.thickness_m || 0.2) * 1000).toFixed(0) + ' mm · ' +
-      (re.wall_segments || 0) + ' 段墙';
+      (re.wall_segments || 0) + ' 段墙') + (extra ? ' · ' + extra : '');
     return text;
   }
 
@@ -1406,7 +1440,7 @@
     function cap() {
       if (viewMode === 'inside') return 0;
       var w = window.innerWidth;
-      return w <= 430 ? 3 : (w <= 760 ? 4 : 5);
+      return w <= 430 ? 3 : (w <= 980 ? 4 : 5);
     }
     var last = 0;
     function tick(now) {
@@ -1545,6 +1579,122 @@
     });
   }
 
+  /* 灯位详情卡（阶段 1.5 验收①④）
+   * 内核自己把「点一盏灯＝切换它那条回路」绑在 pointerdown 上（这条行为保留＝验收②）；
+   * 外壳在 pointerup 之后补一张卡，把 §7.5/§7.6 的四组字段（回路／开孔／SKU／驱动）连同
+   * 缺件清单一起摊开。字段口＝JSON 里的 lights_meta[i].info（backend/lighting3d._fixture_info），
+   * 这里只展示、不另算一份；值一律走 textContent（型号与回路名都是人填的字符串）。
+   */
+  var LAMP_GROUPS = { circuit: '回路', opening: '开孔', sku: 'SKU／产品', driver: '驱动' };
+  var lampCard = null;
+
+  function lcEl(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = String(text);
+    return n;
+  }
+  function hideLampCard() { if (lampCard) lampCard.classList.remove('show'); }
+  function showLampCard(item, ev) {
+    var v = window.__viewer;
+    var m = (item && item.meta) || {};
+    var info = m.info || null;
+    if (!lampCard) {
+      lampCard = lcEl('div'); lampCard.id = 'lampCard';
+      document.body.appendChild(lampCard);
+    }
+    lampCard.textContent = '';
+    var x = lcEl('button', 'lc-x', '×'); x.type = 'button';
+    x.setAttribute('aria-label', '关闭灯位详情');
+    x.addEventListener('click', hideLampCard);
+    lampCard.appendChild(x);
+    lampCard.appendChild(lcEl('h5', null,
+      ((info && info.code) || m.kind || '灯位') + ' · ' + (m.room || '未分区')));
+    lampCard.appendChild(lcEl('div', 'lc-sub', [
+      m.kind || '灯具',
+      isFinite(Number(m.poolR)) && Number(m.poolR) > 0 ? ('光斑 R ' + Number(m.poolR).toFixed(2) + 'm') : '光斑半径未算',
+      m.photometry || '配光口径未标',
+    ].join(' · ')));
+
+    if (!info) {
+      // 验收④：点了必有反应。这一盏连字段包都没带＝数据缺口，要把它说出来。
+      var gap0 = lcEl('div', 'lc-miss');
+      gap0.appendChild(lcEl('b', null, '数据缺口'));
+      gap0.appendChild(lcEl('div', null,
+        '这份场景没带这一盏的字段包（回路／开孔／SKU／驱动都取不到）——不是「点了没反应」，' +
+        '是它在数据口上就没有内容。请回布灯画布补录，或重新生成三维。'));
+      lampCard.appendChild(gap0);
+    } else {
+      var miss = info.missing || [];
+      if (miss.length) {
+        var box = lcEl('div', 'lc-miss');
+        box.appendChild(lcEl('b', null, '数据缺口 ' + miss.length + ' 项（不是这盏灯没有，是这一格没填）'));
+        var ul = lcEl('ul');
+        miss.forEach(function (t) { ul.appendChild(lcEl('li', null, t)); });
+        box.appendChild(ul);
+        lampCard.appendChild(box);
+      }
+      if (info.orphan) {
+        lampCard.appendChild(lcEl('div', 'lc-foot',
+          '图纸解析出来的三维灯位，还没回填到设计：开孔、驱动等字段要在设计侧录入后才显示。'));
+      }
+      Object.keys(LAMP_GROUPS).forEach(function (k) {
+        var rows = (info.groups || {})[k] || [];
+        lampCard.appendChild(lcEl('div', 'lc-grp', LAMP_GROUPS[k] + (rows.length ? '' : '（接口没给这一组）')));
+        rows.forEach(function (r) {
+          var row = lcEl('div', 'lc-row');
+          row.appendChild(lcEl('span', 'lc-k', r.label));
+          row.appendChild(lcEl('span', 'lc-v', String(r.value == null ? '' : r.value) || '—（未填）'));
+          lampCard.appendChild(row);
+        });
+      });
+    }
+    var st = v && v.circuitState ? v.circuitState[m.circuit] : null;
+    lampCard.appendChild(lcEl('div', 'lc-foot',
+      '点这盏灯同时切换回路「' + (m.circuit || '未分区') + '」→ 现在' + (st > 0.02 ? '是开' : '是关')));
+
+    lampCard.classList.add('show');
+    var r = lampCard.getBoundingClientRect();
+    var left = (ev ? ev.clientX : 120) + 16, top = (ev ? ev.clientY : 120) + 12;
+    if (left + r.width > window.innerWidth - 8) left = (ev.clientX) - r.width - 18;
+    if (top + r.height > window.innerHeight - 8) top = window.innerHeight - r.height - 12;
+    lampCard.style.left = Math.max(8, left) + 'px';
+    lampCard.style.top = Math.max(8, top) + 'px';
+    // 验收脚本读的快照：与面板同源，不靠人截图核对。
+    window.__glLamp = { code: (info && info.code) || m.kind || '', room: m.room || '',
+      circuit: m.circuit || '', circuitOn: !!st && st > 0.02, poolR: m.poolR == null ? null : +m.poolR,
+      photometry: m.photometry || '', unverified: m.unverified === true,
+      hasInfo: !!info, missing: (info && info.missing) || [],
+      groups: (info && info.groups) || {}, orphan: !!(info && info.orphan),
+      text: lampCard.textContent };
+  }
+  function setupLampCard() {
+    var v = window.__viewer;
+    if (!v || !v.THREE || !v.groups || !v.groups.lum || !Array.isArray(v.lumList)) return;
+    var ray = new v.THREE.Raycaster(), ndc = new v.THREE.Vector2(), down = null;
+    var canvas = v.renderer.domElement;
+    canvas.addEventListener('pointerdown', function (ev) { down = { x: ev.clientX, y: ev.clientY }; });
+    canvas.addEventListener('pointerup', function (ev) {
+      if (!down) return;
+      var moved = Math.hypot(ev.clientX - down.x, ev.clientY - down.y);
+      down = null;
+      if (moved > 7) return;                 // 拖动旋转不算点灯
+      var rect = canvas.getBoundingClientRect();
+      ndc.set(((ev.clientX - rect.left) / rect.width) * 2 - 1,
+              -((ev.clientY - rect.top) / rect.height) * 2 + 1);
+      ray.setFromCamera(ndc, v.camera);
+      var hit = ray.intersectObjects(v.groups.lum.children, false)[0];
+      if (!hit) { hideLampCard(); return; }
+      var item = null;
+      for (var i = 0; i < v.lumList.length; i++) {
+        if (v.lumList[i].body === hit.object) { item = v.lumList[i]; break; }
+      }
+      if (!item) { hideLampCard(); return; }
+      showLampCard(item, ev);
+    });
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') hideLampCard(); });
+  }
+
   function setupCeilLine() {
     var v = window.__viewer;
     if (!v || !v.groups || !v.groups.ceilLine) return;
@@ -1631,6 +1781,7 @@
       applyFurnitureMode(nightMode);
       setupCeilLine();
       setupFurnitureHover();
+      setupLampCard();
       setupLabels();
       (function () {
         var fbtn = document.querySelector('[data-toggle="furniture"]');
@@ -1675,14 +1826,18 @@
             }
             if (birdView) setTimeout(function () { fitCamera(true); }, 60);
             if (mode === 'inside') setTimeout(insideView, 30);
-            // 手机上选完视角先收起面板，别让控件压住刚聚焦的场景。
-            if (window.matchMedia('(max-width: 430px)').matches) setPanelOpen(false);
+            // 画布不宽时选完视角先收起面板，别让控件压住刚聚焦的场景。
+            if (window.innerWidth <= 980) setPanelOpen(false);
           });
         });
         var resizeTimer = 0;
         window.addEventListener('resize', function () {
           clearTimeout(resizeTimer);
-          resizeTimer = setTimeout(function () { if (birdView) fitCamera(true); }, 180);
+          resizeTimer = setTimeout(function () {
+            if (birdView) fitCamera(true);
+            // 「全屏看」进出时画布宽度突变：没手动开合过面板就跟着宽度重定默认态
+            if (!panelTouched) setPanelOpen(window.innerWidth > 980);
+          }, 180);
         });
         // 剖切高度变了，可见墙顶跟着变；鸟瞰下重新取景，避免切高后户型缩在画面一角。
         var cutEl = document.getElementById('cut');
@@ -1701,17 +1856,31 @@
         btnLight.onclick = function () { userMode = true; setMode(!nightMode); };
       }
 
-      // 面板收起态（手机宽度）：用右下「工具」按钮打开
+      // 控件面板：默认只在够宽的画布里展开。工作台把 3D 嵌成 500~900 px 的窗口，
+      // 常驻面板会吃掉右侧三成画面，所以那里默认收起，用右上「视角 / 图层」唤出。
       var tools = document.getElementById('glTools');
       var panel = document.getElementById('panel');
+      var closeBtn = document.getElementById('glClose');
+      var panelTouched = false;   // 用户手动开合过 → 缩放/全屏时不再替他改
       function setPanelOpen(open) {
         panel.classList.toggle('gl-open', open);
-        tools.classList.toggle('on', open);
-        tools.textContent = open ? '收起' : '工具';
+        tools.hidden = open;
+        tools.setAttribute('aria-expanded', open ? 'true' : 'false');
       }
-      tools.addEventListener('click', function () {
-        setPanelOpen(!panel.classList.contains('gl-open'));
+      tools.addEventListener('click', function () { panelTouched = true; setPanelOpen(true); });
+      if (closeBtn) closeBtn.addEventListener('click', function () { panelTouched = true; setPanelOpen(false); });
+      document.addEventListener('keydown', function (e) {
+        // 全屏时 Esc 是「退出全屏」，别顺手把面板状态记成用户手动改过
+        if (e.key === 'Escape' && !document.fullscreenElement && panel.classList.contains('gl-open')) {
+          panelTouched = true;
+          setPanelOpen(false);
+        }
       });
+      setPanelOpen(window.innerWidth > 980);
+
+      // 操作提示看过即走
+      var hintEl = document.querySelector('.hint');
+      if (hintEl) setTimeout(function () { hintEl.classList.add('gl-fade'); }, 7000);
 
       // 就绪握手：告诉工作台「可以推亮度了」，避免它靠猜时间补发
       post('guanglv:ready', { floor: q.get('floor') || '1' });
@@ -1781,5 +1950,491 @@
   }).catch(function (e) { fail(e.message); });
 })();
 </script>
+
+<style id="gvExtStyle">
+  #gvExtBar{position:fixed;left:50%;transform:translateX(-50%);top:12px;z-index:40;max-width:calc(100vw - 24px);flex-wrap:wrap;justify-content:center;display:flex;align-items:center;gap:6px;
+    padding:6px 8px;border-radius:10px;background:rgba(20,22,26,.82);border:1px solid rgba(255,255,255,.14);
+    box-shadow:0 6px 18px rgba(0,0,0,.28);backdrop-filter:blur(8px)}
+  #gvExtBar button,#gvExtBar .gvFile{font:12px/1 -apple-system,"PingFang SC",sans-serif;color:#d9d3c7;
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);border-radius:7px;padding:6px 9px;cursor:pointer}
+  #gvExtBar button.on{background:#c9a96e;border-color:#c9a96e;color:#1b1710}
+  #gvExtBar .gvFile{display:inline-flex;align-items:center;gap:5px}
+  #gvExtBar .gvFile input{display:none}
+  #gvExtToast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%) translateY(6px);z-index:45;
+    max-width:82vw;padding:8px 14px;border-radius:9px;background:rgba(20,22,26,.9);border:1px solid rgba(255,255,255,.16);
+    color:#e8e2d6;font:12px/1.4 -apple-system,"PingFang SC",sans-serif;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s}
+  #gvExtToast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  #gvExtStatus{font:11px/1.3 -apple-system,"PingFang SC",sans-serif;color:#9aa0a8;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  html.gvMin #hud,html.gvMin #legend,html.gvMin #fixtures,html.gvMin .hint{display:none!important}
+  html.gvMin #panel{display:none!important}
+  html.gvMin #panel.gvForce{display:block!important}
+  #panel.gvHide{display:none!important}
+  #gvExtBar .gvFold{display:none}
+  #gvExtBar.gvCompact .gvFold{display:inline-flex}
+  #gvExtBar.gvCompact:not(.gvOpen)>*:not(.gvFold){display:none!important}
+  #gvExtBar.gvCompact:not(.gvOpen) #gvExtStatus{display:none!important}
+  #gvExtBar.gvCompact{left:50%;right:auto;transform:translateX(-50%)}
+  @media (max-width:760px){ #gvExtBar.gvCompact:not(.gvOpen){top:64px} }
+  #gvExtBar.gvCompact.gvOpen{left:12px;right:auto;transform:none}
+  #panel.gvForce{display:block!important}
+  html.gvMin .room{opacity:.72}
+  html.gvMin .room b{font-size:10px;font-weight:500}
+  /* 窄画面：面板默认收起，点「控件」再展开（1.5.0 修 1.4.2 的窄屏常显） */
+  @media (max-width:760px){ #panel:not(.gl-open):not(.gvForce){display:none!important} }
+</style>
+<div id="gvExtBar">
+  <button type="button" data-x="panel" title="展开 / 收起右侧控件面板">控件</button>
+  <button type="button" class="gvFold" data-x="more" title="更多控件">⋯</button>
+  <button type="button" data-x="night" title="日景 / 夜景切换（快捷键 N）">夜景</button>
+  <button type="button" data-x="cone" class="on" title="光锥示意 开 / 关（快捷键 C）">光锥</button>
+  <button type="button" data-x="min" title="精简：只留空间名（快捷键 M）">精简</button>
+  <label class="gvFile" title="导入 .ies 配光文件，按真实半峰值角重算光锥">IES<input id="gvIesFile" type="file" accept=".ies,text/plain"></label>
+  <button type="button" data-x="clear" title="还原为初始光锥">还原光锥</button>
+  <span id="gvExtStatus" aria-live="polite"></span>
+</div>
+<div id="gvExtToast" role="status" aria-live="polite"></div>
+<script src="ies-ext.js"></script>
+<script>
+/* V-24 壳交互增量（叠在工作台 1.6.0 上，只做加法，不动渲染与默认观感）
+ * 记忆键统一 gv.v24.<project>.<floor>.*：min / night / cone / view / panel / ies + iesName
+ *  1) 视角记忆：面板 [data-view] 点过就记（top/bird/inside），下次进三维自动恢复；默认仍是鸟瞰。
+ *  2) 面板显隐记忆：用「控件」收起/展开、面板 × 收起、「视角 / 图层」展开时记忆，下次沿用。
+ *  3) IES 记忆（可选）：把原始 .ies 文本（≤200KB）存本地，进三维自动重放并提示；「还原光锥」清除记忆。
+ *  4) 首次访问仍是原默认：完整 + 日景 + 光锥开 + 面板可见 + 鸟瞰。
+ *  5) 昼夜/光锥/精简的记忆与双向同步、M/N/C 快捷键沿用 1.6.0（未重写）；只补「点空白 / Esc 收控件条」的记录。
+ */
+(function(){
+  var bar = document.getElementById('gvExtBar');
+  var status = document.getElementById('gvExtStatus');
+  var minOn = false, nightOn = false, forced = false;
+  var lastNight = null, lastCone = null, lastPanel = null;
+  var pollReady = false;   // 就绪前不写记忆：1.6.0 的轮询在 boot 完成前会误判一次状态
+  // 1.6.0：偏好按「项目 + 楼层」隔离，避免多项目共用一套记忆；旧键自动迁移
+  var US = new URLSearchParams(location.search);
+  var PREFIX = 'gv.v24.' + (US.get('project') || 'default') + '.' + (US.get('floor') || '1') + '.';
+  var K = {
+    min: PREFIX + 'min', night: PREFIX + 'night', cone: PREFIX + 'cone',
+    view: PREFIX + 'view', panel: PREFIX + 'panel', ies: PREFIX + 'ies', iesName: PREFIX + 'iesName'
+  };
+  var K_OLD = { min: 'gv.v24.min', night: 'gv.v24.night', cone: 'gv.v24.cone' };
+  var VIEW_NAME = { top: '户型图', bird: '鸟瞰', inside: '室内视角' };
+  var IES_MAX = 200000;   // 单份 .ies 文本上限（字符）：超出就不记忆，避免占满 localStorage
+  /* ===== 1.10.0 夜景皮肤：参考优邑的墙/地/家具/灯具表现形式 + IES 窄光束 ===== */
+  var NIGHT_IES_TEXT = "IESNA:LM-63-2002\n[TEST] narrow 10deg\nTILT=NONE\n1 800 1 5 1 1 1 0 0 0\n0 5 10 15 20\n0\n1000 900 500 120 0\n";
+  var SKIN = { on: false, saved: [], lights: [], blocks: null, autoIes: false };
+  var userIes = false;
+  function skinSave(v) {
+    var T = v.THREE, groups = v.groups || {};
+    skinSave.group = function(key, floor) {
+      var g = groups[key]; if (!g) return;
+      g.traverse(function (o) {
+        if (!o.isMesh || !o.material || !o.material.color) return;
+        var m = o.material;
+        SKIN.saved.push({ mat: m, color: m.color.getHex(), floor: !!floor });
+      });
+    };
+    skinSave.group('wall', false); skinSave.group('floor', true); skinSave.group('open', false);
+  }
+  function skinBlocks(v) {
+    var T = v.THREE, old = (v.groups || {}).furniture;
+    if (!old || !old.children.length) return;
+    var g = new T.Group(); g.name = 'gvUyiBlocks';
+    var palette = ['#A9825A', '#B89772', '#9A9284', '#8D9198'];
+    old.children.forEach(function (c, idx) {
+      var b = new T.Box3().setFromObject(c);
+      var size = b.getSize(new T.Vector3()), ctr = b.getCenter(new T.Vector3());
+      var w = Math.max(0.35, Math.min(0.75, (size.x || 0.6) * 0.85));
+      var d = Math.max(0.35, Math.min(0.75, (size.z || 0.6) * 0.85));
+      var h = Math.max(0.38, Math.min(0.8, (size.y || 0.5) * 0.6));
+      var mesh = new T.Mesh(new T.BoxGeometry(w, h, d),
+        new T.MeshStandardMaterial({ color: palette[idx % palette.length], roughness: 0.88 }));
+      mesh.position.set(ctr.x, h / 2 + 0.02, ctr.z);
+      g.add(mesh);
+    });
+    old.visible = false;
+    v.scene.add(g);
+    SKIN.blocks = g;
+  }
+  function skinLights(v) {
+    var g = (v.groups || {}).light; if (!g) return;
+    g.traverse(function (o) {
+      if (o.isMesh && o.material) {
+        var m = o.material;
+        SKIN.lights.push({ mat: m, color: m.color ? m.color.getHex() : null });
+        if (m.color) m.color.set('#fff1d0');
+        if (m.emissive) { m.emissive.set('#ffd479'); m.emissiveIntensity = 0.55; }
+      }
+    });
+  }
+  function applySkin(on) {
+    var v = window.__viewer; if (!v || !v.THREE) return;
+    if (on === SKIN.on) return;
+    SKIN.on = !!on;
+    var i;
+    if (on) {
+      if (!SKIN.saved.length) skinSave(v);
+      for (i = 0; i < SKIN.saved.length; i += 1) {
+        var r = SKIN.saved[i]; if (r.mat.color) r.mat.color.set(r.floor ? '#cbb08c' : '#f0e8da');
+      }
+      skinBlocks(v);
+      skinLights(v);
+      if (!userIes && window.GVIes) {
+        try { window.GVIes.apply(window, window.GVIes.parse(NIGHT_IES_TEXT)); SKIN.autoIes = true; } catch (e) {}
+      }
+    } else {
+      for (i = 0; i < SKIN.saved.length; i += 1) { var q = SKIN.saved[i]; if (q.mat.color && q.color !== null) q.mat.color.set(q.color); }
+      if (SKIN.blocks) { v.scene.remove(SKIN.blocks); SKIN.blocks = null; }
+      var furn = (v.groups || {}).furniture; if (furn) furn.visible = true;
+      for (i = 0; i < SKIN.lights.length; i += 1) {
+        var l = SKIN.lights[i]; if (l.color !== null && l.mat.color) l.mat.color.set(l.color);
+        if (l.mat.emissive) l.mat.emissiveIntensity = 0;
+      }
+      if (SKIN.autoIes && window.GVIes) { window.GVIes.clear(window); SKIN.autoIes = false; }
+    }
+    try { v.renderer.render(v.scene, v.camera); } catch (e) {}
+  }
+
+  var toastEl = document.getElementById('gvExtToast'), toastTimer = null;
+  function say(t){
+    if (status) status.textContent = t || '';
+    if (!toastEl) return;
+    if (t) {
+      toastEl.textContent = t;
+      toastEl.classList.add('on');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function(){ toastEl.classList.remove('on'); }, 3200);
+    } else {
+      toastEl.classList.remove('on');
+    }
+  }
+  function whenReady(cb){ var t0 = Date.now(); (function tick(){ if (window.__ready && window.__viewer) return cb(); if (Date.now()-t0>20000) return; setTimeout(tick,120); })(); }
+  function lsRead(k){
+    try { var v = localStorage.getItem(k); return v === '1' ? true : (v === '0' ? false : null); }
+    catch (e) { return null; }   // 隐私模式 / 存储被禁用：静默降级为「不记忆」
+  }
+  function lsGet(k, old){
+    var v = lsRead(k);
+    if (v === null && old) { v = lsRead(old); if (v !== null) lsSet(k, v); }   // 旧键迁移
+    return v;
+  }
+  function lsSet(k, on){
+    try { localStorage.setItem(k, on ? '1' : '0'); } catch (e) {}
+  }
+  function lsGetStr(k){
+    try { return localStorage.getItem(k) || null; } catch (e) { return null; }
+  }
+  function lsSetStr(k, v){
+    try { localStorage.setItem(k, String(v)); } catch (e) {}
+  }
+  function lsRemove(k){
+    try { localStorage.removeItem(k); } catch (e) {}
+  }
+  function setMin(on, opts){
+    opts = opts || {};
+    minOn = !!on;
+    document.documentElement.classList.toggle('gvMin', minOn);
+    bar.querySelector('[data-x="min"]').classList.toggle('on', minOn);
+    if (!minOn) forced = false;
+    var panel = document.getElementById('panel');
+    if (panel) panel.classList.remove('gvForce');
+    if (opts.paint !== false) paint();
+    if (opts.persist !== false) lsSet(K.min, minOn);
+  }
+  function lightBtn(){ return document.getElementById('btnLight'); }
+  function lightState(){ var b = lightBtn(); return b ? b.classList.contains('on') : false; }
+  function setNight(on, opts){
+    opts = opts || {};
+    var b = lightBtn();
+    // N2 修复（1.4.2）：必须走壳层自己的「灯光演示」按钮，否则墙面/家具材质与 HUD 状态不同步
+    if (b) { if (b.classList.contains('on') !== !!on) b.click(); }
+    nightOn = lightState();            // 以点完之后的真实状态为准（按钮不存在 / 点击失败时不虚报）
+    bar.querySelector('[data-x="night"]').classList.toggle('on', nightOn);
+    lastNight = nightOn;
+    // 1.9.0：日夜=两套三维表现形式 —— 白天=空间渲染（完整控件）/ 夜晚=参考三维态（精简界面）
+    if (opts.ui !== false) setMin(nightOn, { persist: opts.persist });
+    applySkin(nightOn);
+    if (opts.persist !== false) lsSet(K.night, nightOn);
+    if (opts.quiet !== true) say(nightOn ? '夜景：参考三维态（精简）' : '日景：空间渲染（完整）');
+  }
+  bar.querySelector('[data-x="min"]').onclick = function(){ setMin(!minOn); autoBar(); say(minOn ? '精简：只留空间名' : '完整：显示全部控件'); };
+  bar.querySelector('[data-x="night"]').onclick = function(){ setNight(!nightOn); };
+  function coneBtn(){ return document.querySelector('[data-toggle="beams"]'); }
+  function coneState(){
+    var g = window.__viewer && window.__viewer.groups && window.__viewer.groups.beams;
+    if (g && typeof g.visible === 'boolean') return g.visible;   // 内核真实可见性优先（点击面板后立即可读）
+    var b = coneBtn(); return b ? b.classList.contains('on') : true;
+  }
+  function setCone(on, opts){
+    opts = opts || {};
+    var b = coneBtn();
+    if (b) { if (b.classList.contains('on') !== !!on) b.click(); }
+    var cur = coneState();
+    bar.querySelector('[data-x="cone"]').classList.toggle('on', cur);
+    lastCone = cur;
+    if (opts.persist !== false) lsSet(K.cone, cur);
+    if (opts.quiet !== true) say(cur ? '光锥：开' : '光锥：关');
+  }
+  bar.querySelector('[data-x="cone"]').onclick = function(){ setCone(!coneState()); };
+  function autoBar(){
+    if (bar.classList.contains('gvOpen')) return;
+    bar.classList.remove('gvCompact');
+    bar.style.marginLeft = '';
+    var br = bar.getBoundingClientRect();
+    function oxOf(el){
+      if (!el) return 0;
+      var cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') return 0;
+      var r = el.getBoundingClientRect();
+      var ox = Math.min(br.right, r.right) - Math.max(br.left, r.left);
+      var oy = Math.min(br.bottom, r.bottom) - Math.max(br.top, r.top);
+      return (ox > 0 && oy > 0) ? ox : 0;
+    }
+    // 审计 1.6.0 P3：默认不压面板/HUD；只要有一点点重叠就收成「⋯」。
+    // （「⋯」贴右只有 50px，不会碰到左上 HUD，也不会碰到右侧面板。）
+    var p = panelEl();
+    var hudOx = oxOf(document.getElementById('hud'));
+    var panelOx = (p && getComputedStyle(p).display !== 'none') ? oxOf(p) : 0;
+    if (hudOx > 0 || panelOx > 4 || window.innerWidth < 900) {
+      bar.style.marginLeft = '';
+      bar.classList.add('gvCompact');
+    }
+  }
+  window.__gvAutoBar = autoBar;   // QA/自测入口（不影响行为）
+  bar.querySelector('[data-x="more"]').onclick = function(){
+    bar.classList.toggle('gvOpen');
+    if (!bar.classList.contains('gvOpen')) autoBar();
+    say(bar.classList.contains('gvOpen') ? '控件条已展开' : '');
+  };
+  // 面板打开时收起「视角/图层」按钮，避免压住面板 ×（窄画面）
+  function syncTools(){
+    var p = panelEl(); var g = document.getElementById('glTools');
+    if (!p || !g) return;
+    var open = getComputedStyle(p).display !== 'none';
+    // 1.6.0 原来只改 style.display，.gl-tools[hidden]{display:none!important} 仍会压住它；
+    // 面板收起时把 hidden 也一起清掉，「视角 / 图层」才真的能点（面板记忆收起后不会没入口）。
+    g.hidden = open;
+    g.style.display = open ? 'none' : '';
+  }
+  addEventListener('resize', autoBar);
+  function panelEl(){ return document.getElementById('panel'); }
+  function panelShown(){
+    var p = panelEl(); if (!p) return false;
+    var cs = getComputedStyle(p);
+    return cs.display !== 'none';
+  }
+  function setPanelVisible(show, opts){
+    opts = opts || {};
+    var p = panelEl(); if (!p) return;
+    p.classList.toggle('gvHide', !show);
+    p.classList.toggle('gvForce', !!show);
+    if (opts.quiet !== true) say(show ? '控件已展开' : '控件已收起');
+    syncTools();
+  }
+  /* ===== V-24 本轮增量 A：面板显隐记忆（只记用户主动开合，不记窗口 resize 的自动开合） ===== */
+  function notePanel(force){
+    var s = panelShown();
+    if (!force && s === lastPanel) return;
+    lastPanel = s;
+    lsSet(K.panel, s);
+  }
+  function userOpenPanel(){
+    var p = panelEl();
+    if (p) { p.classList.remove('gvHide'); p.classList.add('gvForce'); }
+    syncTools(); notePanel(true);
+  }
+  function userClosePanel(){
+    // 面板可能是被「控件」用 gvForce 打开的（此时外壳 × 只移除 gl-open，面板不会真的消失），
+    // 这里把 gvForce 一起去掉并落 gvHide，保证「× 关得掉、下次也还是关着」。
+    var p = panelEl();
+    if (p) { p.classList.remove('gvForce'); p.classList.add('gvHide'); }
+    syncTools(); notePanel(true);
+  }
+  bar.querySelector('[data-x="panel"]').onclick = function(){
+    setPanelVisible(!panelShown(), { quiet: false });
+    notePanel(true);
+  };
+
+  /* ===== V-24 本轮增量 B：视角记忆（面板里的户型图 / 鸟瞰 / 室内视角） ===== */
+  function hookViews(){
+    Array.prototype.forEach.call(document.querySelectorAll('[data-view]'), function (btn) {
+      if (btn.__v24view) return;              // 不重复绑定
+      btn.__v24view = true;
+      btn.addEventListener('click', function () {
+        var m = btn.getAttribute('data-view');
+        if (VIEW_NAME[m]) lsSetStr(K.view, m);
+      });
+    });
+  }
+  function applyView(mode){
+    // 默认就是鸟瞰，bird 不需要点；只有 top/inside 才恢复
+    if (!mode || mode === 'bird' || !VIEW_NAME[mode]) return false;
+    var btn = document.querySelector('[data-view="' + mode + '"]');
+    if (!btn) return false;
+    try { btn.click(); return true; } catch (e) { return false; }
+  }
+
+  /* ===== V-24 本轮增量 C：IES 配光记忆（原始文本，进三维自动重放；还原光锥清除） ===== */
+  function saveIes(name, text){
+    if (!text || text.length > IES_MAX) { lsRemove(K.ies); lsRemove(K.iesName); return false; }
+    lsSetStr(K.ies, text);
+    lsSetStr(K.iesName, name || '');
+    return true;
+  }
+  function clearIes(){ lsRemove(K.ies); lsRemove(K.iesName); }
+  function restoreIes(){
+    var text = lsGetStr(K.ies);
+    if (!text || !window.GVIes) return null;
+    try {
+      var parsed = window.GVIes.parse(text);
+      var res = window.GVIes.apply(window, parsed);
+      userIes = true;      // 用户记忆的 IES 优先，夜景皮肤不再自动套窄光束
+      return { name: lsGetStr(K.iesName) || '上次 IES', half: parsed.halfAngleDeg, applied: res.applied };
+    } catch (e) {
+      clearIes();          // 记忆过期 / 场景换过导致应用失败：清掉，别每次进都报错
+      return null;
+    }
+  }
+
+  /* ===== 1.6.0 增量：控件条 ↔ 面板双向同步（一个轮询，不重复绑事件） ===== */
+  function paint(){
+    var n = lightState(), c = coneState();
+    nightOn = n;
+    var nb = bar.querySelector('[data-x="night"]'), cb = bar.querySelector('[data-x="cone"]'), mb = bar.querySelector('[data-x="min"]');
+    if (nb) nb.classList.toggle('on', n);
+    if (cb) cb.classList.toggle('on', c);
+    if (mb) mb.classList.toggle('on', minOn);
+    return { night: n, cone: c };
+  }
+  var layoutTick = 0;
+  setInterval(function(){
+    syncTools();
+    if (++layoutTick % 5 === 0) autoBar();   // HUD/面板尺寸晚到也会被纠正（审计 P3）
+    if (!pollReady) return;
+    var n = lightState(), c = coneState();
+    var changed = false;
+    if (n !== lastNight) {
+      lastNight = n;
+      lsSet(K.night, n);
+      say(n ? '夜景：面板已切到灯光演示' : '日景：面板已切回日景');
+      changed = true;
+    }
+    if (c !== lastCone) {
+      lastCone = c;
+      lsSet(K.cone, c);
+      say(c ? '光锥：开' : '光锥：关');
+      changed = true;
+    }
+    if (changed) paint();
+  }, 400);
+
+  /* ===== 1.6.0 增量：快捷键 M / N / C（打字时不抢键） + 展开态点空白/Esc 收起 ===== */
+  function typing(e){
+    var t = e.target;
+    if (!t || t === document || t === window || t.nodeType !== 1) return false;
+    var tag = (t.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+    if (t.isContentEditable) return true;
+    return false;
+  }
+  function hotkey(k){
+    if (k === 'escape') {
+      if (bar.classList.contains('gvOpen')) { bar.classList.remove('gvOpen'); autoBar(); }
+      return false;              // 不拦截 Esc：外壳还要用它收面板 / 退全屏
+    }
+    if (k === 'm') { setMin(!minOn); autoBar(); say(minOn ? '精简：只留空间名' : '完整：显示全部控件'); return true; }
+    if (k === 'n') { setNight(!nightOn); return true; }
+    if (k === 'c') { setCone(!coneState()); return true; }
+    return false;
+  }
+  document.addEventListener('keydown', function(e){
+    if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.isComposing || e.keyCode === 229) return;
+    if (typing(e)) return;
+    var k = String(e.key || '').toLowerCase();
+    if (hotkey(k)) e.preventDefault();
+    if (k === 'escape') setTimeout(function(){ notePanel(); }, 0);   // 外壳的 Esc 先收面板，这里只记结果
+  });
+  // 1.6.0：外层页面把 M/N/C 转发进来（焦点不在三维画面时也能用）
+  window.addEventListener('message', function(e){
+    if (e.origin !== location.origin) return;
+    var d = e.data || {};
+    if (d.type === 'guanglv:v24key' && hotkey(String(d.key || '').toLowerCase())) { /* handled */ }
+  });
+  document.addEventListener('pointerdown', function(e){
+    if (!bar.classList.contains('gvOpen')) return;
+    if (!bar.contains(e.target)) { bar.classList.remove('gvOpen'); autoBar(); }
+  }, true);
+
+  bar.querySelector('[data-x="clear"]').onclick = function(){
+    try {
+      if (window.GVIes) {
+        window.GVIes.clear(window);
+        clearIes();
+        say('已还原光锥');
+      }
+    } catch(e){ say('还原失败：' + (e.message||e)); }
+  };
+  var file = document.getElementById('gvIesFile');
+  file.addEventListener('change', function(){
+    var f = file.files && file.files[0]; if (!f) return;
+    f.text().then(function(text){
+      try {
+        var parsed = window.GVIes.parse(text);
+        userIes = true;
+        var res = window.GVIes.apply(window, parsed);
+        saveIes(f.name, text);
+        say('IES：' + f.name + ' · 半峰 ' + parsed.halfAngleDeg.toFixed(1) + '° · ' + res.applied + ' 盏');
+      } catch(e){ say('IES 解析失败：' + (e.message||e)); }
+    });
+  });
+
+  /* ===== 状态记忆（首次访问 = 原默认；有记忆才恢复） ===== */
+  var savedMin = lsGet(K.min, K_OLD.min), savedNight = lsGet(K.night, K_OLD.night), savedCone = lsGet(K.cone, K_OLD.cone);
+  var savedView = lsGetStr(K.view), savedPanel = lsGet(K.panel);
+  if (savedMin === true) setMin(true, { persist: false, paint: false });  // 先上 class，避免加载中闪一下完整界面
+  // 面板「上次是收起」的话先挂 gvHide，避免刷新时面板先亮一下再消失
+  if (savedPanel === false && panelEl()) panelEl().classList.add('gvHide');
+
+  whenReady(function(){
+    try { if (window.GVIes) window.GVIes.init(window); } catch(e){}
+    var restored = [];
+    setMin(savedMin === null ? true : savedMin === true, { persist: false });
+    if (savedMin === true) restored.push('精简');
+    // URL 显式带 night= 时以 URL 为准（深链 / 工作台推送），不覆盖
+    if (!/[?&]night=/.test(location.search)) {
+      setNight(savedNight === null ? true : savedNight === true, { persist: false, quiet: true, ui: false });
+      if (savedNight === true) restored.push('夜景');
+    }
+    setCone(savedCone === null ? coneState() : savedCone, { persist: false, quiet: true });
+    if (savedCone === true) restored.push('光锥开');
+    if (savedCone === false) restored.push('光锥关');
+    // 视角要在 boot 的 700ms 自动取景之前点（点完 viewTouched=true，取景不会再抢镜头）
+    if (applyView(savedView)) restored.push('视角：' + VIEW_NAME[savedView]);
+    // 面板在视角之后恢复：窄屏点视角会顺手收起面板，以记忆为准
+    if (savedPanel !== null && panelShown() !== savedPanel) {
+      setPanelVisible(savedPanel, { quiet: true });
+      restored.push(savedPanel ? '面板展开' : '面板收起');
+    } else if (savedPanel === false) {
+      restored.push('面板收起');   // 解析期已经挂好 gvHide，不需要再动，但状态里要说清
+    }
+    var ies = restoreIes();
+    if (ies) restored.push('已恢复上次 IES：' + ies.name);
+    paint();
+    lastNight = lightState(); lastCone = coneState(); lastPanel = panelShown();
+    pollReady = true;
+    autoBar(); syncTools();
+    if (nightOn) applySkin(true);
+    hookViews();
+    var closeBtn = document.getElementById('glClose');
+    if (closeBtn) closeBtn.addEventListener('click', function(){ setTimeout(userClosePanel, 0); });
+    var tools = document.getElementById('glTools');
+    if (tools) tools.addEventListener('click', function(){
+      var p = panelEl(); if (p) p.classList.remove('gvHide');
+      setTimeout(function(){ syncTools(); notePanel(); }, 0);
+    });
+    say(restored.length ? '场景已就绪 · 已恢复上次状态（' + restored.join(' · ') + '）' : '场景已就绪');
+  });
+})();
+</script>
+
 </body>
 </html>

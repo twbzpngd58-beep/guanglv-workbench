@@ -13,9 +13,13 @@ import { isTabletopDevice } from "./deviceMount";
 import { Spatial3D } from "./Spatial3D";
 import { planArchitecture, isLegacyAuto } from "./systemArchitecture";
 import { Ueyi3D } from "./Ueyi3D";
+import CollabPanel from "./CollabPanel";
+import GatePanel from "./GatePanel";
+import { confirmDanger } from "./dangerConfirm";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   ArrowLeft,
+  Users,
   ChevronRight,
   Plus,
   Upload,
@@ -69,6 +73,8 @@ import {
   Sparkles,
   Smartphone,
   QrCode,
+  Gauge,
+  Crosshair,
 } from "lucide-react";
 import { type DrawingStep, type EditingPhase, DrawingProgress } from "./DrawingProgress";
 import { CircuitIssueList, CircuitBoard } from "./CircuitCheck";
@@ -116,14 +122,13 @@ import {
   safeBasements,
 } from "./floors";
 import { Plan, stripPoints, type Selection } from "./Plan";
-import { GROUPED_SPACES, spaceMapByAlias, spaceMapByCode, type HouseType } from "./spaces";
+import { GROUPED_SPACES, spaceMapByAlias, spaceMapByCode, spaceCodesOfRoomName, type HouseType } from "./spaces";
 import {
   DEFAULT_ROLE_BY_POSITION,
   ROLE_CODES,
   SPACE_CODES,
   POSITION_CODES,
-  groupedPositionsForSpace,
-  positionsForSpace,
+  groupedPositionsForSpaces,
   positionNameIn,
   positionCodeInSpace,
   defaultRoleForPosition,
@@ -136,6 +141,7 @@ import {
   roleOfCode,
   spotDiameterMetres,
   spotMultiple,
+  spotBasisForFixture,
   isDecorativeLight,
   defaultFixtureName,
   defaultFixtureModel,
@@ -148,8 +154,8 @@ import {
   cctNeedsReason,
   cctText,
   isCctPending,
-  applyProductCct,
   applyProductToFixture,
+  productDimmable,
   CCT_PENDING_LABEL,
   colorModeOf,
   isColorful,
@@ -176,6 +182,20 @@ import {
   sceneDefFor,
 } from "./sceneRules";
 import { Button, Modal, Badge, Field } from "./ui";
+import { CatalogPicker } from "./CatalogPicker";
+import {
+  applyCatalogModel,
+  catalogModel,
+  catalogModelOfFixture,
+  catalogSelectionOf,
+  catalogBeamText,
+  catalogCctText,
+  catalogLocks,
+  loadCatalog,
+  type Catalog,
+  type CatalogModel,
+  type CatalogSelection,
+} from "./catalog";
 import {
   PANEL_KEY_COUNTS, PANEL_DEFAULT_KEYS, PANEL_BRAND, PANEL_MODELS, ENGRAVE_MODES,
   normalizePanel, fillPanelKeys as fillPanelKeysFor, panelModel, pickableModels, panelTextMax, panelIssues, keyFace,
@@ -216,6 +236,12 @@ const DEFAULT_DEVICE_NAME: Record<string, string> = {
 };
 /** 场景联动的对象只有灯具：窗帘不接入场景（不写入、也不保留 scene.states）。 */
 const isSceneLight = (f: Obj) => !!f && f.type !== "窗帘";
+/** 草稿里这盏灯相对「已保存情景」改了哪几项（[原值, 现值]）。 */
+type LampDelta = {
+  on: [boolean, boolean] | null;
+  brightness: [number, number] | null;
+  cct: [number, number] | null;
+};
 /** 回路编号：空＝未分配回路。 */
 const circuitOf = (f: Obj) =>
   (f && f.circuit ? String(f.circuit).trim() : "") || "未分配回路";
@@ -273,18 +299,46 @@ function applyWirelessDefaults(f: Obj) {
 /**
  * 总线智能（KNX/DALI）：无线协议与旧的「KNX 控制」换成 DALI；
  * **开闭的灯保持开闭**（不强行升级成调光——会在 DALI 地址与造价上凭空多算）。
+ * 双色（调色温）与彩色（RGB/RGBW）灯具在总线方案里走 DALI 载体，
+ * 不许被压成「开闭」——开源产品不能规定只能用单一光源标准（2026-10-27 用户口径）。
  */
 function applyBusDefaults(f: Obj) {
   if (!f) return;
   const cur = String(f.control || "").trim();
   if (!cur || ["蓝牙 Mesh", "Zigbee", "Wi-Fi", "KNX"].includes(cur)) f.control = "DALI";
   else normalizeFixtureControl(f, "KNX");
+  if (colorModeOf(f) !== "单色" && f.control === "开关控制") f.control = "DALI";
   if (f.control === "DALI") {
     f.dimmable = true;
     if (colorModeOf(f) !== "单色") f.tunable = true;
   } else {
     f.dimmable = false;
   }
+}
+/** 无线生态的产品（飞利浦 / 各类无线协议）：它在总线方案里没有对应的执行器。 */
+function isWirelessProduct(prod?: Obj | null): boolean {
+  if (!prod) return false;
+  return /飞利浦|蓝牙|Mesh|BLE|Wi[\- ]?Fi|Zigbee/i.test(
+    `${prod.brand ?? ""} ${prod.control ?? ""} ${prod.protocol ?? ""}`,
+  );
+}
+
+/**
+ * 选型落灯具 + 按项目智能方案收敛控制方式（2026-11-03 用户口径）。
+ * 控制方式不由产品写：飞利浦的 control 是空文本、世聪写的是 KNX，直接抄进灯具就成了本方案不认的值，
+ * 界面只能显示「旧值，请重选」。产品自己写了调光（调光标记 / 能调色温 / 色温是个区间）而灯具还挂在
+ * 开闭时，升到本方案的调光载体 —— 否则选完型号亮度滑块又灰回去，后续调光与情景走不下去。
+ */
+function applySelectedProduct(f: Obj, prod: Obj, smart?: string) {
+  applyProductToFixture(f, prod);
+  const carrier = smart === "KNX" ? "DALI" : smart === "无线" ? "蓝牙 Mesh" : "";
+  const cur = String(f.control || "").trim();
+  if (carrier && productDimmable(prod) === true && (!cur || cur === "开关控制")) {
+    f.control = carrier;
+  }
+  if (smart === "KNX") applyBusDefaults(f);
+  else if (smart === "无线") applyWirelessDefaults(f);
+  else normalizeFixtureControl(f, "无");
 }
 /** 不做智能：按空间给每盏灯分配回路（每个空间一条回路 C01/C02…）。 */
 function autoCircuitsByRoom(n: Obj) {
@@ -587,6 +641,19 @@ function roomSpaceCodeOf(r: Obj | undefined | null): { code: string; name: strin
     if (aliasName) return spaceMapByAlias.get(aliasName) || null;
   }
   return SPACE_CODES.find((s) => s.name === r.type) || null;
+}
+/**
+ * 这间房涉及哪几类空间（决定位置表列哪些家具/功能位）。
+ * 房间名明确含两类以上空间时（「餐厅、客厅」），返回全部——解析器会把连通空间合成一间房、
+ * 只留一个 spaceCode，若照旧只认那一个码，另一类空间的家具位就整片消失（2026-10-27 用户报的 bug）。
+ * 单空间房仍以显式 spaceCode 优先，行为与 roomSpaceCodeOf 一致。
+ */
+function roomSpaceCodesOf(r: Obj | undefined | null): string[] {
+  if (!r) return [];
+  const named = spaceCodesOfRoomName(r.name).map((s) => s.code);
+  if (named.length > 1) return named;
+  const single = roomSpaceCodeOf(r);
+  return single ? [single.code] : named;
 }
 
 /** 同类空间可以有多个：次卧 → 次卧 2 → 次卧 3；别墅多个入户 → 门厅、门厅 2…。 */
@@ -1070,6 +1137,8 @@ export function Workspace({
     // 剪贴板里放的是哪一类对象（fixtures / devices / …）：粘贴时按类型还原，设备不会被粘成灯具。
     [clipKind, setClipKind] = useState("fixtures"),
     [lampType, setLampType] = useState("射灯"),
+    // 选型目录（飞利浦 WiZ/Hue + FLOS）：由 /api/catalog 只读下发，页面进来拉一次。
+    [catalog, setCatalog] = useState<Catalog | null>(null),
     [pasteCount, setPasteCount] = useState(0),
     [tool, setTool] = useState("select"),
     [floor, setFloor] = useState(1),
@@ -1090,7 +1159,8 @@ export function Workspace({
     [sceneInsp, setSceneInsp] = useState<"scene" | "circuit" | "lamp" | "panel">("scene"),
     [inspPanelId, setInspPanelId] = useState(""),
     [setupSel, setSetupSel] = useState<string[]>([]),
-    [setupClear, setSetupClear] = useState(true),
+    // 一键设置只清标准情景；默认保留现有内容，避免把「新增情景」建的自定义情景删掉。
+    [setupClear, setSetupClear] = useState(false),
     [spaceQuery, setSpaceQuery] = useState(""),
     [spaceTypical, setSpaceTypical] = useState(true),
     // 批 3（C3/C4/F7）：新增空间三步改两步——记住上次的分区，第二次打开直接落房间屏。
@@ -1106,7 +1176,19 @@ export function Workspace({
     [offset, setOffset] = useState(20),
     [canvasReset, setCanvasReset] = useState(0),
     [focus, setFocus] = useState<{ x: number; y: number; token: number } | null>(null),
+    // 点右栏灯具编号 → 三维里给这盏灯定点打光并居中（token 让重复点同一盏也能重新触发）。
+    [fixtureFocus, setFixtureFocus] = useState<{ id: string; token: number; code?: string } | null>(null),
     [recognitionFile, setRecognitionFile] = useState("");
+
+  useEffect(() => {
+    let live = true;
+    loadCatalog().then((c) => {
+      if (live && c) setCatalog(c);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // 2026-10-16：画布上选中家具/空间后，检视面板必须「明显可见」——滚到眼前并闪一下。
   const inspectorBody = useRef<HTMLDivElement | null>(null);
@@ -1128,7 +1210,29 @@ export function Workspace({
   const [lampColorMode, setLampColorMode] = useState<ColorMode>("单色");
   const [lampSingleCct, setLampSingleCct] = useState<number>(SINGLE_CCT_DEFAULT);
   const [lampCctReason, setLampCctReason] = useState("");
-  const lampNeedsReason = lampColorMode !== "单色" || lampSingleCct !== SINGLE_CCT_DEFAULT;
+  // 布灯时选的品牌 / 型号 / 型号可选项：型号一旦选定，类型与色温口径跟着产品走。
+  const [lampCatalogBrand, setLampCatalogBrand] = useState("");
+  const [lampCatalogId, setLampCatalogId] = useState("");
+  const [lampCatalogSel, setLampCatalogSel] = useState<CatalogSelection>({});
+  const lampCatModel = catalogModel(catalog, lampCatalogId);
+  const lampCatCct = lampCatModel?.params.cct;
+  const lampCatColorMode: ColorMode | null = lampCatCct
+    ? lampCatCct.kind === "range"
+      ? lampCatCct.rgb
+        ? "彩色"
+        : "双色"
+      : "单色"
+    : null;
+  const lampEffectiveCct = lampCatCct
+    ? lampCatCct.kind === "fixed"
+      ? lampCatCct.value
+      : lampCatCct.kind === "options"
+        ? (lampCatalogSel.cct ?? lampCatCct.default)
+        : null
+    : lampSingleCct;
+  const lampNeedsReason =
+    (lampCatColorMode ?? lampColorMode) !== "单色" ||
+    (lampEffectiveCct !== null && lampEffectiveCct !== SINGLE_CCT_DEFAULT);
   // 添加设备 / 传感器 / 窗帘：先选类型与空间再落到图纸（楼层跟当前页，空间只列本层，与布灯一致）。
   const [addObject, setAddObject] = useState<"" | "device" | "curtain">("");
   const [addType, setAddType] = useState("传感器");
@@ -1136,7 +1240,9 @@ export function Workspace({
   const [addRoomId, setAddRoomId] = useState("");
   const [addMotor, setAddMotor] = useState("单电机");
   // 设备位置（家具/功能位，随空间取表；不填也能用）。
+  // addPositionSpace＝所选位置属于哪一类空间（「餐厅、客厅」这种合并房里位置码会重名，必须记住来源）。
   const [addPositionCode, setAddPositionCode] = useState("");
+  const [addPositionSpace, setAddPositionSpace] = useState("");
   // 传感器关联灯具的分步选择：先楼层（多层）/ 先区域（平层），再看灯具。
   const [linkFloor, setLinkFloor] = useState(1);
   // 正在手动调整探测范围的传感器（画布上显示可拖顶点）+ 当前选中的顶点序号（-1 = 未选）
@@ -1346,6 +1452,40 @@ export function Workspace({
       : liveScene;
   // 有未保存的情景改动（草稿）＝只有点「保存场景」/「保存」才会写进设计。
   const sceneDirty = !!sceneDraft && scene === sceneDraft;
+  // 草稿对照已保存的情景：逐盏算差多少，供「已改」标记与差异文案使用。
+  // 关灯时亮度/色温不参与比较（灯关着，数值没有现场意义）。
+  const savedScene =
+    sceneDirty && scene
+      ? (d?.scenes || []).find((s) => s.id === scene.id) || null
+      : null;
+  const lampDeltaOf = (f: Obj): LampDelta | null => {
+    if (!savedScene || !scene) return null;
+    const def = { on: false, brightness: 0, cct: Number(f.cctMin) || 3000 };
+    const cur = { ...def, ...(scene.states?.[f.id] || {}) };
+    const base = { ...def, ...(savedScene.states?.[f.id] || {}) };
+    if (!!cur.on !== !!base.on) {
+      return { on: [!!base.on, !!cur.on], brightness: null, cct: null };
+    }
+    if (!cur.on) return null;
+    const db = Number(cur.brightness) !== Number(base.brightness);
+    const dc = Number(cur.cct) !== Number(base.cct);
+    if (!db && !dc) return null;
+    return {
+      on: null,
+      brightness: db ? [Number(base.brightness), Number(cur.brightness)] : null,
+      cct: dc ? [Number(base.cct), Number(cur.cct)] : null,
+    };
+  };
+  const lampDeltaText = (dt: LampDelta) => {
+    const parts: string[] = [];
+    if (dt.on) parts.push(`开关 ${dt.on[0] ? "开" : "关"} → ${dt.on[1] ? "开" : "关"}`);
+    if (dt.brightness) parts.push(`亮度 ${dt.brightness[0]}% → ${dt.brightness[1]}%`);
+    if (dt.cct) parts.push(`色温 ${dt.cct[0]}K → ${dt.cct[1]}K`);
+    return parts.join(" · ");
+  };
+  const sceneChangedLampCount = savedScene
+    ? (d?.fixtures || []).filter(isSceneLight).filter((f) => !!lampDeltaOf(f)).length
+    : 0;
   // 画布固定读数：单击灯具时显示 编号 / 灯具类型 / 功率（HTML 层，缩放/平移都不影响）；
   // 定向照射的灯具再补一段 光束角 + 地面光斑直径，装饰型灯具（吊灯/壁灯/台灯…）只显示前三个。
   const spotFixture: Obj | null =
@@ -1479,6 +1619,9 @@ export function Workspace({
           const st = standardSceneState(label, { ...parsed, explicitRole: true }, f);
           if (st) states[f.id] = st;
         });
+        // 本项目一盏都控不到的情景（如只有其他空间/茶室时的 13.7）不自动塞进来：
+        // 左栏会多一条「0 盏」的空情景，点开画布什么都不亮。
+        if (!Object.keys(states).length) return;
         n.scenes.push({
           id: uid(),
           templateId: t.id,
@@ -1554,14 +1697,33 @@ export function Workspace({
   // 布灯目标：同类空间可以有多个，按房间（而不是空间码）选，避免落到别的次卧/门厅。
   const placeRooms = (d?.rooms || []).filter((r) => r.floor === floor);
   const lampRoom = (d?.rooms || []).find((r) => r.id === lampRoomId);
-  const lampSpaceCode = (lampRoom ? roomSpaceCodeOf(lampRoom)?.code : lampSpace) || lampSpace;
+  // 一间房可能同时是餐厅+客厅（解析器把连通空间合成了一间）：位置表要把两类空间并起来，
+  // 否则「客厅」的茶几/沙发/电视墙整片不出现（2026-10-27 用户报的 bug）。
+  const lampRoomCodes = lampRoom ? roomSpaceCodesOf(lampRoom) : [];
+  const lampSpaceCodes = lampRoomCodes.length ? lampRoomCodes : [lampSpace];
+  const lampSpaceCode = lampSpaceCodes.includes(lampSpace) ? lampSpace : lampSpaceCodes[0];
   const lampSpaceName = SPACE_CODES.find((s) => s.code === lampSpaceCode)?.name || "其他空间";
-  // 位置按空间取表：布灯/设备的「位置」下拉只列该空间的家具与功能位。
-  const lampPositions = groupedPositionsForSpace(lampSpaceCode);
+  const lampSpaceNames = lampSpaceCodes.map(
+    (c) => SPACE_CODES.find((s) => s.code === c)?.name || c,
+  );
+  // 多空间时下拉用「空间码:位置码」当值：同一个位置码在两类空间里含义可能不同
+  // （餐厅 a＝吊灯位、客厅 a＝单椅），只用一个字母做 value 会让两行撞值、选中项错乱。
+  const lampPositionValue = lampSpaceCodes.length > 1
+    ? `${lampSpaceCode}:${lampPosition}`
+    : lampPosition;
+  // 位置按空间取表：布灯/设备的「位置」下拉只列该空间（或该房涉及的几类空间）的家具与功能位。
+  const lampPositions = groupedPositionsForSpaces(lampSpaceCodes);
   const addRoomForPosition = (d?.rooms || []).find((r) => r.id === addRoomId);
-  const addSpaceCode = (addRoomForPosition ? roomSpaceCodeOf(addRoomForPosition)?.code : "") || "x";
+  const addRoomCodes = addRoomForPosition ? roomSpaceCodesOf(addRoomForPosition) : [];
+  const addSpaceCodes = addRoomCodes.length ? addRoomCodes : ["x"];
+  const addSpaceCode = addSpaceCodes.includes(addPositionSpace)
+    ? addPositionSpace
+    : addSpaceCodes[0];
   const addSpaceName = SPACE_CODES.find((s) => s.code === addSpaceCode)?.name || "其他空间";
-  const addPositions = groupedPositionsForSpace(addSpaceCode);
+  const addPositionValue = addSpaceCodes.length > 1
+    ? `${addSpaceCode}:${addPositionCode}`
+    : addPositionCode;
+  const addPositions = groupedPositionsForSpaces(addSpaceCodes);
   // 图层开关：底图与布灯、情景演示共用一套状态。
   const layerSwitch = (
     <div className="layer-switch" title="图层开关：灯具与设备（面板）叠在一起时，关掉设备层就能单独看灯、单独拖灯">
@@ -1595,13 +1757,26 @@ export function Workspace({
     );
     setModal("files");
   };
+  // 位置码必须落在当前空间（或合并房涉及的几类空间）的位置表里：否则 <select> 找不到匹配项
+  // 会回退显示第一项，而编号仍按旧码生成（2026-10-27 实测：显示「z · 餐桌/桌面」、编号却是 ccE003＝茶几）。
+  // 返回生效的「空间 + 位置」——合并房里位置码可能重名，只返回码不足以确定编号前缀。
+  function clampLampPosition(codes: string[]): { space: string; position: string } {
+    const list = groupedPositionsForSpaces(codes.length ? codes : ["x"]).flatMap((g) => g.positions);
+    const space = codes.includes(lampSpace) ? lampSpace : (codes[0] || "x");
+    const kept = list.find((p) => p.code === lampPosition && p.spaceCode === space);
+    if (kept) return { space, position: kept.code };
+    const first = list.find((p) => p.spaceCode === space) || list[0];
+    if (!first) return { space, position: lampPosition };
+    setLampSpace(first.spaceCode);
+    setLampPosition(first.code);
+    setLampRole(defaultRoleForPosition(first.spaceCode, first.code));
+    return { space: first.spaceCode, position: first.code };
+  }
   // 换空间＝换位置表：把当前位置收敛到该空间的家具/功能位，职能跟着位置的默认值走。
   function selectPlaceSpace(code: string) {
     setLampSpace(code);
-    const list = positionsForSpace(code);
-    const keep = list.some((p) => p.code === lampPosition) ? lampPosition : list[0]?.code || "q";
-    setLampPosition(keep);
-    setLampRole(defaultRoleForPosition(code, keep));
+    const kept = clampLampPosition([code]);
+    setLampRole(defaultRoleForPosition(kept.space, kept.position));
   }
   // 灯带折线（§十.10 口径②；实测 2026-10-12 认可）：
   // 「灯带 ＝ 折线工具量长度」——在画布上依次点拐点，每点一下接一段，长度按各段之和自动量；
@@ -1686,7 +1861,7 @@ export function Workspace({
         colorHue: 0,
         colorHex: "",
         group: "",
-        control: smart === "无" ? "开关控制" : smart === "无线" ? "蓝牙 Mesh" : "KNX",
+        control: smart === "无" ? "开关控制" : smart === "无线" ? "蓝牙 Mesh" : "DALI",
         circuit: room ? circuitForRoom(n, room) : "",
         dimmable: true,
         tunable: true,
@@ -1736,8 +1911,11 @@ export function Workspace({
     const first = (d?.rooms || []).find((r) => r.floor === floor);
     setLampRoomId(first ? first.id : "");
     if (first) {
-      const meta = roomSpaceCodeOf(first);
-      if (meta) setLampSpace(meta.code);
+      const codes = roomSpaceCodesOf(first);
+      if (codes.length) {
+        setLampSpace(codes[0]);
+        clampLampPosition(codes);
+      }
     }
     setPlacePoint(null);
     setTool("place-lamp");
@@ -1831,6 +2009,21 @@ export function Workspace({
   ).length;
   const usableScenes = availableScenes(p?.type || "平层", projectSpaces.map((s) => s.code));
   const unusableScenes = excludedScenes(p?.type || "平层", projectSpaces.map((s) => s.code));
+  // 房型/空间只筛「主空间」，全屋场景仍可能在本项目一盏都控不到
+  // （13.7 声明控制 k/c/u/m，落到只有其他空间/茶室的项目＝0 盏）。
+  // 「可用」必须再按当前灯具编号算一遍，0 盏的不勾、不写，否则点开画布什么都不亮。
+  const sceneLampCount = (t: { code: string; name: string }) => {
+    const label = t.code + " " + t.name;
+    return (d?.fixtures || []).filter((f) => {
+      const parsed = parseFixtureCode(f.code || "");
+      if (!parsed) return false;
+      return !!standardSceneState(label, { ...parsed, explicitRole: true }, f);
+    }).length;
+  };
+  const usableWithLamps = usableScenes.filter((t) => sceneLampCount(t) > 0);
+  const usableNoLamps = usableScenes.filter((t) => sceneLampCount(t) === 0);
+  // 一键设置不会动这些情景：手动新增的、以及标准情景里已经改过的。
+  const keptSceneCount = (d?.scenes || []).filter((s) => !s.standard || s.customized).length;
   const toggleSetupScene = (code: string) => {
     const list = [...setupSel];
     const i = list.indexOf(code);
@@ -1839,8 +2032,8 @@ export function Workspace({
     setSetupSel(list);
   };
   const openSceneSetup = () => {
-    setSetupSel(usableScenes.map((s) => s.code));
-    setSetupClear(true);
+    setSetupSel(usableWithLamps.map((s) => s.code));
+    setSetupClear(false);
     setModal("scene-setup");
   };
   const run = async (fn: () => Promise<any>, message = "已保存") => {
@@ -1876,15 +2069,17 @@ export function Workspace({
     }
   };
   const update = (fn: (d: Design) => void, record = true) => {
-    if (!d || locked || busy) return;
+    if (!d || locked || busy) return false;
     const next = clone(d);
     fn(next);
     change(next, record);
+    return true;
   };
   const patch = (key: string, value: any) => {
     if (!selection || !selected) return;
     update((n) => {
-      const o = n[selection.kind].find((v) => v.id === selection.id)!;
+      const o = n[selection.kind].find((v) => v.id === selection.id);
+      if (!o) return;
       const prev = clone(o);
       o[key] = value;
       if (selection.kind === "rooms") {
@@ -1942,7 +2137,18 @@ export function Workspace({
           syncStandardScenes(n, o);
         }
         // 光源类型：单色 / 双色 / 彩色，切换时自动补全色温字段。
-        if (key === "colorMode") applyColorMode(o, value as ColorMode);
+        if (key === "colorMode") {
+          applyColorMode(o, value as ColorMode);
+          // 总线方案里把灯改成双色/彩色：开闭载体留不住调色功能，自动升到 DALI（无线同理升蓝牙 Mesh）。
+          if (
+            value !== "单色" &&
+            o.control === "开关控制" &&
+            (smart === "KNX" || smart === "无线")
+          ) {
+            o.control = smart === "KNX" ? "DALI" : "蓝牙 Mesh";
+            o.dimmable = true;
+          }
+        }
         // 单色灯具只有唯一色温，写入后同步上下限。
         if (key === "cct") applyColorMode(o, "单色");
         // 人工确认过光源类型 / 色温，即解除「待核」。
@@ -1998,8 +2204,17 @@ export function Workspace({
       (v.fixtures || []).filter(isSceneLight).forEach((f: Obj) => {
         const was = String(f.control || "").trim();
         if (fixtureControlAllowed(smart, was)) return;
-        f.control = fixtureControlOptions(smart)[0].value;
-        f.dimmable = false;
+        const dim = fixtureControlOptions(smart).find((o) => o.value !== "开关控制");
+        // 双色/彩色灯必须留调光载体（总线＝DALI、无线＝蓝牙 Mesh）：压成开闭等于把这盏灯废掉。
+        // 其余仍按保守口径：不凭空升级成调光，旧值落到本方案的「开闭」。
+        if (dim && colorModeOf(f) !== "单色") {
+          f.control = dim.value;
+          f.dimmable = true;
+          f.tunable = true;
+        } else {
+          f.control = fixtureControlOptions(smart)[0].value;
+          f.dimmable = false;
+        }
         fixed.push(`${f.code || f.id}（${was || "空"}→${f.control}）`);
       });
     });
@@ -2020,6 +2235,19 @@ export function Workspace({
     setFocus({ x: Number(f.x) || 0, y: Number(f.y) || 0, token: Date.now() });
     setTab("plan");
     setModal("fixture");
+  }
+  // 情景页点灯具编号：不弹配置窗、不切页签，只在图上把这盏灯圈出来并居中
+  // （二维走 Plan 的定位环，三维走 Ueyi3D 的定点打光）。token 让重复点同一盏也能重新触发。
+  function locateLamp(f: Obj) {
+    if (!d) return;
+    const fl = Number.isFinite(f.floor)
+      ? Number(f.floor)
+      : d.rooms.find((r) => r.id === f.roomId)?.floor || floor;
+    const token = Date.now();
+    setSelection({ kind: "fixtures", id: f.id });
+    if (fl !== floor) setFloor(fl);
+    setFocus({ x: Number(f.x) || 0, y: Number(f.y) || 0, token });
+    setFixtureFocus({ id: f.id, token, code: String(f.code || "") });
   }
   // 一键修正色温：上下限倒置就换回来，单色对齐，情景越界的色温夹回允许区间。
   function fixCct(f: Obj) {
@@ -2324,9 +2552,12 @@ export function Workspace({
   }
   // 落图后把画布对准新对象：避免「画布放大了 → 找不到刚放的灯 → 手动缩小再放大」。
   // 只把视野居中；放大倍数保持在可读区间（<100% 回到 100%，已放大则保留）。
+  // 坐标不可用时绝不动视野：把 NaN 当成 0 居中，等于把整幅画面推到画布外（「画布消失」）。
   function focusPlaced(x: number, y: number) {
+    const fx = Number(x), fy = Number(y);
+    if (!Number.isFinite(fx) || !Number.isFinite(fy)) return;
     setZoom((z) => Math.min(2, Math.max(1, z)));
-    setFocus({ x: Number(x) || 0, y: Number(y) || 0, token: Date.now() });
+    setFocus({ x: fx, y: fy, token: Date.now() });
   }
   // 画布落点：记住坐标、把「空间」默认成落点所在房间，然后打开布灯对话框。
   function beginPlaceAt(p: { x: number; y: number }) {
@@ -2366,8 +2597,9 @@ export function Workspace({
     }
     if (hit) {
       setLampRoomId(hit.id);
-      const meta = roomSpaceCodeOf(hit);
-      if (meta) setLampSpace(meta.code);
+      // 合并房（餐厅、客厅）：把两类空间的位置表一起给出来，并保留用户已选的那一层（lampSpace 仍在表内就沿用）。
+      const codes = roomSpaceCodesOf(hit);
+      if (codes.length) clampLampPosition(codes);
     }
     setModal("place");
   }
@@ -2395,9 +2627,9 @@ export function Workspace({
   // 布灯：选好空间、位置与职能，编号（如 kcA001）自动生成并同步标准情景。
   function placeLamps(count = 1) {
     if (!d) return;
-    const spaceMeta = lampRoom
-      ? roomSpaceCodeOf(lampRoom)
-      : SPACE_CODES.find((s) => s.code === lampSpace);
+    // 编号前缀跟「选中的位置属于哪类空间」走：合并房里选客厅茶几就出 kc…，不是房间的默认码 c。
+    const spaceMeta = SPACE_CODES.find((s) => s.code === lampSpaceCode)
+      || (lampRoom ? roomSpaceCodeOf(lampRoom) : null);
     const spaceCode = spaceMeta?.code || lampSpace;
     const spaceName = spaceMeta?.name || "其他空间";
     const positionName = positionNameIn(spaceCode, lampPosition) || "其他位置";
@@ -2524,7 +2756,9 @@ export function Workspace({
       colorHue: 0,
       colorHex: "",
       group: "",
-      control: smart === "无" ? "开关控制" : smart === "无线" ? "蓝牙 Mesh" : "KNX",
+      // 总线方案的调光载体是 DALI（"KNX" 作为控制值不在方案白名单内，会被归一打回开闭，
+      // 双色/彩色灯因此在总线方案里留不住）。
+      control: smart === "无" ? "开关控制" : smart === "无线" ? "蓝牙 Mesh" : "DALI",
       circuit: circuitForRoom(n, r),
       dimmable: true,
       tunable: true,
@@ -2541,10 +2775,16 @@ export function Workspace({
       address: "",
       stripPath: [],
     };
-    applyColorMode(fx, lampColorMode);
-    if (lampColorMode === "单色") {
-      fx.cct = lampSingleCct;
-      applyColorMode(fx, "单色");
+    if (lampCatModel) {
+      // 型号把名称 / 型号 / 品牌 / 功率 / 色温 / 光束角 / 价格一并落灯；
+      // 控制方式仍归方案（makeFixture 上面已按智能方案写好），这里不覆盖。
+      applyCatalogModel(fx, lampCatModel, lampCatalogSel);
+    } else {
+      applyColorMode(fx, lampColorMode);
+      if (lampColorMode === "单色") {
+        fx.cct = lampSingleCct;
+        applyColorMode(fx, "单色");
+      }
     }
     if (lampNeedsReason) fx.cctReason = lampCctReason.trim();
     return fx;
@@ -2560,7 +2800,11 @@ export function Workspace({
       // 点哪放哪：优先用画布落点，没有落点才退回空间中心。
       const x = placePoint ? placePoint.x : room ? room.x + room.width / 2 : 200;
       const y = placePoint ? placePoint.y : room ? room.y + room.height / 2 : 200;
-      const devSpaceCode = (room ? roomSpaceCodeOf(room)?.code : "") || "x";
+      // 位置属于哪个空间就以它为名称依据：合并房里同一位置码在两类空间含义不同。
+      const devSpaceCode =
+        addPositionCode && addSpaceCodes.includes(addPositionSpace)
+          ? addPositionSpace
+          : (room ? roomSpaceCodeOf(room)?.code : "") || "x";
       const dev: Obj = {
         id: uid(),
         code: buildDeviceCode(room, addType, n.devices),
@@ -2776,18 +3020,26 @@ export function Workspace({
     const newId = uid();
     const step = (pasteCount + 1) * 24;
     const placedAt: { pos?: { x: number; y: number } } = {};
+    // 锁定/保存中 update() 不会写入：这时不能把选中态指向一个并不存在的 id，
+    // 否则右侧属性面板读到空对象、后续 patch 抛错（复制粘贴后画布异常的来源之一）。
+    if (!d || locked || busy) {
+      notify(locked ? "项目已锁定，不能粘贴" : busy ? "正在保存，稍后再试" : "数据还没载入");
+      return;
+    }
     update((n) => {
       const obj = clone(src);
       obj.id = newId;
-      obj.x = src.x + step;
-      obj.y = src.y + step;
+      // 坐标一律数值化后再偏移：src.x 缺失会得到 NaN、字符串坐标会得到「312.524」这种拼接值，
+      // 两者都会让视野与外接框算不出合法值。
+      obj.x = (Number(src.x) || 0) + step;
+      obj.y = (Number(src.y) || 0) + step;
       if (obj.points)
-        obj.points = obj.points.map((v: Obj) => ({ x: v.x + step, y: v.y + step }));
+        obj.points = obj.points.map((v: Obj) => ({ x: (Number(v.x) || 0) + step, y: (Number(v.y) || 0) + step }));
       if (obj.stripPath)
-        obj.stripPath = obj.stripPath.map((v: Obj) => ({ x: v.x + step, y: v.y + step }));
-      if (obj.x2 !== undefined) {
-        obj.x2 += step;
-        obj.y2 += step;
+        obj.stripPath = obj.stripPath.map((v: Obj) => ({ x: (Number(v.x) || 0) + step, y: (Number(v.y) || 0) + step }));
+      if (obj.x2 !== undefined && obj.y2 !== undefined) {
+        obj.x2 = (Number(obj.x2) || 0) + step;
+        obj.y2 = (Number(obj.y2) || 0) + step;
       }
       const r = n.rooms.find((x) => x.id === obj.roomId) || n.rooms[0];
       if (r) {
@@ -2818,6 +3070,7 @@ export function Workspace({
         obj.controller = "CTL-" + newId;
       }
       n.scenes.forEach((s) => {
+        s.states = s.states || {};
         s.states[newId] = clone(s.states[src.id] || { on: true, brightness: 80, cct: 3000 });
       });
       n.fixtures.push(obj);
@@ -2836,6 +3089,10 @@ export function Workspace({
     const step = (pasteCount + 1) * 24;
     let newCode = "";
     const placedAt: { pos?: { x: number; y: number } } = {};
+    if (!d || locked || busy) {
+      notify(locked ? "项目已锁定，不能粘贴" : busy ? "正在保存，稍后再试" : "数据还没载入");
+      return;
+    }
     update((n) => {
       const obj = clone(src);
       obj.id = newId;
@@ -2898,7 +3155,8 @@ export function Workspace({
   }
   const splitRoom = () => void alterRoom("split");
   const mergeRoom = () => void alterRoom("merge");
-  function addScene(name = "新情景", brightness = 70, cct = 3000) {
+  async function addScene(name = "新情景", brightness = 70, cct = 3000) {
+    if (!(await confirmDiscardDraft("新增情景"))) return;
     const id = uid();
     update((n) =>
       n.scenes.push({
@@ -2925,6 +3183,7 @@ export function Workspace({
     const standard = sceneTemplates.map((item) => [item.code + " " + item.name, item.description, item]);
     let created = 0;
     let synced = 0;
+    let empty = 0;
     update((n) => {
       // 每个标准情景里每盏灯的状态，全部由编号（空间+位置）推导，不手工维护。
       const statesFor = (label: string, template: any) => {
@@ -2943,6 +3202,10 @@ export function Workspace({
       };
       for (const [name, description, template] of standard as any[]) {
         const states = statesFor(name, template);
+        if (!Object.keys(states).length) {
+          empty += 1;
+          continue;
+        }
         const existing = n.scenes.find((s) => s.name === name);
         if (existing) {
           if (!existing.customized) {
@@ -2958,12 +3221,13 @@ export function Workspace({
         created += 1;
       }
     });
-    notify(`已写入 ${created} 个标准情景、按编号同步 ${synced} 个；不覆盖同名情景`);
+    notify(`已写入 ${created} 个标准情景、按编号同步 ${synced} 个${empty ? `；跳过 ${empty} 个本项目无灯情景` : ""}；不覆盖同名情景`);
   }
   // 写入场景包：43 个场景一次落库，每盏灯的状态仍由编号（空间×职能×位置）推导。
   function writeScenePackage() {
     let created = 0;
     let synced = 0;
+    let empty = 0;
     update((n) => {
       for (const t of PACKAGE_TEMPLATES) {
         const label = t.code + " " + t.name;
@@ -2975,6 +3239,11 @@ export function Workspace({
             : null;
           if (st) states[f.id] = st;
         });
+        // 本项目没有这盏情景控制的灯：跳过并计入回执，不写空情景。
+        if (!Object.keys(states).length) {
+          empty += 1;
+          continue;
+        }
         const existing = n.scenes.find((s) => s.name === label || s.name === t.name);
         if (existing) {
           existing.states = states;
@@ -3008,17 +3277,24 @@ export function Workspace({
       }
     });
     notify(
-      `已写入场景包「${SCENE_PACKAGE.name}」：新建 ${created} 个、按编号同步 ${synced} 个情景；不覆盖同名情景`,
+      `已写入场景包「${SCENE_PACKAGE.name}」：新建 ${created} 个、按编号同步 ${synced} 个情景${empty ? `，跳过 ${empty} 个本项目无灯情景` : ""}；不覆盖同名情景`,
     );
   }
-  // 一键设置场景：按「户型 + 本项目空间」筛出可用场景后一次写入（默认先清空原有情景）。
+  // 一键设置场景：只维护标准情景。新增情景建的自定义情景、以及用户改过的情景不删不覆盖；
+  // 勾选「清空标准情景」也只清未改过的标准情景。
   function applySceneSetup() {
     const codes = new Set(setupSel);
     const clearFirst = setupClear;
+    const activeBefore = (d?.scenes || []).find((s) => s.id === activeScene);
     let created = 0;
     let synced = 0;
+    let kept = 0;
+    let skipped = 0;
+    let empty = 0;
     update((n) => {
-      if (clearFirst) n.scenes = [];
+      const keeps = (s: Obj) => !s.standard || !!s.customized;
+      kept = n.scenes.filter(keeps).length;
+      if (clearFirst) n.scenes = n.scenes.filter(keeps);
       const statesFor = (label: string, t: Obj) => {
         const states: Obj = {};
         n.fixtures.forEach((f) => {
@@ -3037,8 +3313,23 @@ export function Workspace({
       };
       const add = (t: any, label: string) => {
         const states = statesFor(label, t);
-        const existing = n.scenes.find((s) => s.name === label || s.name === t.name);
+        // 本项目一盏都控不到就不写：写进去只是左栏多一条点开不亮的空情景。
+        if (!Object.keys(states).length) {
+          empty += 1;
+          return;
+        }
+        const sameName = n.scenes.filter((s) => s.name === label || s.name === t.name);
+        if (sameName.some((s) => !s.standard)) {
+          // 同名自定义情景优先：既不覆盖，也不另建一个同名的标准情景。
+          skipped += 1;
+          return;
+        }
+        const existing = sameName.find((s) => s.standard);
         if (existing) {
+          if (existing.customized) {
+            skipped += 1;
+            return;
+          }
           existing.states = states;
           existing.standard = true;
           synced += 1;
@@ -3054,9 +3345,15 @@ export function Workspace({
         if (codes.has(t.code)) add(t, t.code + " " + t.name);
       if (!noSmart) ensurePanels(n, smart);
     });
-    setActiveScene("");
+    const activeSurvives = !!activeBefore && !(clearFirst && activeBefore.standard && !activeBefore.customized);
+    if (!activeSurvives) setActiveScene("");
     setModal("");
-    notify(`已一键设置 ${created} 个可用情景（按「${p?.type || "平层"}」+ 本项目空间筛选${clearFirst ? "，已清空原情景" : ""}）`);
+    const bits = [`新建 ${created} 个`];
+    if (synced) bits.push(`更新 ${synced} 个`);
+    if (kept) bits.push(`保留 ${kept} 个自定义/已改情景`);
+    if (skipped) bits.push(`跳过 ${skipped} 个已改情景`);
+    if (empty) bits.push(`跳过 ${empty} 个本项目无灯情景`);
+    notify(`一键设置完成：${bits.join("、")}（按「${p?.type || "平层"}」+ 本项目空间筛选）`);
   }
 
   /**
@@ -3119,6 +3416,23 @@ export function Workspace({
     });
     return true;
   }
+  // 切走/新建情景前先拦一下：草稿没保存就离开，等于把这些修改丢了。
+  async function confirmDiscardDraft(action: string) {
+    if (!sceneDirty) return true;
+    const ok = await confirmDanger({
+      title: `「${scene?.name || "当前情景"}」有未保存的修改`,
+      detail: `${action}会丢弃这些修改。要保留就先点右下角的「保存修改」。`,
+      confirmText: "丢弃修改并继续",
+      cancelText: "留在本情景",
+    });
+    if (ok) setSceneDraft(null);
+    return ok;
+  }
+  async function pickScene(nextId: string) {
+    if (!nextId || nextId === activeScene) return;
+    if (!(await confirmDiscardDraft("切换情景"))) return;
+    setActiveScene(nextId);
+  }
   function scenePatch(k: string, v: any) {
     if (!scene) return;
     editSceneDraft((s) => {
@@ -3138,6 +3452,34 @@ export function Workspace({
         [k]: v,
       };
       s.customized = true;
+    });
+  }
+  /**
+   * 单灯卡片就地解锁：改的是灯位属性（与「灯具属性」面板同一套口径），
+   * 并跟着升控制载体——开闭载体留不住调光/调色温，不升会出现「滑块能动、现场调不了」。
+   */
+  function unlockLampCap(fid: string, want: "dimmable" | "tunable") {
+    update((n) => {
+      const o = n.fixtures.find((v) => v.id === fid);
+      if (!o) return;
+      if (want === "tunable") applyColorMode(o, "双色");
+      else o.dimmable = true;
+      const carrier = smart === "KNX" ? "DALI" : smart === "无线" ? "蓝牙 Mesh" : "";
+      if (carrier) {
+        // 旧数据里的「KNX / 无线协议」先归到本方案的合法值，再统一升到调光载体。
+        normalizeFixtureControl(o, String(smart));
+        if (o.control === "开关控制") o.control = carrier;
+        o.dimmable = true;
+      }
+      delete o.cctPending;
+      n.scenes.forEach((s) => {
+        const st = s.states[o.id];
+        if (!st) return;
+        st.brightness = Math.min(st.brightness, o.brightnessMax);
+        st.cct = Math.min(o.cctMax, Math.max(o.cctMin, st.cct));
+        if (want === "dimmable" && !st.on) st.brightness = Math.min(80, o.brightnessMax);
+      });
+      (n.devices || []).forEach((dev) => syncSensorCct(dev, n.fixtures));
     });
   }
   async function filesUpload(
@@ -3276,9 +3618,11 @@ export function Workspace({
   }, [id, p?.id, dxfPreviewUrl, spacePreview?.state]);
   /** 只有「当前铺的这张底图就是那张 DXF 预览」时才给矩形，别把别的底图也拉变形。 */
   const bgRectFor = (url: string) => {
-    return planBg && url && String(planBg.url) === url
-      ? { x: Number(planBg.x), y: Number(planBg.y), w: Number(planBg.w), h: Number(planBg.h) }
-      : null;
+    if (!planBg || !url || String(planBg.url) !== url) return null;
+    const v = [planBg.x, planBg.y, planBg.w, planBg.h].map(Number);
+    // 底图字段坏一个就会让 viewBox 变成 NaN，整张画布不渲染 —— 宁可不铺底图矩形
+    if (!v.every(Number.isFinite) || v[2] <= 0 || v[3] <= 0) return null;
+    return { x: v[0], y: v[1], w: v[2], h: v[3] };
   };
 
   /** 三维生成 + 空间预览层（2026-10-12 本地口径：预览与修改都在同一个界面里）。 */
@@ -3293,6 +3637,12 @@ export function Workspace({
       setSpacePreview({ state: "error", error: e.message, stage: "生成失败" });
       return;
     }
+    const job = await wait3dJob("生成失败", "生成超时，请到三维页重试");
+    if (job && job.state === "done") await openSpacePreview();
+  }
+
+  /** 轮询三维生成进度到 done/error。连续三次查不到就立刻报错（以前要等满 12 分钟才超时）。 */
+  async function wait3dJob(stage: string, timeoutNote: string): Promise<Obj | null> {
     let jobFailures = 0;
     for (let i = 0; i < 900; i += 1) {
       const j = await api<Obj>(`/lighting3d/${id}/job`).catch(() => null);
@@ -3300,8 +3650,8 @@ export function Workspace({
         // 以前这里连失败 900 次也当作「还在跑」，用户要等 12 分钟才看到超时。
         jobFailures += 1;
         if (jobFailures >= 3) {
-          setSpacePreview({ state: "error", error: "三维进度查询连续失败，请检查服务是否在运行后重试", stage: "生成失败" });
-          return;
+          setSpacePreview({ state: "error", error: "三维进度查询连续失败，请检查服务是否在运行后重试", stage });
+          return null;
         }
         await new Promise((r) => setTimeout(r, 1200));
         continue;
@@ -3309,25 +3659,50 @@ export function Workspace({
       jobFailures = 0;
       if (j.state !== "running" && j.state !== "idle") {
         setSpacePreview(j);
-        if (j.state === "done") await openSpacePreview();
-        return;
+        return j;
       }
       setSpacePreview(v => ({ ...v, ...j }));
       await new Promise((r) => setTimeout(r, 800));
     }
-    setSpacePreview({ state: "error", error: "生成超时，请到三维页重试", stage: "生成失败" });
+    setSpacePreview({ state: "error", error: timeoutNote, stage });
+    return null;
+  }
+
+  /** 三维预览层里的「重新解析」：后端按当前解析器重跑项目里那张图纸（不用再传一次 DXF），
+   *  跑完重开这一层到「三维预览」。解析器升级后老项目不会自己变新，这里给一条不绕路的重跑入口。
+   *  已确认（冻结）的项目必须先问一句：点头才用图纸结果整套替换已确认空间（2026-10-27 拍板）。 */
+  async function reparse3d() {
+    if (d?.spaceDefinition?.status === "confirmed") {
+      askDanger("重新解析会替换已确认空间？",
+        () => void doReparse3d(true),
+        "图纸解析出的空间将整套覆盖当前空间：手工改过的名字、边界会丢，灯具/设备/家具按落点重新挂到新空间，挂不上的变成「暂未归属」。");
+      return;
+    }
+    await doReparse3d(false);
+  }
+  async function doReparse3d(reapply: boolean) {
+    setSpacePreview({ state: "running", recognizing: false, pct: 0, stage: "按当前解析器重新解析图纸…", initialPhase: "review", editorKey: uid() });
+    try {
+      await flush();
+      await api(`/lighting3d/${id}/regenerate`, { method: "POST" });
+    } catch (e: any) {
+      setSpacePreview({ state: "error", error: e.message, stage: "重新解析失败" });
+      return;
+    }
+    const job = await wait3dJob("重新解析失败", "重新解析超时，请稍后再试");
+    if (job && job.state === "done") await openSpacePreview(undefined, reapply);
   }
 
   /** 生成完先把「预览里那套空间」落成**可编辑**的设计空间，再开预览层（就地改名 / 拖边界）。 */
-  async function openSpacePreview(initialPhase?: EditingPhase) {
+  async function openSpacePreview(initialPhase?: EditingPhase, reapply = false) {
     const editorKey = uid();
     // 已确认的项目点进来就是「回来改东西」：落在修改空间，进度条才不会退回三维预览（2026-10-16）。
-    const phase = initialPhase
-      || (d?.spaceDefinition?.status === "confirmed" ? "spaces" : "review");
+    // 重新解析并替换（reapply）走的是全新一套空间，必须回到三维预览再走一遍确认。
+    const phase = initialPhase || (reapply || d?.spaceDefinition?.status !== "confirmed" ? "review" : "spaces");
     setSpacePreview({ state: "running", recognizing: false, pct: 0, stage: "正在准备空间与底图…", initialPhase: phase, editorKey });
     try {
       await flush();
-      if (!initialPhase || initialPhase === "review") await api(`/lighting3d/${id}/preview-to-design`, { method: "POST" });
+      if (!initialPhase || initialPhase === "review") await api(`/lighting3d/${id}/preview-to-design${reapply ? "?reapply=1" : ""}`, { method: "POST" });
       w.accept(await api<Project>(`/projects/${id}`));
     } catch (e: any) {
       notify(`空间预览准备失败：${e.message}`, "error");
@@ -3470,7 +3845,7 @@ export function Workspace({
       );
     }, "");
   }
-  // 上传 IES：解析成功 / 配光不支持 / 解析失败三种结果分别提示，不再一律报「已解析」。
+  // 上传 IES：实测剖面 / 不支持 / 解析失败三种结果分别提示；后两种该灯标红「未实测」，不退回理论值。
   async function uploadIes(file?: File) {
     if (!file || selection?.kind !== "fixtures" || !selected) return;
     const fd = new FormData();
@@ -3483,17 +3858,18 @@ export function Workspace({
       w.accept(next);
       const ies = next.design?.fixtures?.find((f: Obj) => f.id === selected.id)?.ies;
       const parsed = ies?.parsed;
+      const prof = ies?.profile || parsed?.profile;
       if (ies?.status === "parsed") {
         notify(
-          `IES 已解析：${file.name}${parsed?.beamAngleApprox ? ` · 光束角 ${parsed.beamAngleApprox}°` : ""}${parsed?.maxCandela ? ` · 峰值 ${parsed.maxCandela} cd` : ""}（仅配光参考）`,
+          `IES 已按实测剖面出光斑：${file.name}${prof?.thetaHalfDeg ? ` · θ_half ${prof.thetaHalfDeg}°` : ""}${prof?.thetaCutDeg ? ` · θ_cut ${prof.thetaCutDeg}°（外缘 R＝${prof.rOverH}×H）` : ""}${parsed?.maxCandela ? ` · 峰值 ${parsed.maxCandela} cd` : ""}`,
         );
       } else if (ies?.status === "unsupported") {
         notify(
-          `IES 已留存，但不能按 C 平面半角使用：${parsed?.unsupportedReason || "配光类型或峰值位置不支持"}`,
+          `IES 已留存，但不能按 C 平面半角使用：${parsed?.unsupportedReason || "配光类型或峰值位置不支持"}。该灯标红「未实测」，不画光斑、不退回理论值`,
           "error",
         );
       } else {
-        notify(`IES 已留存但解析失败：${ies?.parseError || "文件格式不完整"}`, "error");
+        notify(`IES 解析失败：${ies?.parseError || "文件格式不完整"}。该灯标红「未实测」，不画光斑、不退回理论值`, "error");
       }
     }, "");
   }
@@ -3757,6 +4133,8 @@ export function Workspace({
   const railMain = [
     { id: "plan", label: "图纸", icon: Layers3, tab: "plan" },
     { id: "fixtures", label: "布灯", icon: Lightbulb, tab: "fixtures" },
+    { id: "collab", label: "协同", icon: Users, tab: "collab" },
+    { id: "gate", label: "闸门", icon: Gauge, tab: "gate" },
     { id: "review", label: "复核", icon: ShieldCheck, tab: "deliver" },
     { id: "export", label: "交付", icon: Download, tab: "deliver" },
   ];
@@ -3772,8 +4150,30 @@ export function Workspace({
     if (section === "export") setV2Delivery("export");
     setTab(t);
   };
+  /** 三维「全屏看」：把 iframe 那块容器撑满整屏（Esc 退出）。
+   *  只从点按钮所在的 .scene-canvas 里找容器，不新增布局分支、不动二维。 */
+  const go3dFullscreen = (from: HTMLElement) => {
+    const box = from
+      .closest(".scene-canvas")
+      ?.querySelector(".scene-model-3d") as HTMLElement | null;
+    if (!box) return;
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    else void box.requestFullscreen?.().catch(() => {});
+  };
+  const scene3dFullBtn =
+    p.mode === "3D" && view3d ? (
+      <button
+        type="button"
+        className="scene-3d-full"
+        title="把三维画布撑满整个屏幕（Esc 退出）"
+        onClick={(e) => go3dFullscreen(e.currentTarget)}
+      >
+        <Maximize size={13} /> 全屏
+      </button>
+    ) : null;
+  const scene3dOn = tab === "scenes" && p.mode === "3D" && view3d;
   return (
-    <div className={"studio-shell" + (shellV2 ? " wsv2" : "") + (shellV2 && tab === "plan" ? " wsv2-plan" : "") + (v2Tree ? " wsv2-treeopen" : "") + (shellV2 && tab === "deliver" ? (" wsv2-d" + v2Delivery) : "") + (shellV2 && tab === "scenes" && p.mode === "3D" && view3d ? " scene3d-full" : "")}>
+    <div className={"studio-shell" + (shellV2 ? " wsv2" : "") + (shellV2 && tab === "plan" ? " wsv2-plan" : "") + (v2Tree ? " wsv2-treeopen" : "") + (shellV2 && tab === "deliver" ? (" wsv2-d" + v2Delivery) : "") + (shellV2 && scene3dOn ? " scene3d-full" : "") + (scene3dOn ? " scene3d-compact" : "")}>
       {shellV2 ? (
         <>
           <header className="wsv2-top">
@@ -3956,6 +4356,8 @@ export function Workspace({
           {[
             { id: "plan", label: "底图与空间", icon: Layers3 },
             { id: "fixtures", label: "灯具配置", icon: Lightbulb },
+            { id: "collab", label: "协同与冲突", icon: Users },
+            { id: "gate", label: "闸门录入", icon: Gauge },
             { id: "scenes", label: "智能情景", icon: Sun },
             { id: "renders", label: "效果与示意", icon: Image },
             { id: "deliver", label: "复核与交付", icon: ShieldCheck },
@@ -4012,6 +4414,7 @@ export function Workspace({
           // 关掉这一层之前，先把没落盘的改动写完（await）：不然「改到一半点关闭」再刷新，
           // 服务端还停在上一步（2026-10-16 反馈「进度条与所在环节不匹配」的另一半原因）。
           onClose={async () => { await flush().catch(() => {}); setSpacePreview(null); }}
+          reparse={reparse3d}
           job={spacePreview}
         />
       )}
@@ -4122,9 +4525,11 @@ export function Workspace({
               </span>
             </div>
           </div>
-          {/* 七步条挂页头：功能句行 → 七步条 → 工具行。review 步会写库（preview-to-design），批 1 不接，灰掉。 */}
+          {/* 七步条挂页头：功能句行 → 七步条 → 工具行。
+              2026-10-26 现场：七步条里的「3 · 三维预览」被写死成禁用，用户点了没反应（报「三维预览打不开」）。
+              preview-to-design 对已确认项目是 no-op（后端第一件事就判断 confirmed 直接返回），所以放开此步。 */}
           <DrawingProgress project={p} design={d} job={spacePreview}
-            confirmed={spaceConfirmed} onStep={jumpDrawingStep} blockedSteps={["review"]} />
+            confirmed={spaceConfirmed} onStep={jumpDrawingStep} />
           <div className="editor-toolbar">
             <div>
               {/* 主操作 3（B7）：放置灯具 / 画灯带 / 调整家具。确认空间单列，不计这一段。 */}
@@ -4501,29 +4906,20 @@ export function Workspace({
                     {spotFixture.circuit ? ` · 回路 ${spotFixture.circuit}` : ""}
                     {spotFixture.dimmable ? " · 可调光" : ""}
                   </small>
-                  {hasBeam(spotFixture) && (
-                    <small>
-                      光束角{" "}
-                      {spotFixture.beamAngle ??
-                        defaultBeamAngle(spotFixture.type)}
-                      ° · 地面光斑 Ø
-                      {(
-                        spotDiameterMetres(
-                          spotFixture.installHeight,
-                          spotFixture.beamAngle ??
-                            defaultBeamAngle(spotFixture.type),
-                        ) *
-                        (Number(spotFixture.spotScale) > 0
-                          ? Number(spotFixture.spotScale)
-                          : 1)
-                      ).toFixed(2)}{" "}
-                      m
-                      {(Number(spotFixture.spotScale) > 0
-                        ? Number(spotFixture.spotScale)
-                        : 1) !== 1 &&
-                        `（理论值 ×${Number(spotFixture.spotScale)}）`}
-                    </small>
-                  )}
+                  {hasBeam(spotFixture) &&
+                    (() => {
+                      const beam = spotFixture.beamAngle ?? defaultBeamAngle(spotFixture.type);
+                      const b = spotBasisForFixture(spotFixture, spotFixture.installHeight, beam);
+                      const sc = Number(spotFixture.spotScale) > 0 ? Number(spotFixture.spotScale) : 1;
+                      return (
+                        <small>
+                          光束角 {beam}° · 地面光斑{" "}
+                          {b.rMetres === null
+                            ? "Ø 未实测（配光文件不可用，不退回理论值）"
+                            : `Ø ${(2 * b.rMetres * sc).toFixed(2)} m · ${b.source}${sc !== 1 ? `（×${sc} 光斑大小）` : ""}`}
+                        </small>
+                      );
+                    })()}
                 </div>
               )}
               {/* 底图与空间＝纯绘图面（2026-10-19 定）：这一页只有平面图，不放任何三维。
@@ -4670,18 +5066,25 @@ export function Workspace({
                         <div className="wsv2-ikv"><span>灯具</span><b>{v2SelFix.code} · {v2SelFix.name}</b></div>
                         <div className="wsv2-ikv"><span>型号</span><b>{v2SelFix.model || "待补"}</b></div>
                         <div className="wsv2-ikv"><span>已绑 IES</span><b>{v2SelFix.ies?.name || "未绑定"}</b></div>
-                        {v2SelFix.ies && <div className="wsv2-ikv"><span>状态</span><b>{v2SelFix.ies.status === "parsed" ? "已解析 · 配光参考" : v2SelFix.ies.status === "unsupported" ? "配光不支持 · 已留存" : (v2SelFix.ies.status === "parse_failed" || v2SelFix.ies.status === "parse-failed") ? "解析失败 · 已留存" : "已留存"}</b></div>}
-                        {v2SelFix.ies?.parsed && <>
+                        {v2SelFix.ies && <div className="wsv2-ikv"><span>状态</span><b>{v2SelFix.ies.status === "parsed" ? "已解析 · 按实测剖面出光斑" : v2SelFix.ies.status === "unsupported" ? "配光不支持 · 已留存（图上标红未实测）" : (v2SelFix.ies.status === "parse_failed" || v2SelFix.ies.status === "parse-failed") ? "解析失败 · 已留存（图上标红未实测）" : "已留存"}</b></div>}
+                        {v2SelFix.ies && <div className="wsv2-ikv"><span>配光来源</span><b>{v2SelFix.ies.photometry || (v2SelFix.ies.status === "parsed" ? "实测IES" : "未实测")}</b></div>}
+                        {v2SelFix.ies?.parsed && (() => {
+                          const prof = v2SelFix.ies.profile || v2SelFix.ies.parsed.profile || {};
+                          return (<>
                           <div className="wsv2-ikv"><span>总光通量</span><b>{v2SelFix.ies.parsed.totalLumens ? `${v2SelFix.ies.parsed.totalLumens} lm` : "—"}</b></div>
                           <div className="wsv2-ikv"><span>峰值光强</span><b>{v2SelFix.ies.parsed.maxCandela ? `${v2SelFix.ies.parsed.maxCandela} cd` : "—"}</b></div>
                           <div className="wsv2-ikv"><span>近似光束角</span><b>{v2SelFix.ies.parsed.beamAngleApprox ? `${v2SelFix.ies.parsed.beamAngleApprox}°` : "—"}</b></div>
+                          {prof.thetaHalfDeg !== undefined && (
+                            <div className="wsv2-ikv"><span>实测剖面</span><b>θ_half {prof.thetaHalfDeg}° · θ_cut {prof.thetaCutDeg}° · R＝{prof.rOverH}×H（外缘取 θ_cut）</b></div>
+                          )}
                           {v2SelFix.ies.parsed.beamAngleMin !== v2SelFix.ies.parsed.beamAngleMax && (
                             <div className="wsv2-ikv"><span>光束角范围</span><b>{v2SelFix.ies.parsed.beamAngleMin}° – {v2SelFix.ies.parsed.beamAngleMax}°</b></div>
                           )}
                           {v2SelFix.ies.status === "parsed" && !!v2SelFix.ies.parsed.beamAngleApprox && (
-                            <button className="wsv2-iupload" onClick={() => { patch("beamAngle", v2SelFix.ies.parsed.beamAngleApprox); notify(`已把光斑参考角切到 ${v2SelFix.ies.parsed.beamAngleApprox}°（仍为理论参考，不做正式照度）`); }}>应用解析配光（仅改光斑参考角）</button>
+                            <button className="wsv2-iupload" onClick={() => { patch("beamAngle", v2SelFix.ies.parsed.beamAngleApprox); notify(`已把光束角「标注」改成解析值 ${v2SelFix.ies.parsed.beamAngleApprox}°（光斑仍按实测剖面，不做正式照度）`); }}>应用解析配光（仅改光束角标注）</button>
                           )}
-                        </>}
+                          </>);
+                        })()}
                         {v2SelFix.ies?.parseError && <div className="wsv2-inote">{v2SelFix.ies.parseError}</div>}
                         {v2SelFix.ies?.parsed?.headerFields === 13 && <div className="wsv2-inote">表头为 13 字段（含镇流器三值），已按规范跳过，不参与角度读取。</div>}
                         {(v2SelFix.ies?.parsed?.warnings || []).map((w: string) => <div className="wsv2-inote" key={w}>{w}</div>)}
@@ -5058,25 +5461,59 @@ export function Workspace({
                           <Field label="位置（家具/功能位）">
                             {(() => {
                               const rm = d.rooms.find((r) => r.id === selected.roomId);
-                              const sc = roomSpaceCodeOf(rm)?.code || "x";
+                              // 合并空间（「餐厅、客厅」）要列出所含各类空间的位置表：
+                              // 同一位置码在两类空间含义不同，值用「空间码:位置码」区分。
+                              const codes = roomSpaceCodesOf(rm);
+                              const scs = codes.length ? codes : ["x"];
+                              const sc = roomSpaceCodeOf(rm)?.code || scs[0];
+                              const groups = groupedPositionsForSpaces(scs);
+                              const options = groups.flatMap((g) => g.positions);
+                              const candidates = selected.positionCode
+                                ? options.filter((p) => p.code === selected.positionCode)
+                                : [];
+                              const resolved =
+                                candidates.find((p) => p.name === selected.position) ||
+                                candidates[0] ||
+                                null;
+                              // 换空间后旧位置码可能不在新空间的位置表里：不兜选项的话
+                              // <select> 会显示「不指定位置」，数据里却还留着旧码（2026-10-27 同类 bug）。
+                              const stale = selected.positionCode && !resolved ? selected.positionCode : "";
+                              const value = !selected.positionCode
+                                ? ""
+                                : resolved
+                                  ? scs.length > 1
+                                    ? `${resolved.spaceCode}:${resolved.code}`
+                                    : resolved.code
+                                  : selected.positionCode;
                               return (
                                 <select
-                                  value={selected.positionCode || ""}
+                                  value={value}
                                   aria-label="设备位置"
                                   onChange={(e) => {
-                                    const code = e.target.value;
+                                    const raw = e.target.value;
+                                    const sep = raw.indexOf(":");
+                                    const posSpace = sep > 0 ? raw.slice(0, sep) : sc;
+                                    const code = sep > 0 ? raw.slice(sep + 1) : raw;
                                     update((n) => {
                                       const dev = n.devices.find((v) => v.id === selected.id)!;
                                       dev.positionCode = code;
-                                      dev.position = code ? positionNameIn(sc, code) : "";
+                                      dev.position = code ? positionNameIn(posSpace, code) : "";
                                     });
                                   }}
                                 >
                                   <option value="">不指定位置</option>
-                                  {groupedPositionsForSpace(sc).map((g) => (
+                                  {stale && (
+                                    <option value={stale}>
+                                      {stale} · {selected.position || positionNameIn(sc, stale) || "该空间无此位置"}（请重选）
+                                    </option>
+                                  )}
+                                  {groups.map((g) => (
                                     <optgroup key={g.group} label={g.group}>
                                       {g.positions.map((item) => (
-                                        <option key={item.code} value={item.code}>
+                                        <option
+                                          key={`${item.spaceCode}:${item.code}`}
+                                          value={scs.length > 1 ? `${item.spaceCode}:${item.code}` : item.code}
+                                        >
                                           {item.code} · {item.name}
                                         </option>
                                       ))}
@@ -5565,13 +6002,37 @@ export function Workspace({
                           multiFloor={p.floors > 1}
                           basements={p.basements || 0}
                           smart={p.smart}
+                          catalog={catalog}
                           patch={patch}
+                          applyCatalog={(m, sel) =>
+                            update((n) => {
+                              const f = n.fixtures.find(
+                                (f) => f.id === selected.id,
+                              )!;
+                              if (!m) {
+                                delete f.catalogId;
+                                delete f.catalogBrand;
+                                return;
+                              }
+                              f.productId = "";
+                              applyCatalogModel(f, m, sel);
+                              n.scenes.forEach((s) => {
+                                if (s.states[f.id])
+                                  s.states[f.id].cct = Math.min(
+                                    f.cctMax,
+                                    Math.max(f.cctMin, s.states[f.id].cct),
+                                  );
+                              });
+                            })
+                          }
                           applyProduct={(prod) =>
                             update((n) => {
                               const f = n.fixtures.find(
                                 (f) => f.id === selected.id,
                               )!;
-                              applyProductToFixture(f, prod);
+                              delete f.catalogId;
+                              delete f.catalogBrand;
+                              applySelectedProduct(f, prod, p.smart);
                               if (f.type === "灯带") {
                                 f.powerSupply = f.powerSupply || "PS-" + f.code;
                                 f.controller = f.controller || "CTL-" + f.code;
@@ -5753,6 +6214,12 @@ export function Workspace({
             </aside>
           </div>
         </>
+      )}
+      {tab === "collab" && (
+        <CollabPanel id={id} notify={notify} locked={locked} />
+      )}
+      {tab === "gate" && (
+        <GatePanel id={id} notify={notify} locked={locked} />
       )}
       {tab === "fixtures" && (
         <main className="studio-content">
@@ -6047,9 +6514,14 @@ export function Workspace({
                       <small>{f.control}</small>
                     </td>
                     <td className="amount">
-                      {f.priceMissing && !(Number(f.price) > 0)
-                        ? "—待补价"
-                        : "¥ " + Number(f.price || 0).toFixed(2)}
+                      {Number(f.price) > 0
+                        ? "¥ " + Number(f.price).toFixed(2)
+                        : f.catalogPriceCurrency === "EUR" &&
+                            Number(f.catalogPriceAmount) > 0
+                          ? `€${Number(f.catalogPriceAmount).toLocaleString("zh-CN")}（目录价·未折人民币）`
+                          : f.priceMissing
+                            ? "—待补价"
+                            : "¥ " + Number(f.price || 0).toFixed(2)}
                     </td>
                     <td>
                       <span
@@ -6506,6 +6978,7 @@ export function Workspace({
                         </option>
                       ))}
                     </select>
+                    {scene3dFullBtn}
                   </div>
                   {p.floors > 1 && !(p.mode === "3D" && view3d) ? (
                     <div
@@ -6547,7 +7020,7 @@ export function Workspace({
                       ))}
                     </div>
                   ) : (
-                    p.mode === "3D" && view3d ? <Ueyi3D projectId={id} floor={floor} states={scene?.states} back onBack2D={() => setView3d(false)} /> : <Plan
+                    p.mode === "3D" && view3d ? <Ueyi3D projectId={id} floor={floor} states={scene?.states} scenes={d.scenes} sceneId={scene?.id} onPickScene={pickScene} back onBack2D={() => setView3d(false)} /> : <Plan
                       design={d}
                       projectArea={p.area}
                       showFixtureLayer={fixtureLayer}
@@ -6604,18 +7077,22 @@ export function Workspace({
                           <div className="scene-rail-group">
                             {gname[g] ? g + " · " + gname[g] : g}
                           </div>
-                          {list.map((s) => {
+                          {list.map((saved) => {
+                            // 当前情景有草稿时，左栏也跟着显示草稿里的名字 / 点亮数，改完立刻能对上。
+                            const s = sceneDirty && scene?.id === saved.id ? scene : saved;
+                            const stateCount = Object.keys(s.states || {}).length;
+                            const noLamps = stateCount === 0;
                             const onCount = Object.values(s.states || {}).filter((st: any) => st.on).length;
                             const total = Math.max(1, d.fixtures.filter(isSceneLight).length);
                             return (
                               <button
-                                key={s.id}
-                                className={"scene-rail-item" + (scene?.id === s.id ? " active" : "")}
-                                onClick={() => setActiveScene(s.id)}
-                                title={`${s.name} · ${onCount} 盏点亮`}
+                                key={saved.id}
+                                className={"scene-rail-item" + (scene?.id === saved.id ? " active" : "") + (sceneDirty && scene?.id === saved.id ? " dirty" : "") + (noLamps ? " empty" : "")}
+                                onClick={() => pickScene(saved.id)}
+                                title={noLamps ? `${s.name} · 本项目没有这盏情景控制的灯` : `${s.name} · ${onCount} 盏点亮${sceneDirty && scene?.id === saved.id ? " · 未保存" : ""}`}
                               >
                                 <span className="nm">{s.name}</span>
-                                <span className="n">{onCount}</span>
+                                <span className="n">{noLamps ? "无灯" : onCount}</span>
                                 <span className="sub">{s.trigger || "手动"} · {Number(s.fade) || 0}s</span>
                                 <i className="bar" style={{ width: Math.round((onCount / total) * 100) + "%" }} />
                               </button>
@@ -6639,19 +7116,34 @@ export function Workspace({
                           <i />
                           {scene.name} <small>{p.mode === "3D" && view3d ? "3D 模型 / 非实景渲染" : "灯光分布示意 / 非实景"}</small>
                         </span>
-                        {layerSwitch}
-                        {p.floors > 1 ? (
-                          <span className="floor-link-badge">
-                            <Link size={12} /> {levelSummary(p.floors, p.basements)}同步 · 全屋联动
-                          </span>
-                        ) : null}
-                        {(p.floors <= 1 || (p.mode === "3D" && view3d)) && (
-                          <select aria-label="场景预览楼层" value={floor} onChange={(e) => setFloor(+e.target.value)}>
-                            {floorLevels(p.floors, p.basements).map((lv) => (
-                              <option key={lv.value} value={lv.value}>{lv.label}</option>
-                            ))}
-                          </select>
-                        )}
+                        {/* 右侧控件整组换行：楼层/全屏不许被拆散成单独一行（2026-10-27 排版拥挤） */}
+                        <div className="scene-canvas-tools">
+                          {layerSwitch}
+                          {p.floors > 1 ? (
+                            <span className="floor-link-badge">
+                              <Link size={12} /> {levelSummary(p.floors, p.basements)}同步 · 全屋联动
+                            </span>
+                          ) : null}
+                          {(p.floors <= 1 || (p.mode === "3D" && view3d)) && (
+                            <select aria-label="场景预览楼层" value={floor} onChange={(e) => setFloor(+e.target.value)}>
+                              {floorLevels(p.floors, p.basements).map((lv) => (
+                                <option key={lv.value} value={lv.value}>{lv.label}</option>
+                              ))}
+                            </select>
+                          )}
+                          {p.mode === "3D" && (
+                            <button
+                              type="button"
+                              className="scene-view-toggle"
+                              title={view3d ? "切到二维平面图，逐盏灯调亮度 / 色温" : "切回三维模型看效果"}
+                              onClick={() => setView3d((v) => !v)}
+                            >
+                              {view3d ? <Layers3 size={13} /> : <Box size={13} />}
+                              {view3d ? "看平面图编辑" : "看三维效果"}
+                            </button>
+                          )}
+                          {scene3dFullBtn}
+                        </div>
                       </div>
                       {p.floors > 1 && !(p.mode === "3D" && view3d) ? (
                         <div
@@ -6684,12 +7176,19 @@ export function Workspace({
                                 mini={false}
                                 showGrid={false}
                                 fadeTick={fadeTick}
+                                focus={lv.value === floor ? focus : null}
                                 background={backgroundUrlFor(lv.value)}
                                 backgroundRect={bgRectFor(backgroundUrlFor(lv.value))}
                                 voidNote={voidNoteFor(lv.value)}
                                 readonly
                                 selection={selection}
-                                onSelect={setSelection}
+                                onSelect={(s) => {
+                                  setSelection(s);
+                                  if (s?.kind === "fixtures") {
+                                    const f = d.fixtures.find((x) => x.id === s.id);
+                                    if (f) setFixtureFocus({ id: f.id, token: Date.now(), code: String(f.code || "") });
+                                  }
+                                }}
                                 roam={roamOn && lv.value === roamFloor ? roamPos : null}
                                 roamArmed={roamOn}
                                 onRoamMove={(x, y) => {
@@ -6701,7 +7200,7 @@ export function Workspace({
                           ))}
                         </div>
                       ) : (
-                        p.mode === "3D" && view3d ? <Ueyi3D projectId={id} floor={floor} states={scene?.states} back onBack2D={() => setView3d(false)} /> : <Plan
+                        p.mode === "3D" && view3d ? <Ueyi3D projectId={id} floor={floor} states={scene?.states} scenes={d.scenes} sceneId={scene?.id} onPickScene={pickScene} focusFixture={fixtureFocus} back onBack2D={() => setView3d(false)} /> : <Plan
                           design={d}
                           scene={roamSceneOf(scene)}
                           projectArea={p.area}
@@ -6711,6 +7210,7 @@ export function Workspace({
                           mini={false}
                           showGrid={false}
                           fadeTick={fadeTick}
+                          focus={focus}
                           background={backgroundUrlFor(floor)}
                           backgroundRect={bgRectFor(backgroundUrlFor(floor))}
                           voidNote={voidNoteFor(floor)}
@@ -6718,6 +7218,10 @@ export function Workspace({
                           selection={selection}
                           onSelect={(s) => {
                             setSelection(s);
+                            if (s?.kind === "fixtures") {
+                              const f = d.fixtures.find((x) => x.id === s.id);
+                              if (f) setFixtureFocus({ id: f.id, token: Date.now(), code: String(f.code || "") });
+                            }
                             if (s?.kind === "devices" && d.devices.find((dev) => dev.id === s.id)?.type === "面板") setPanelEditorOpen(true);
                           }}
                           roam={roamOn && roamFloor === floor ? roamPos : null}
@@ -6745,6 +7249,14 @@ export function Workspace({
                         onClick={() => setSceneInsp(k)}
                       >
                         {label}
+                        {k === "lamp" && sceneChangedLampCount > 0 && (
+                          <span
+                            className="tab-count"
+                            title={`${sceneChangedLampCount} 盏灯有未保存的修改`}
+                          >
+                            {sceneChangedLampCount}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -6884,19 +7396,6 @@ export function Workspace({
                               </Button>
                             </div>
                             <Button
-                              variant="primary"
-                              disabled={busy}
-                              onClick={() =>
-                                run(() => {
-                                  commitSceneDraft();
-                                  return flush();
-                                }, "场景已保存")
-                              }
-                            >
-                              <Save size={14} />
-                              保存场景
-                            </Button>
-                            <Button
                               variant="danger"
                               onClick={() => {
                                 const sceneId = scene.id;
@@ -6988,19 +7487,39 @@ export function Workspace({
                       const focus = selection?.kind === "fixtures"
                         ? lamps.find((f) => f.id === selection.id)
                         : null;
+                      const changed = lamps.filter((f) => !!lampDeltaOf(f)).length;
                       const card = (f: Obj) => {
-                        const st = scene.states[f.id] || { on: false, brightness: 0, cct: f.cctMin };
+                        const st = { on: false, brightness: 0, cct: f.cctMin, ...(scene.states[f.id] || {}) };
+                        const dt = lampDeltaOf(f);
+                        const dimOff = !locked && !f.dimmable;
+                        const cctOff = !locked && !isTunable(f);
+                        const carrier =
+                          smart === "KNX" ? "DALI" : smart === "无线" ? "蓝牙 Mesh" : "";
                         return (
                           <div className="lamp-card" key={f.id}>
                             <div className="lamp-card-top">
-                              <span className="badge">{String(f.code || "").slice(-3)}</span>
-                              <span className="tt">
-                                {f.code} · {f.name}
-                                <small>
-                                  {d.rooms.find((r) => r.id === f.roomId)?.name || "未分配空间"}
-                                  {" · "}{circuitOf(f)}
-                                </small>
-                              </span>
+                              <button
+                                type="button"
+                                className="lamp-card-locate"
+                                onClick={() => locateLamp(f)}
+                                title="在图上定位这盏灯"
+                                aria-label={`在图上定位 ${f.code}`}
+                              >
+                                <span className="badge">{String(f.code || "").slice(-3)}</span>
+                                <span className="tt">
+                                  {f.code} · {f.name}
+                                  <small>
+                                    {d.rooms.find((r) => r.id === f.roomId)?.name || "未分配空间"}
+                                    {" · "}{circuitOf(f)}
+                                    {" · "}
+                                    {fixtureControlOptions(String(smart)).find(
+                                      (o) => o.value === String(f.control || "").trim(),
+                                    )?.label || String(f.control || "").trim() || "开闭"}
+                                    {" · "}{colorModeOf(f)}
+                                  </small>
+                                </span>
+                                <Crosshair size={13} className="locate-ico" />
+                              </button>
                               <button
                                 type="button"
                                 role="switch"
@@ -7013,6 +7532,12 @@ export function Workspace({
                                 <i />
                               </button>
                             </div>
+                            {dt && (
+                              <p className="lamp-changed">
+                                <span className="tag">已改</span>
+                                <span>{lampDeltaText(dt)}</span>
+                              </p>
+                            )}
                             <label className="lamp-line">
                               <span>亮度 <b>{st.brightness}%</b></span>
                               <input
@@ -7039,11 +7564,58 @@ export function Workspace({
                                 onChange={(e) => lampState(f.id, "cct", +e.target.value)}
                               />
                             </label>
+                            {locked && (
+                              <p className="lamp-lock">
+                                项目已{p?.frozen ? "冻结" : "归档"}，单灯只读。
+                              </p>
+                            )}
+                            {!locked && (dimOff || cctOff) && (
+                              <div className="lamp-lock">
+                                {dimOff && (
+                                  <div className="lamp-lock-row">
+                                    <span>
+                                      {smart === "无"
+                                        ? "亮度灰着：项目不做智能，灯具按回路开闭。要逐灯调光，先到项目设置里选智能方案。"
+                                        : `亮度灰着：这盏灯是开闭灯（不支持调光）。${carrier ? `标为可调光后控制方式升到 ${carrier}，` : ""}回路与报价口径同步变化。`}
+                                    </span>
+                                    {smart !== "无" && (
+                                      <button
+                                        type="button"
+                                        className="mini-btn"
+                                        onClick={() => unlockLampCap(f.id, "dimmable")}
+                                      >
+                                        标为可调光
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                                {cctOff && (
+                                  <div className="lamp-lock-row">
+                                    <span>
+                                      色温灰着：单色温灯（固定 {f.cct || f.cctMin}K）。改成双色后才能冷暖调。
+                                      {carrier ? `控制方式同步升到 ${carrier}。` : ""}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="mini-btn"
+                                      onClick={() => unlockLampCap(f.id, "tunable")}
+                                    >
+                                      改成双色（可调色温）
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       };
                       return (
                         <div className="scene-insp-pane">
+                          {changed > 0 && (
+                            <p className="scene-insp-note">
+                              带「已改」的是相对已保存情景的改动，还没写回；点右下角「保存修改」写回。
+                            </p>
+                          )}
                           {focus ? card(focus) : (
                             <p className="scene-insp-empty">
                               点画布上的一盏灯，这里显示它的亮度与色温；下面也能直接调每一盏。
@@ -7051,23 +7623,26 @@ export function Workspace({
                           )}
                           <div className="scene-insp-head">
                             <span>{focus ? "其他灯具" : "全部灯具"}</span>
-                            <span>{lamps.length} 盏</span>
+                            <span>{lamps.length} 盏{changed > 0 ? ` · 已改 ${changed}` : ""}</span>
                           </div>
                           {lamps.filter((f) => !focus || f.id !== focus.id).map((f) => {
-                            const st = scene.states[f.id] || { on: false, brightness: 0 };
+                            const st = { on: false, brightness: 0, cct: f.cctMin, ...(scene.states[f.id] || {}) };
+                            const dt = lampDeltaOf(f);
                             return (
                               <button
                                 key={f.id}
                                 type="button"
-                                className={"lamp-row" + (st.on ? " is-on" : "")}
-                                onClick={() => setSelection({ kind: "fixtures", id: f.id })}
+                                className={"lamp-row" + (st.on ? " is-on" : "") + (dt ? " is-changed" : "")}
+                                onClick={() => locateLamp(f)}
+                                title={dt ? `${f.code}：${lampDeltaText(dt)}（未保存）· 点击在图上定位` : `在图上定位 ${f.code}`}
                               >
                                 <span className="nm">{f.code}</span>
                                 <span className="sub">
                                   {d.rooms.find((r) => r.id === f.roomId)?.name || "未分配"} · {f.name}
                                 </span>
+                                {dt && <span className="chg">已改</span>}
                                 <span className={"dot" + (st.on ? " on" : "")} />
-                                <span className="pct">{st.on ? st.brightness + "%" : "关"}</span>
+                                <span className="pct">{st.on ? `${st.brightness}% · ${st.cct}K` : "关"}</span>
                               </button>
                             );
                           })}
@@ -7133,6 +7708,50 @@ export function Workspace({
                       );
                     })()}
                   </div>
+                  {/* 保存条常驻：不随页签/滚动消失，改没改、存没存一眼能看到。 */}
+                  <div className={"scene-insp-savebar" + (sceneDirty ? " is-dirty" : "")}>
+                    <div className="savebar-state">
+                      <i />
+                      <span>
+                        {locked
+                          ? "项目已冻结 / 归档，只读"
+                          : sceneDirty
+                            ? "有未保存的改动"
+                            : "已保存到方案"}
+                      </span>
+                    </div>
+                    <div className="savebar-actions">
+                      {sceneDirty && (
+                        <Button
+                          disabled={busy}
+                          onClick={() => setSceneDraft(null)}
+                          title="丢弃本次改动，回到已保存的版本"
+                        >
+                          放弃
+                        </Button>
+                      )}
+                      <Button
+                        variant="primary"
+                        disabled={busy || locked || !sceneDirty}
+                        title={
+                          locked
+                            ? "项目已冻结 / 归档，只读"
+                            : sceneDirty
+                              ? "保存到方案"
+                              : "没有未保存的改动"
+                        }
+                        onClick={() =>
+                          run(() => {
+                            commitSceneDraft();
+                            return flush();
+                          }, "场景已保存")
+                        }
+                      >
+                        <Save size={14} />
+                        保存修改
+                      </Button>
+                    </div>
+                  </div>
                 </aside>
               </div>
             </>
@@ -7147,6 +7766,7 @@ export function Workspace({
                         <option key={lv.value} value={lv.value}>{lv.label}</option>
                       ))}
                     </select>
+                    {scene3dFullBtn}
                   </div>
                   {/* 这个分支里还没有任何情景：三维按内核自己的预置亮，不传 states */}
                   <Ueyi3D projectId={id} floor={floor} back={false} />
@@ -7964,16 +8584,16 @@ export function Workspace({
               <b>IES 光度文件</b>
               <span>
                 {selected.ies?.name
-                  ? `已上传：${selected.ies.name} · ${
+                  ? `已上传：${selected.ies.name} · 配光来源 ${selected.ies.photometry || (selected.ies.status === "parsed" ? "实测IES" : "未实测")} · ${
                       selected.ies.status === "parsed"
-                        ? `已解析${selected.ies.parsed?.beamAngleApprox ? ` · ${selected.ies.parsed.beamAngleApprox}°` : ""}`
+                        ? `已按实测剖面出光斑${selected.ies.parsed?.beamAngleApprox ? ` · 光束角 ${selected.ies.parsed.beamAngleApprox}°` : ""}`
                         : selected.ies.status === "unsupported"
-                          ? "配光不支持 · 已留存"
+                          ? "配光不支持 · 已留存（图上标红未实测，不退回理论值）"
                           : (selected.ies.status === "parse_failed" || selected.ies.status === "parse-failed")
-                            ? "解析失败 · 已留存"
+                            ? "解析失败 · 已留存（图上标红未实测，不退回理论值）"
                             : "已留存"
                     }`
-                  : "未上传 · 当前按半角光束角理论值估算光斑"}
+                  : "未上传 · 光斑按半角光束角理论值（清单配光来源＝理论半角）"}
               </span>
               <Button disabled={locked || busy} onClick={() => iesRef.current?.click()}>
                 <Upload size={14} /> 上传 IES
@@ -7995,11 +8615,33 @@ export function Workspace({
               rooms={d.rooms}
               products={products}
               smart={p.smart}
+              catalog={catalog}
               patch={patch}
+              applyCatalog={(m, sel) =>
+                update((n) => {
+                  const f = n.fixtures.find((f) => f.id === selected.id)!;
+                  if (!m) {
+                    delete f.catalogId;
+                    delete f.catalogBrand;
+                    return;
+                  }
+                  f.productId = "";
+                  applyCatalogModel(f, m, sel);
+                  n.scenes.forEach((s) => {
+                    if (s.states[f.id])
+                      s.states[f.id].cct = Math.min(
+                        f.cctMax,
+                        Math.max(f.cctMin, s.states[f.id].cct),
+                      );
+                  });
+                })
+              }
               applyProduct={(prod) =>
                 update((n) => {
                   const f = n.fixtures.find((f) => f.id === selected.id)!;
-                  applyProductToFixture(f, prod);
+                  delete f.catalogId;
+                  delete f.catalogBrand;
+                  applySelectedProduct(f, prod, p.smart);
                   if (f.type === "灯带") {
                     f.powerSupply = "PS-" + f.code;
                     f.controller = "CTL-" + f.code;
@@ -8056,10 +8698,21 @@ export function Workspace({
             {placePoint
               ? `落点已选：X ${placePoint.x} · Y ${placePoint.y}；灯就放在图纸上点选的位置（数量 > 1 时围绕落点排布）。`
               : "还没选落点：关闭后重新点「放置灯具」，在图纸上点一下要放灯的位置。"}
-            位置按空间取表：{lampSpaceName}＝
-            {lampPositions.flatMap((g) => g.positions).slice(0, 10).map((p) => p.name).join("、")}
-            {lampPositions.flatMap((g) => g.positions).length > 10 ? " 等" : ""}；
-            换空间时位置自动换成该空间的家具与功能位。
+            位置按空间取表：
+            {lampSpaceCodes.length > 1 ? (
+              <>
+                {lampSpaceNames.join(" + ")}＝共{" "}
+                {lampPositions.flatMap((g) => g.positions).length} 个位置，
+                按所含空间分组合并显示（餐厅项在前、客厅项在后）；编号前缀跟着所选位置所属的空间走。
+              </>
+            ) : (
+              <>
+                {lampSpaceNames.join(" + ")}＝
+                {lampPositions.flatMap((g) => g.positions).slice(0, 10).map((p) => p.name).join("、")}
+                {lampPositions.flatMap((g) => g.positions).length > 10 ? " 等" : ""}；
+                换空间时位置自动换成该空间的家具与功能位。
+              </>
+            )}
           </p>
           <div className="form-grid">
             <Field label="空间">
@@ -8069,18 +8722,18 @@ export function Workspace({
                   aria-label="布灯空间"
                   onChange={(e) => {
                     setLampRoomId(e.target.value);
-                    const meta = roomSpaceCodeOf(
+                    const codes = roomSpaceCodesOf(
                       d?.rooms.find((r) => r.id === e.target.value),
                     );
-                    if (meta) selectPlaceSpace(meta.code);
+                    if (codes.length) selectPlaceSpace(codes[0]);
                   }}
                 >
                   {placeRooms.map((r) => {
-                    const meta = roomSpaceCodeOf(r);
+                    const codes = roomSpaceCodesOf(r);
                     return (
                       <option key={r.id} value={r.id}>
                         {r.name}
-                        {meta ? ` · ${meta.code}` : ""}
+                        {codes.length ? ` · ${codes.join("+")}` : ""}
                       </option>
                     );
                   })}
@@ -8108,18 +8761,36 @@ export function Workspace({
             </Field>
             <Field label="位置">
               <select
-                value={lampPosition}
+                value={lampPositionValue}
                 aria-label="布灯位置"
                 onChange={(e) => {
-                  setLampPosition(e.target.value);
-                  // 职能随位置给默认值：位置变了就把职能带回该位置的常规用法（按该空间的位置表）。
-                  setLampRole(defaultRoleForPosition(lampSpaceCode, e.target.value) || lampRole);
+                  const raw = e.target.value;
+                  const sep = raw.indexOf(":");
+                  const sc = sep > 0 ? raw.slice(0, sep) : lampSpaceCode;
+                  const code = sep > 0 ? raw.slice(sep + 1) : raw;
+                  if (sep > 0) setLampSpace(sc);
+                  setLampPosition(code);
+                  // 职能随位置给默认值：位置变了就把职能带回该位置的常规用法（按该位置所属空间的位置表）。
+                  setLampRole(defaultRoleForPosition(sc, code) || lampRole);
                 }}
               >
+                {!lampPositions.some((g) =>
+                  g.positions.some(
+                    (p) => (lampSpaceCodes.length > 1 ? `${p.spaceCode}:${p.code}` : p.code) === lampPositionValue,
+                  ),
+                ) && (
+                  <option value={lampPositionValue}>{lampPosition} · 请重选位置</option>
+                )}
                 {lampPositions.map((g) => (
-                  <optgroup key={g.group} label={`${lampSpaceName} · ${g.group}`}>
+                  <optgroup
+                    key={g.group}
+                    label={lampSpaceCodes.length > 1 ? g.group : `${lampSpaceName} · ${g.group}`}
+                  >
                     {g.positions.map((item) => (
-                      <option key={item.code} value={item.code}>
+                      <option
+                        key={`${item.spaceCode}:${item.code}`}
+                        value={lampSpaceCodes.length > 1 ? `${item.spaceCode}:${item.code}` : item.code}
+                      >
                         {item.code} · {item.name}
                       </option>
                     ))}
@@ -8140,34 +8811,54 @@ export function Workspace({
                 ))}
               </select>
             </Field>
-            <Field label="类型">
-              <select
-                value={lampType}
-                aria-label="灯具类型"
-                onChange={(e) => setLampType(e.target.value)}
-              >
-                {lightTypes.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="光源类型">
-              <select
-                value={lampColorMode}
-                aria-label="光源类型"
-                onChange={(e) => setLampColorMode(e.target.value as ColorMode)}
-              >
-                {COLOR_MODES.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                    {m === "单色" ? "（固定色温）" : m === "双色" ? "（可调色温）" : "（RGB 彩色）"}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            {lampColorMode === "单色" && (
+            <CatalogPicker
+              catalog={catalog}
+              brandId={lampCatalogBrand}
+              modelId={lampCatalogId}
+              selection={lampCatalogSel}
+              onBrand={(id) => {
+                setLampCatalogBrand(id);
+                setLampCatalogId("");
+                setLampCatalogSel({});
+              }}
+              onModel={(id) => {
+                setLampCatalogId(id);
+                setLampCatalogSel({});
+              }}
+              onSelection={setLampCatalogSel}
+            />
+            {!lampCatModel && (
+              <Field label="类型">
+                <select
+                  value={lampType}
+                  aria-label="灯具类型"
+                  onChange={(e) => setLampType(e.target.value)}
+                >
+                  {lightTypes.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+            {!lampCatColorMode && (
+              <Field label="光源类型">
+                <select
+                  value={lampColorMode}
+                  aria-label="光源类型"
+                  onChange={(e) => setLampColorMode(e.target.value as ColorMode)}
+                >
+                  {COLOR_MODES.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                      {m === "单色" ? "（固定色温）" : m === "双色" ? "（可调色温）" : "（RGB 彩色）"}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+            {!lampCatCct && lampColorMode === "单色" && (
               <Field label="色温 K">
                 <select
                   value={lampSingleCct}
@@ -8307,18 +8998,27 @@ export function Workspace({
                   onChange={(e) => {
                     setAddRoomId(e.target.value);
                     const rm = (d?.rooms || []).find((r) => r.id === e.target.value);
-                    const code = (rm ? roomSpaceCodeOf(rm)?.code : "") || "x";
-                    if (!positionsForSpace(code).some((p) => p.code === addPositionCode)) {
+                    const codes = roomSpaceCodesOf(rm);
+                    const sc = codes.includes(addPositionSpace)
+                      ? addPositionSpace
+                      : codes[0] || "x";
+                    setAddPositionSpace(sc);
+                    const list = groupedPositionsForSpaces(codes.length ? codes : ["x"])
+                      .flatMap((g) => g.positions);
+                    if (
+                      addPositionCode &&
+                      !list.some((p) => p.code === addPositionCode && p.spaceCode === sc)
+                    ) {
                       setAddPositionCode("");
                     }
                   }}
                 >
                   {placeRooms.map((r) => {
-                    const meta = roomSpaceCodeOf(r);
+                    const codes = roomSpaceCodesOf(r);
                     return (
                       <option key={r.id} value={r.id}>
                         {r.name}
-                        {meta ? ` · ${meta.code}` : ""}
+                        {codes.length ? ` · ${codes.join("+")}` : ""}
                       </option>
                     );
                   })}
@@ -8334,15 +9034,32 @@ export function Workspace({
           {addObject === "device" && (
             <Field label={`位置（${addSpaceName}的家具/功能位）`}>
               <select
-                value={addPositionCode}
+                value={addPositionCode ? addPositionValue : ""}
                 aria-label="设备位置"
-                onChange={(e) => setAddPositionCode(e.target.value)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (!raw) {
+                    setAddPositionCode("");
+                    return;
+                  }
+                  // 合并空间的值是「空间码:位置码」，同一位置码在两类空间里含义可能不同。
+                  const sep = raw.indexOf(":");
+                  if (sep > 0) {
+                    setAddPositionSpace(raw.slice(0, sep));
+                    setAddPositionCode(raw.slice(sep + 1));
+                  } else {
+                    setAddPositionCode(raw);
+                  }
+                }}
               >
                 <option value="">不指定位置</option>
                 {addPositions.map((g) => (
                   <optgroup key={g.group} label={g.group}>
                     {g.positions.map((item) => (
-                      <option key={item.code} value={item.code}>
+                      <option
+                        key={`${item.spaceCode}:${item.code}`}
+                        value={addSpaceCodes.length > 1 ? `${item.spaceCode}:${item.code}` : item.code}
+                      >
                         {item.code} · {item.name}
                       </option>
                     ))}
@@ -8816,7 +9533,7 @@ export function Workspace({
       {modal === "scene-setup" && (
         <Modal
           title="一键设置场景"
-          subtitle="按房型与空间筛出本项目用得上的情景，一次套用；用不上的场景不会铺进项目。"
+          subtitle="按房型与空间筛出本项目用得上的情景，一次套用；新增情景建的自定义情景和改过的情景不会被删除或覆盖。"
           onClose={() => setModal("")}
           wide
         >
@@ -8828,8 +9545,11 @@ export function Workspace({
                 ? projectSpaces.map((s) => s.name).join("、")
                 : "未选（按房型默认）"}
             </span>
-            <span className="setup-pill ok">可用 · {usableScenes.length} 个</span>
-            <span className="setup-pill muted">已筛掉 · {unusableScenes.length} 个</span>
+            <span className="setup-pill ok">可用 · {usableWithLamps.length} 个（本项目有可控灯）</span>
+            <span className="setup-pill muted">已筛掉 · {unusableScenes.length + usableNoLamps.length} 个</span>
+            {keptSceneCount > 0 && (
+              <span className="setup-pill ok">保留 · {keptSceneCount} 个自定义/已改情景</span>
+            )}
           </div>
 
           <div className="setup-group">
@@ -8844,12 +9564,12 @@ export function Workspace({
             </div>
           </div>
 
-          {Array.from(new Set(usableScenes.map((s) => sceneHomeSpaceName(s)))).map(
+          {Array.from(new Set(usableWithLamps.map((s) => sceneHomeSpaceName(s)))).map(
             (space) => (
               <div className="setup-group" key={space}>
                 <h4>{space}</h4>
                 <div className="setup-items">
-                  {usableScenes
+                  {usableWithLamps
                     .filter((s) => sceneHomeSpaceName(s) === space)
                     .map((s) => (
                       <button
@@ -8867,6 +9587,28 @@ export function Workspace({
                 </div>
               </div>
             ),
+          )}
+
+          {!usableWithLamps.length && (
+            <p className="setup-empty-note">
+              本项目现有空间里没有这些情景能控制的灯。先按空间给灯具编号（如 kcA001），再回来一键设置。
+            </p>
+          )}
+
+          {usableNoLamps.length > 0 && (
+            <details className="setup-excluded">
+              <summary>
+                本项目没有这 {usableNoLamps.length} 个情景控制的灯（已跳过，点开查看）
+              </summary>
+              <div className="setup-items">
+                {usableNoLamps.map((s) => (
+                  <span className="setup-item muted" key={s.code}>
+                    <b>{s.code}</b> {s.name}
+                    <small>· 本项目空间里没有它控制的灯</small>
+                  </span>
+                ))}
+              </div>
+            </details>
           )}
 
           {unusableScenes.length > 0 && (
@@ -8893,13 +9635,13 @@ export function Workspace({
                 checked={setupClear}
                 onChange={(e) => setSetupClear(e.target.checked)}
               />
-              套用前清空现有情景
+              套用前清空标准情景（自定义和已改情景保留）
             </label>
             <div className="flex">
               <button
                 className="mini-btn"
                 disabled={locked}
-                onClick={() => setSetupSel(usableScenes.map((s) => s.code))}
+                onClick={() => setSetupSel(usableWithLamps.map((s) => s.code))}
               >
                 全选
               </button>
@@ -9227,8 +9969,10 @@ function FixtureFields({
   multiFloor,
   basements = 0,
   smart = "",
+  catalog,
   patch,
   applyProduct,
+  applyCatalog,
 }: {
   fixture: Obj;
   rooms: Obj[];
@@ -9237,12 +9981,48 @@ function FixtureFields({
   basements?: number;
   /** 项目智能方案：决定「控制方式」一栏允许的选项（总线只给开闭 / DALI）。 */
   smart?: string;
+  catalog: Catalog | null;
   patch: (k: string, v: any) => void;
   applyProduct: (p: Obj) => void;
+  applyCatalog: (m: CatalogModel | null, sel: CatalogSelection) => void;
 }) {
+  // 关联的产品行：总线方案里选中无线生态的型号，要在控制方式上说明清楚谁承载它。
+  const selProd = products.find((p) => p.id === f.productId) || null;
+  const catModel = catalogModelOfFixture(catalog, f);
+  const locks = catalogLocks(catModel);
+  const catParams = catModel?.params || {};
+  // 品牌下拉的待选值：还没定型号时先留在界面上，选定型号后跟灯具上的目录品牌走。
+  const [pickBrand, setPickBrand] = useState(catModel?.brand || "");
+  // 换灯具才重置品牌；换品牌后型号被摘掉（catModel 变 null）时要保留刚选的品牌，
+  // 否则下拉弹回「不指定」，型号列表跟着禁用。
+  useEffect(() => {
+    setPickBrand(catModel?.brand || "");
+  }, [f.id]);
+  useEffect(() => {
+    if (catModel?.brand) setPickBrand(catModel.brand);
+  }, [catModel?.brand]);
   return (
     <div className="fixture-fields">
-      <Field label="关联产品库产品">
+      <CatalogPicker
+        catalog={catalog}
+        brandId={pickBrand}
+        modelId={catModel?.id || ""}
+        selection={catalogSelectionOf(f)}
+        compact
+        onBrand={(id) => {
+          setPickBrand(id);
+          // 换品牌 = 脱离原型号：参数退回手动配置，避免界面显示 A 牌却仍挂着 B 牌型号。
+          if (catModel) applyCatalog(null, {});
+        }}
+        onModel={(id) => {
+          const m = catalog?.brands.flatMap((b) => b.models).find((x) => x.id === id);
+          if (m) applyCatalog(m, {});
+        }}
+        onSelection={(sel) => {
+          if (catModel) applyCatalog(catModel, sel);
+        }}
+      />
+      <Field label="关联产品库产品（导入行）">
         <select
           value={f.productId || ""}
           onChange={(e) => {
@@ -9288,64 +10068,80 @@ function FixtureFields({
             onChange={(e) => patch("name", e.target.value)}
           />
         </Field>
-        <Field label="产品型号">
+        <Field label={catModel ? "产品型号（型号锁定）" : "产品型号"}>
           <input
             value={f.model}
+            readOnly={!!catModel}
             onChange={(e) => patch("model", e.target.value)}
           />
         </Field>
-        <Field label="品牌">
+        <Field label={catModel ? "品牌（型号锁定）" : "品牌"}>
           <input
             value={f.brand}
+            readOnly={!!catModel}
             onChange={(e) => patch("brand", e.target.value)}
           />
         </Field>
       </div>
-      <Field label="灯具类型">
-        <select value={f.type} onChange={(e) => patch("type", e.target.value)}>
-          {lightTypes.map((t) => (
-            <option key={t}>{t}</option>
-          ))}
-        </select>
-      </Field>
+      {!catModel && (
+        <Field label="灯具类型">
+          <select value={f.type} onChange={(e) => patch("type", e.target.value)}>
+            {lightTypes.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </select>
+        </Field>
+      )}
       {isCctPending(f) && (
         <p className="field-hint cct-pending" role="note">
           色温{CCT_PENDING_LABEL}：导入 / 产品资料没给色温，暂按 3000K 占位，请按实物确认后选择光源类型或色温。
         </p>
       )}
-      <div className="two-fields">
-        <Field label="光源类型">
-          <select
-            value={colorModeOf(f)}
-            onChange={(e) => patch("colorMode", e.target.value)}
-          >
-            {COLOR_MODES.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </Field>
-        {colorModeOf(f) === "单色" && (
-          <Field label="色温 K（单色固定）">
+      {catParams.cct ? (
+        <p className="field-hint">
+          色温由型号锁定：{catalogCctText(catParams.cct)}
+          {catParams.cct.kind === "range"
+            ? "（区间可调，上下限不可改）"
+            : catParams.cct.kind === "options"
+              ? "（在上方型号参数里选）"
+              : "（不可调）"}
+          {catParams.cct.rgb ? "；含 RGB 彩色通道" : ""}
+        </p>
+      ) : (
+        <div className="two-fields">
+          <Field label="光源类型">
             <select
-              value={
-                SINGLE_CCT_OPTIONS.includes(Number(f.cct))
-                  ? Number(f.cct)
-                  : SINGLE_CCT_DEFAULT
-              }
-              onChange={(e) => patch("cct", +e.target.value)}
+              value={colorModeOf(f)}
+              onChange={(e) => patch("colorMode", e.target.value)}
             >
-              {SINGLE_CCT_OPTIONS.map((k) => (
-                <option key={k} value={k}>
-                  {k} K{k === SINGLE_CCT_DEFAULT ? "（默认）" : ""}
+              {COLOR_MODES.map((m) => (
+                <option key={m} value={m}>
+                  {m}
                 </option>
               ))}
             </select>
           </Field>
-        )}
-      </div>
-      {colorModeOf(f) === "双色" && (
+          {colorModeOf(f) === "单色" && (
+            <Field label="色温 K（单色固定）">
+              <select
+                value={
+                  SINGLE_CCT_OPTIONS.includes(Number(f.cct))
+                    ? Number(f.cct)
+                    : SINGLE_CCT_DEFAULT
+                }
+                onChange={(e) => patch("cct", +e.target.value)}
+              >
+                {SINGLE_CCT_OPTIONS.map((k) => (
+                  <option key={k} value={k}>
+                    {k} K{k === SINGLE_CCT_DEFAULT ? "（默认）" : ""}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+        </div>
+      )}
+      {!catParams.cct && colorModeOf(f) === "双色" && (
         <div className="two-fields">
           <Num label="最低色温 K" value={f.cctMin} min={1000} onChange={(v) => patch("cctMin", v)} />
           <Num label="最高色温 K" value={f.cctMax} min={1000} onChange={(v) => patch("cctMax", v)} />
@@ -9364,7 +10160,7 @@ function FixtureFields({
           />
         </Field>
       )}
-      {colorModeOf(f) === "彩色" && (
+      {!catParams.cct && colorModeOf(f) === "彩色" && (
         <>
           <div className="two-fields">
             <Num label="最低色温 K（白光通道）" value={f.cctMin} min={1000} onChange={(v) => patch("cctMin", v)} />
@@ -9431,18 +10227,22 @@ function FixtureFields({
             </p>
           </>
         )}
-        <Num
-          label={f.type === "灯带" ? "功率 W/m" : "功率 W"}
-          value={f.power}
-          min={0}
-          onChange={(v) => patch("power", v)}
-        />
-        <Num
-          label="光通量 lm"
-          value={f.lumen ?? 0}
-          min={0}
-          onChange={(v) => patch("lumen", v)}
-        />
+        {!locks.power && (
+          <Num
+            label={f.type === "灯带" ? "功率 W/m" : "功率 W"}
+            value={f.power}
+            min={0}
+            onChange={(v) => patch("power", v)}
+          />
+        )}
+        {!locks.lumen && (
+          <Num
+            label="光通量 lm"
+            value={f.lumen ?? 0}
+            min={0}
+            onChange={(v) => patch("lumen", v)}
+          />
+        )}
         {String(f.type || "").includes("吊灯") && !(Number(f.power) > 0) && (
           <p className="field-hint">
             吊灯需手填功率与光通量（产品库补全后以产品库为准）。
@@ -9450,22 +10250,39 @@ function FixtureFields({
         )}
         {f.type !== "灯带" && !isDecorativeLight(f.type) && (
           <>
-        <Num
-          label="光束角 °"
-          value={f.beamAngle ?? defaultBeamAngle(f.type)}
-          min={5}
-          max={180}
-          onChange={(v) => patch("beamAngle", v)}
-        />
-        <p className="field-hint">
-          地面光斑直径约{" "}
-          {spotDiameterMetres(
-            f.installHeight,
-            f.beamAngle ?? defaultBeamAngle(f.type),
-          ).toFixed(2)}{" "}
-          m（＝15° 基准的 ×
-          {spotMultiple(f.beamAngle ?? defaultBeamAngle(f.type)).toFixed(2)} 倍；半角光束角理论值，暂未使用 IES 光度文件）
-        </p>
+        {locks.beam ? (
+          <p className="field-hint">
+            光束角由型号决定：{catalogBeamText(catParams.beam)}
+            {catParams.beam?.kind === "options"
+              ? "（在上方型号参数里选）"
+              : "（不可改）"}
+          </p>
+        ) : (
+          <Num
+            label="光束角 °"
+            value={f.beamAngle ?? defaultBeamAngle(f.type)}
+            min={5}
+            max={180}
+            onChange={(v) => patch("beamAngle", v)}
+          />
+        )}
+        {(() => {
+          const beam = f.beamAngle ?? defaultBeamAngle(f.type);
+          const b = spotBasisForFixture(f, f.installHeight, beam);
+          return (
+            <p className="field-hint">
+              {b.source === "实测IES" ? (
+                <>地面光斑按<b>实测 IES 剖面</b>：外缘 R＝{b.profile?.rOverH}×H≈{(b.rMetres ?? 0).toFixed(2)} m（直径 {(2 * (b.rMetres ?? 0)).toFixed(2)} m）；θ_half {b.profile?.thetaHalfDeg}° 只作标注、θ_cut {b.profile?.thetaCutDeg}° 定外缘。这一档光斑不再随手填光束角变化。</>
+              ) : b.source === "未实测" ? (
+                <>该灯配光文件不可用（状态 {f.ies?.status}）：不画光斑、图上标红「未实测」，<b>不退回理论值</b>；清单「配光来源」同为未实测。</>
+              ) : (
+                <>地面光斑直径约{" "}
+                  {spotDiameterMetres(f.installHeight, beam).toFixed(2)}{" "}
+                  m（＝15° 基准的 ×{spotMultiple(beam).toFixed(2)} 倍；半角光束角理论值，清单「配光来源」＝理论半角。上传 IES 后按实测剖面出图）</>
+              )}
+            </p>
+          );
+        })()}
         <BeamPreview
           installHeight={f.installHeight}
           beamAngle={f.beamAngle ?? defaultBeamAngle(f.type)}
@@ -9581,10 +10398,22 @@ function FixtureFields({
         </select>
         <p className="field-hint">
           {String(smart || "") === "KNX"
-            ? "KNX 总线方案：只有「开闭」（经开关执行器）与「DALI」（经 DALI 网关调光）两种。"
+            ? "KNX 总线方案：接线只有「开闭」（开关执行器）与「DALI」（经 DALI 网关）两种。双色温与彩色灯具照常可布——把光源类型选成「双色 / 彩色」，控制方式用「DALI」即可（工作台开源，不限定单一光源标准）。"
             : String(smart || "") === "无线"
               ? "无线方案（飞利浦）：只有「开闭」与无线调光两种（协议随飞利浦清单确认）。"
               : "不做智能（按回路开闭）：不生成智能设备与情景，灯具按回路开闭。"}
+          {String(smart || "") === "KNX" && isWirelessProduct(selProd) && (
+            <>
+              <br />
+              该型号为无线产品，总线方案经 DALI / 开关执行器承载：控制方式已按本方案收敛为
+              {'「' +
+                (fixtureControlOptions("KNX").find((o) => o.value === String(f.control || "").trim())
+                  ?.label || String(f.control || "").trim() ||
+                  "未选") +
+                '」'}
+              ，灯具参数（色温 / 调光 / 功率）仍按该型号走。
+            </>
+          )}
         </p>
       </Field>
       {/* 回路表按这三项定位到模块的第几路 / 总线地址；灯带的「模块/网关」后端必填。 */}
@@ -9673,6 +10502,19 @@ function FixtureFields({
           </label>
         </div>
       </div>
+      {f.catalogPriceCurrency &&
+      f.catalogPriceCurrency !== "CNY" &&
+      Number(f.catalogPriceAmount) > 0 ? (
+        <p className="field-hint">
+          目录统一零售价{" "}
+          {f.catalogPriceCurrency === "EUR"
+            ? "€"
+            : f.catalogPriceCurrency + " "}
+          {Number(f.catalogPriceAmount).toLocaleString("zh-CN")}（
+          {f.catalogPriceCurrency}，未折算人民币）。请按结算汇率折算后填写人民币单价，
+          再勾选“价格已人工核实”。
+        </p>
+      ) : null}
       <label className="check-label price-check">
         <input
           type="checkbox"

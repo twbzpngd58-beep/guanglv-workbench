@@ -948,7 +948,11 @@ def polygon_overlap_violations(rooms: list[dict], tolerance_ratio: float = 0.035
         arr=np.asarray([[round(float(v['x'])),round(float(v['y']))] for v in pts],dtype=np.int32)
         mask=np.zeros((660,800),np.uint8)
         cv.fillPoly(mask,[arr],1)
-        masks.append((room,mask,int(mask.sum())))
+        # 共用的墙边不算重叠：坐标取整后，紧贴的两间会在公共边上多出一像素宽的皮
+        # （0 图层反推出来的空间是严丝合缝拼满户型的，几乎每对邻间都会踩到）。
+        # 先把两块各自往里收一个像素再求交，真叠上的面积不会因此消失。
+        skin=np.ones((3,3),np.uint8)
+        masks.append((room,cv.erode(mask,skin,iterations=1),int(mask.sum())))
     errors=[]
     for i,(a,ma,aa) in enumerate(masks):
         for b,mb,ab in masks[i+1:]:

@@ -8,6 +8,7 @@
  * 可控硅和 DALI 组数这一单不判。开闭、总线（DALI、KNX）跨空间不拦不提示，只有无线跨空间算问题。
  */
 import TEXT from "./data/circuit-rules-text.json" with { type: "json" };
+import REF from "./data/control-reference.json" with { type: "json" };
 
 type Obj = Record<string, any>;
 
@@ -19,9 +20,9 @@ function t(key: keyof typeof TEXT, vars: Record<string, string | number> = {}): 
 }
 
 export const WIRELESS = ["Zigbee", "Wi-Fi", "蓝牙 Mesh"];
-export const RELAY_MAX_DRIVERS = 12;
-export const RELAY_MAX_WATTS = 300;
-export const DALI_MAX_ADDRESSES = 55;
+export const RELAY_MAX_DRIVERS = REF.relay.maxDrivers;
+export const RELAY_MAX_WATTS = REF.relay.maxWatts;
+export const DALI_MAX_ADDRESSES = REF.dali.maxAddresses;
 export const UNASSIGNED = TEXT.unassigned;
 /** 拦截档：施工包（zip、dxf、pdf、xlsx、docx）+ 厂家包（panels）+ 订货单（order，S9a 再接入口）。 */
 export const BLOCKED_EXPORTS = ["zip", "dxf", "pdf", "xlsx", "docx", "panels", "order"];

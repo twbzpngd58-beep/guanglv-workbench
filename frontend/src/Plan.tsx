@@ -3,12 +3,14 @@ import {
   decorativeHaloRadiusUnits,
   defaultBeamAngle,
   isDecorativeLight,
+  spotBasisForFixture,
   spotRadiusUnits,
+  spotRadiusUnitsForFixture,
 } from "./codes";
 import type { Design, Obj } from "./types";
 import { clone } from "./types";
 import { roomPoints, insertRoomPoint, deleteRoomPoint, withRoomPolygon } from "./roomPolygon";
-import { snapBoundary, remapOpenings, containsPoint, type SpacePoint } from "./spaceGeometry";
+import { snapBoundary, remapOpenings, containsPoint, interiorPoint, type SpacePoint } from "./spaceGeometry";
 import { coveragePath, manualCoverage, obstaclesFor, sensorSectorPath } from "./sensors";
 import { lightPoolClipPath } from "./lightOcclusion";
 import { useSceneFade } from "./sceneFade";
@@ -297,13 +299,20 @@ export function Plan({
   }, [zoom, backgroundRect?.x, backgroundRect?.y, backgroundRect?.w, backgroundRect?.h]);
   useEffect(() => { if (!polyDrawing) setPolyHover(null); }, [tool]);
   const night = !!scene;
-  // 定位到某盏灯：把该点平移到可视区（820×690）中央；只认 token，改缩放不重定位。
+  // 定位到某盏灯：把该点平移到**当前 viewBox** 中央；只认 token，改缩放不重定位。
+  // 视野中心不能写死 410/345 —— 实际 viewBox 会随底图/本层空间外接框变化，
+  // 写死会把整幅内容推出可视区（现场 2026-10-27：复制粘贴灯具后「画布消失」）。
   const focusRef = useRef(zoom);
   focusRef.current = zoom;
   useEffect(() => {
     if (!focus) return;
+    const fx = Number(focus.x), fy = Number(focus.y);
+    if (!Number.isFinite(fx) || !Number.isFinite(fy)) return;
     const z = focusRef.current || 1;
-    setPan({ x: 410 - Number(focus.x || 0) * z, y: 345 - Number(focus.y || 0) * z });
+    const vb = svg.current?.viewBox?.baseVal;
+    const cx = vb && vb.width > 0 ? vb.x + vb.width / 2 : 410;
+    const cy = vb && vb.height > 0 ? vb.y + vb.height / 2 : 345;
+    setPan({ x: cx - fx * z, y: cy - fy * z });
   }, [focus?.token]);
   // Scene switching is a gradual cross-fade, never a hard cut: lamp level and
   // colour temperature ease from the outgoing scene to the incoming one over the
@@ -350,6 +359,31 @@ export function Plan({
     x: Number(f.x) || 0,
     y: Number(f.y) || 0,
   }));
+  // 自动建立系统架构出的总线设备（网关 / 电源 / 执行器 / 主机 …）没有房间也没有坐标，
+  // 以前逐台画在 (0,0)，整摞叠成一团看不清。现在统一收进一个「电箱」符号：
+  // 图纸上只画箱体和台数，逐台型号仍看「智能设备」页与导出清单（数据一条不动）。
+  // 判据＝自动生成行，或「没房间也没坐标」的老设备行（老生成器的 DG-16 这类同样会落到原点）。
+  const cabinetDevices = (design.devices || []).filter(
+    (v: Obj) => v.source === "auto-arch" || (v.x == null && v.y == null && !v.roomId),
+  );
+  const cabinetSelected = cabinetDevices.some(
+    (v: Obj) => selection?.kind === "devices" && selection.id === v.id,
+  );
+  // 电箱画在玄关/门厅/储藏/过道这类「配电常落位」的空间里；没有就贴在本层平面的左上角。
+  const cabinetAnchor = (() => {
+    if (!cabinetDevices.length || mini || floor !== 1) return null;
+    const roomsOnFloor = (design.rooms || []).filter(
+      (r: Obj) => (Number.isFinite(r.floor) ? Number(r.floor) : 1) === floor,
+    );
+    const pref = roomsOnFloor.find((r: Obj) =>
+      /玄关|门厅|入户|储藏|设备间|配电|过道|走廊|楼梯/.test(String(r.name || "")),
+    );
+    if (pref) return interiorPoint(pref);
+    if (!roomsOnFloor.length) return { x: 40, y: 40 };
+    const minX = Math.min(...roomsOnFloor.map((r: Obj) => Number(r.x) || 0));
+    const minY = Math.min(...roomsOnFloor.map((r: Obj) => Number(r.y) || 0));
+    return { x: minX + 46, y: minY + 34 };
+  })();
   // 只用到 clientX/clientY：拖动的 move 现在是 window 上的原生事件
   const pos = (e: { clientX: number; clientY: number }) => {
     const s = svg.current!;
@@ -718,7 +752,12 @@ export function Plan({
   // 灯和编号挤成一团，没法布灯）。没有空间时仍是固定画布。
   const fitBox = (() => {
     if (mini || backgroundRect || background) return null;
-    const pts = design.rooms.filter((r) => +(r.floor || 1) === floor).flatMap((r) => roomPoints(r));
+    // 只按有真实轮廓的空间算视野：占位空间（按编号归组、1×1）与坏坐标会把 viewBox 算成 NaN，
+    // viewBox 一旦非法整张 SVG 就不画 —— 表现是「画布没了」。
+    const pts = design.rooms
+      .filter((r) => +(r.floor || 1) === floor && r.source !== "fixture-code" && r.source !== "semantic-labels")
+      .flatMap((r) => roomPoints(r))
+      .filter((p) => Number.isFinite(+p.x) && Number.isFinite(+p.y));
     if (pts.length < 3) return null;
     const xs = pts.map((p) => +p.x), ys = pts.map((p) => +p.y);
     const x0 = Math.min(...xs), y0 = Math.min(...ys), w = Math.max(...xs) - x0, h = Math.max(...ys) - y0;
@@ -859,6 +898,9 @@ export function Plan({
         {drawableRooms.map((r) => {
           const selected = selection?.id === r.id;
           const points = r.points?.map((v: Obj) => `${v.x},${v.y}`).join(" ");
+          // 标签落点用空间内部点：凹形房（如「餐厅、客厅」）的外接框中心会掉进缺角里，
+          // 那是隔壁房间的地盘，标签就飘到别人家去了。
+          const anchor = interiorPoint(r);
           const color = showSource
             ? r.source === "manual"
               ? "#dedbd4"
@@ -949,8 +991,9 @@ export function Plan({
                 <Furniture room={r} night={night} />
               )}
               <text
-                x={r.x + r.width / 2}
-                y={r.y + r.height - (mini ? 13 : 17)}
+                x={anchor.x}
+                y={anchor.y}
+                dominantBaseline="middle"
                 textAnchor="middle"
                 fontSize={mini ? 12 : 13}
                 fill={night ? "#cac6c0" : "#666057"}
@@ -1174,19 +1217,23 @@ export function Plan({
             // 装饰型灯具（吊灯/吸顶灯/壁灯/落地灯/台灯/镜前灯）不做定向照射：光斑只是画法上的
             // 「光晕」，基准按类型取（不涉及光束角/安装高度），大小同样可用「光斑大小 ×」调。
             const decorative = isDecorativeLight(f.type);
+            // §5.1：定向灯的光斑按「配光来源」选口径 —— 实测 IES 用 R＝tan(θ_cut)×H，
+            // 没有配光文件用理论半角，有文件但不可用（解析失败/不支持）＝未实测 → 不画光斑，只标红。
+            const spotBasis = decorative ? null : spotBasisForFixture(f, f.installHeight, beam);
             const baseSpotRadius = decorative
               ? decorativeHaloRadiusUnits(f.type, projectArea)
-              : spotRadiusUnits(f.installHeight, beam, projectArea);
+              : spotRadiusUnitsForFixture(f, f.installHeight, beam, projectArea);
             // 图上可调：缩放（大小）、长短轴比（形状）、旋转（朝向），存在灯具上，随项目保存。
             const spotRatio = Number(f.spotRatio) > 0 ? Number(f.spotRatio) : 1;
-            // 光斑大小：定向＝理论外径（安装高度 × 光束角），装饰＝类型光晕基准；再乘「光斑大小 ×」（默认 1）。
+            // 光斑大小：定向＝标称外径（实测 R 或理论半角），装饰＝类型光晕基准；再乘「光斑大小 ×」（默认 1）。
             // 两种都可放大 / 缩小，也可在图上直接拖光斑边缘的橙色圆点。
             const spotScale = Number(f.spotScale) > 0 ? Number(f.spotScale) : 1;
             const spotRadius = baseSpotRadius * spotScale;
+            const unverifiedSpot = !decorative && !!spotBasis && spotBasis.source === "未实测";
             // 放置灯具时只留灯具图标、不铺光斑（现场 2026-10-16：「放置灯具的时候不需要有光斑体现，
              // 但需要有灯具图标，方便移动」）——图标本来就画在光斑之上，去掉光斑就不挡它了。
             const showSpot = !mini && tool !== "place-lamp"
-              && f.type !== "灯带" && f.type !== "窗帘" && (lit || selection?.id === f.id);
+              && f.type !== "灯带" && f.type !== "窗帘" && spotRadius > 0 && (lit || selection?.id === f.id);
             const spotEditing = !mini && !!onChange && selection?.id === f.id;
             // 暖黄发光：中心最亮，向外漫射衰减，随亮度层层加深。
             const spotColour = fixtureLightColour(f, st?.cct ?? 3000);
@@ -1272,6 +1319,15 @@ export function Plan({
                     </g>
                   )}
                   </>
+                )}
+                {unverifiedSpot && !mini && (
+                  // §5.1 补全 3：配光文件不可用（解析失败/不支持）→ 画布不画光斑，红圈＋叉＋「未实测」，
+                  // 与夜景出图、清单、DXF 同一口径（不静默退回理论值）。
+                  <g pointerEvents="none" transform={`translate(${f.x} ${f.y})`}>
+                    <circle r={15} fill="none" stroke="#d94a3d" strokeWidth="1.8" strokeDasharray="4 3" />
+                    <line x1={-10} y1={-10} x2={10} y2={10} stroke="#d94a3d" strokeWidth="1.8" />
+                    <text x={19} y={-9} fontSize="11" fill="#d94a3d">未实测</text>
+                  </g>
                 )}
                 {lit && f.type !== "灯带" && f.type !== "窗帘" && (
                   <circle
@@ -1469,21 +1525,66 @@ export function Plan({
                   </>
                 ) : (
                   <>
-                    {selection?.id === f.id && <circle cx={f.x} cy={f.y} r="13" fill="none" stroke="#88693a" strokeWidth="2" />}
+                    {selection?.kind === "fixtures" && selection.id === f.id && mini && (
+                      <circle cx={f.x} cy={f.y} r="13" fill="none" stroke="#88693a" strokeWidth="2" />
+                    )}
                     <circle cx={f.x} cy={f.y} r={mini ? 4 : 6} fill={night && !lit ? "#69635a" : isColourFixture(f) ? fixtureHex(f) : "#e8bc73"} stroke={night ? "#d7b680" : isColourFixture(f) ? fixtureHex(f) : "#a4824b"} strokeWidth="1.3" />
                     <circle cx={f.x} cy={f.y} r="2" fill="#fff8d6" />
                   </>
                 )}
-                {!mini && showLabels && (
-                  <text
-                    x={f.type === "窗帘" ? f.x : f.x + 10}
-                    y={f.type === "窗帘" ? f.y - 11 : f.y + 4}
-                    fontSize="9"
-                    fill={night ? "#c9c5be" : "#8c877f"}
-                    pointerEvents="none"
+                {selection?.kind === "fixtures" && selection.id === f.id && !mini && (
+                  <g className="plan-fixture-locate" pointerEvents="none">
+                    <circle cx={f.x} cy={f.y} r="25" className="locate-halo" />
+                    <circle cx={f.x} cy={f.y} r="17" className="locate-ring" />
+                    <line x1={+f.x - 30} y1={+f.y} x2={+f.x - 14} y2={+f.y} className="locate-cross" />
+                    <line x1={+f.x + 14} y1={+f.y} x2={+f.x + 30} y2={+f.y} className="locate-cross" />
+                    <line x1={+f.x} y1={+f.y - 30} x2={+f.x} y2={+f.y - 14} className="locate-cross" />
+                    <line x1={+f.x} y1={+f.y + 14} x2={+f.x} y2={+f.y + 30} className="locate-cross" />
+                    <g transform={`translate(${+f.x} ${+f.y - 36})`}>
+                      <rect
+                        x={-Math.max(19, String(f.code || "").length * 3.4 + 10)}
+                        y="-11"
+                        width={Math.max(38, String(f.code || "").length * 6.8 + 20)}
+                        height="22"
+                        rx="6"
+                        className="locate-tag"
+                      />
+                      <text textAnchor="middle" y="4" className="locate-code">
+                        {f.code}
+                      </text>
+                    </g>
+                  </g>
+                )}
+                {!mini && showLabels && !(selection?.kind === "fixtures" && selection.id === f.id) && (
+                  <g
+                    className={"plan-fixture-code" + (onSelect ? " clickable" : "")}
+                    pointerEvents={onSelect ? "all" : "none"}
+                    onClick={
+                      onSelect
+                        ? (e) => {
+                            e.stopPropagation();
+                            onSelect({ kind: "fixtures", id: f.id });
+                          }
+                        : undefined
+                    }
                   >
-                    {f.code}
-                  </text>
+                    <rect
+                      x={(f.type === "窗帘" ? +f.x : +f.x + 10) - 3}
+                      y={(f.type === "窗帘" ? +f.y - 11 : +f.y + 4) - 10}
+                      width={Math.max(24, String(f.code || "").length * 5.4 + 8)}
+                      height="14"
+                      fill="transparent"
+                    />
+                    <text
+                      x={f.type === "窗帘" ? f.x : f.x + 10}
+                      y={f.type === "窗帘" ? f.y - 11 : f.y + 4}
+                      fontSize="9"
+                      fill={night ? "#c9c5be" : "#8c877f"}
+                      pointerEvents="none"
+                    >
+                      {f.code}
+                    </text>
+                  </g>
                 )}
               </g>
             );
@@ -1535,12 +1636,34 @@ export function Plan({
                 />
               );
             })}
+        {/* 电箱：自动建立系统架构的总线设备收在一个箱体里，不再逐台落在原点叠成一摞。 */}
+        {!mini && showDeviceLayer && cabinetAnchor && (
+          <g
+            data-cabinet="1"
+            transform={`translate(${cabinetAnchor.x} ${cabinetAnchor.y})`}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              if (cabinetDevices[0]) onSelect?.({ kind: "devices", id: cabinetDevices[0].id });
+            }}
+            style={{ cursor: "pointer" }}
+          >
+            <title>{`电箱内 ${cabinetDevices.length} 台：${cabinetDevices.map((v: Obj) => v.name).join("、")}`}</title>
+            {cabinetSelected && (
+              <rect x={-27} y={-18} width={54} height={36} rx={7} fill="none" stroke="#88693a" strokeWidth={1.6} opacity={0.7} />
+            )}
+            <rect x={-23} y={-14} width={46} height={28} rx={4} fill="#ffffff" opacity={0.95} />
+            <rect x={-23} y={-14} width={46} height={28} rx={4} fill="none" stroke="#8b7f5f" strokeWidth={cabinetSelected ? 2.6 : 1.8} />
+            <text x={0} y={-1} textAnchor="middle" fontSize={9} fontWeight={600} fill="#6b6255" pointerEvents="none">电箱</text>
+            <text x={0} y={9.5} textAnchor="middle" fontSize={7} fill="#8c877f" pointerEvents="none">{cabinetDevices.length} 台</text>
+          </g>
+        )}
         {!mini &&
           showDeviceLayer &&
           design.devices
             // 设备/面板按楼层显示：优先自身的 floor，老数据回退到所属空间的楼层。
             .filter(
               (dev: Obj) =>
+                !cabinetDevices.includes(dev) &&
                 (Number.isFinite(dev.floor)
                   ? dev.floor
                   : design.rooms.find((r: Obj) => r.id === dev.roomId)?.floor ?? 1) === floor,

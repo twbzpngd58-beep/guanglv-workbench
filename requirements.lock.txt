@@ -28,6 +28,7 @@ pytest==9.0.2
 python-docx==1.2.0
 python-dotenv==1.2.2
 python-multipart==0.0.22
+qrcode==8.2
 reportlab==4.4.10
 starlette==1.6.0
 typing-inspection==0.4.4

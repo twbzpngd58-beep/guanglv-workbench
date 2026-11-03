@@ -59,3 +59,39 @@ export function spacesForHouseType(houseType: string): SpaceDef[] {
   const type = (houseType || "").trim();
   return SPACE_LIBRARY.filter((s) => s.houses.includes(type as HouseType));
 }
+
+/**
+ * 房间名里可能同时含两类空间（「餐厅、客厅」「厨房及餐厅」「客厅/餐厅」）：
+ * 按分隔符切开逐个认，按出现顺序返回，去重。
+ * 为什么单独一个函数：解析器会把连通的两个空间合成一间房、只留一个 spaceCode，
+ * 布灯/设备的位置下拉若只按那一个码取表，另一类空间的家具位就整片消失（2026-10-27 用户报的 bug）。
+ * 这里只负责「名字里有哪几类空间」，不改房间数据、不改 spaceCode 的既有含义。
+ */
+export function spaceCodesOfRoomName(name: string): SpaceDef[] {
+  const nm = (name || "").trim();
+  if (!nm) return [];
+  const out: SpaceDef[] = [];
+  const push = (s?: SpaceDef | null) => {
+    if (s && !out.some((x) => x.code === s.code)) out.push(s);
+  };
+  const resolve = (token: string) => {
+    const exact = spaceMapByName.get(token) || spaceMapByAlias.get(token);
+    if (exact) { push(exact); return true; }
+    return false;
+  };
+  for (const raw of nm.split(/[、,，/／+＋&·\s]+/).map((t) => t.trim()).filter(Boolean)) {
+    if (resolve(raw)) continue;
+    // 「厨房及餐厅」「卧室和书房」：连词两侧都认得才算拆分，避免把「和室」这类词误切。
+    const parts = raw.split(/[及和与跟]/).map((t) => t.trim()).filter(Boolean);
+    if (parts.length > 1 && parts.every((p) => spaceMapByName.has(p) || spaceMapByAlias.has(p))) {
+      parts.forEach((p) => resolve(p));
+      continue;
+    }
+    // 带后缀的房间名（餐厅2 / 客厅阳台）：按最长空间名做前缀匹配，与 roomSpaceCodeOf 的旧口径一致。
+    const hit = [...SPACE_LIBRARY]
+      .sort((a, b) => b.name.length - a.name.length)
+      .find((s) => raw.startsWith(s.name));
+    push(hit);
+  }
+  return out;
+}

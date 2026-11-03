@@ -12,7 +12,7 @@
   轮询进度（含成功/失败/失败原因），前端据此画进度条。
 - 项目数据：`<DATA>/lighting3d/<pid>.json`（解析结果 + 房间名 + 讲解词 + 两个层高），旁挂 `<pid>.source.dxf`
 - 产品参数：`lighting3d_products` 表（studio.sqlite3 里的新表），数据源=随源码分发的产品资料，
-  **只同步市场零售价**（出厂价/运费/备注按白名单挡掉）
+  **只同步市场零售价**（成本口径/运费/备注按白名单挡掉，词表见 `price_terms.py`）
 
 口径（用户 2026-09 拍板，别改）：
 1. 每盏灯必须有看得见的三维光锥，不能只做地面亮斑
@@ -41,7 +41,7 @@ from starlette.concurrency import run_in_threadpool
 
 from . import dxf_lighting as DL
 from . import products as PR
-from .space_geometry import design_geometry
+from .space_geometry import design_geometry, room_points
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.getenv("DATA_DIR", str(ROOT / "data"))).resolve()
@@ -54,6 +54,60 @@ UPLOADS = DATA / "uploads" / "projects"
 SCHEMES = ["缓亮缓灭", "开闭", "无线", "总线"]
 
 router = APIRouter(prefix="/api/lighting3d", tags=["lighting3d"])
+
+@router.get("/refnight")
+def refnight(project: str, floor: int = 1):
+    """参考内核（优邑珺和原件）夜景渲染器：把工作台项目场景注入原件的 __SCENE__。"""
+    import re
+    from fastapi.responses import HTMLResponse
+    from . import ueyi_scene as US
+    tpl_path = Path(__file__).resolve().parent / "scene3d" / "ref" / "template.html"
+    html = tpl_path.read_text(encoding="utf-8", errors="ignore")
+    try:
+        scene = ueyi_scene(project, floor=floor)
+    except Exception as e:
+        return HTMLResponse("<h3>场景加载失败</h3><pre>" + str(e) + "</pre>", status_code=500)
+    if not isinstance(scene, dict) or scene.get("error"):
+        return HTMLResponse("<h3>场景不可用</h3><pre>" + str(scene) + "</pre>", status_code=500)
+    scene = json.loads(json.dumps(scene, ensure_ascii=False))
+    # 家具行整条传过去（kind/w/d/h/rot/pts）：以前只留 [x, z, 0.16]，
+    # 类型与占地在这一步就丢了，夜景只能按坐标瞎补随机小方块（用户报「家具只是矩形块」）。
+    scene["furniture"] = [
+        {
+            "id": str(f.get("id") or ""),
+            "kind": str(f.get("kind") or ""),
+            "x": round(float(f.get("x") or 0), 3),
+            "z": round(float(f.get("z") or 0), 3),
+            "w": round(float(f.get("w") or 0.6), 3),
+            "d": round(float(f.get("d") or 0.6), 3),
+            "h": round(float(f.get("h") or 0.75), 3),
+            "rot": round(float(f.get("rot") or 0), 2),
+        }
+        for f in scene.get("furniture", [])
+        if isinstance(f, dict) and isinstance(f.get("x"), (int, float)) and isinstance(f.get("z"), (int, float))
+    ]
+    scene.pop("fixture_circuits", None)
+    scene.pop("geometry_source", None)
+    data = json.dumps(scene, ensure_ascii=False, separators=(",", ":"))
+    m = re.search(r"window\.__SCENE__\s*=\s*\{", html)
+    if not m:
+        return HTMLResponse("<h3>模板缺少 __SCENE__</h3>", status_code=500)
+    start = m.end() - 1
+    depth = 0
+    end = None
+    for i in range(start, len(html)):
+        ch = html[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+    if end is None:
+        return HTMLResponse("<h3>模板场景解析失败</h3>", status_code=500)
+    return HTMLResponse(html[:start] + data + html[end:])
+
 
 
 def _furn_poly_geom(row: dict):
@@ -621,12 +675,69 @@ def _furn_poly_pts(f: dict) -> list | None:
     return out
 
 
+# ---------- 阶段 1.5 验收①：三维里点一个灯位要出四组字段（回路／开孔／SKU／驱动） ----------
+# 字段正本＝§7.5 灯位（D9/D10/D11）＋§7.6 驱动（D4）＋产品库（D10-2 的型号参数）。
+# 三维只读这些口，不另开一份数据；读不到就如实进 missing —— 「点了没反应」＝数据缺口，
+# 面板必须把缺口说出来，不能让设计师以为这盏灯没有回路/没开孔。
+_LIGHT_GROUPS = {
+    "circuit": (("circuit", "回路名"), ("circuitId", "回路号"), ("floor", "楼层")),
+    "opening": (("d9_1", "暗盒规格 D9-1"), ("d9_2", "暗盒定位 D9-2"),
+                ("d10_1", "开孔孔径 D10-1"), ("d10_3", "净空 D10-3")),
+    "sku": (("model", "对应 SKU D10-2"), ("brand", "品牌"), ("name", "灯具名称"),
+            ("power", "功率 W"), ("cct", "色温 K"), ("beamAngle", "光束角 °")),
+    "driver": (("d4_1", "驱动型号与参数 D4-1"), ("d4_2", "驱动安装位置 D4-2"),
+               ("d4_3", "驱动带灯数与回路归属 D4-3")),
+}
+# 定位类必填格不属于「回路／开孔／SKU／驱动」四组，但同属 §7.5 的缺件口：
+# 三维面板按四组展示字段，缺口一条不落（缺定位＝没法预埋，照样要说出来）。
+
+
+def _fixture_info(f: dict, product: dict | None = None) -> dict:
+    """一盏灯在三维面板上该看到的四组字段＋缺口清单（与缺件单同一批字段口）。"""
+    from . import v3_fields as VF
+    required = {s["key"] for s in VF.FIXTURE_FIELDS if s["tier"] == VF.REQUIRED}
+    groups, missing = {}, []
+    for name, items in _LIGHT_GROUPS.items():
+        rows = []
+        for key, label in items:
+            value = f.get(key)
+            rows.append({"key": key, "label": label, "value": "" if value is None else value})
+            # §7.5 的正本格叫 D10-2，画布上的型号存在 model（d10_2 同值）：两个口都算填了
+            if key == "circuitId" and value in (None, "", UNASSIGNED_CIRCUIT_ID):
+                missing.append("所属回路（未归属＝孤儿灯，现场不知道接哪路线管）")
+            elif value in (None, "", []) and key in required and not (
+                    key == "model" and f.get("d10_2")):
+                missing.append(label)
+        groups[name] = rows
+    if "x/y" in required and any(f.get(k) in (None, "") for k in ("x", "y")):
+        missing.append("定位（X／Y 图内坐标）")
+    for key, label in (("installHeight", "安装高度 mount_h"),
+                       ("type", "灯具类型 fixture_type")):
+        if key in required and f.get(key) in (None, ""):
+            missing.append(label)
+    if product:
+        groups["sku"].extend([
+            {"key": "product_name", "label": "产品名称", "value": product.get("name") or ""},
+            {"key": "product_cutout", "label": "产品库开孔", "value": product.get("cutout") or ""},
+            {"key": "product_angle", "label": "产品库光束角", "value": product.get("angle")},
+            {"key": "product_watt", "label": "产品库功率", "value": product.get("watt")},
+            {"key": "product_dimmable", "label": "调光方式", "value": product.get("dimmable") or ""},
+            {"key": "product_scheme", "label": "方案类型", "value": product.get("scheme") or ""},
+        ])
+    return {"id": f.get("id"), "code": f.get("code") or f.get("id"),
+            "type": f.get("type") or "灯具", "groups": groups, "missing": missing,
+            "hasData": bool(product) or any(r["value"] for g in groups.values() for r in g)}
+
+
 def _engine_view(pid: str, st: dict, parsed: dict, opts: dict) -> dict:
     """Only the 3D view is overlaid: original parsed data stays untouched."""
     engine = DL.to_engine(parsed, opts)
+    # 三维面板要能自己发请求（换 SKU 等）：把项目编号带下去，前端不必再猜 URL。
+    engine["pid"] = pid
     # §十.8：空间一旦确认过，三维房间就以确认后的设计空间为准——否则在「底图与空间」手绘 /
     # 改名 / 改边界之后，三维还是那张图刚解析出来的老样子。
     confirmed_design = None
+    project: dict = {}
     try:
         project = _project_doc(pid)
         status = ((project.get("design") or {}).get("spaceDefinition") or {}).get("status")
@@ -673,12 +784,48 @@ def _engine_view(pid: str, st: dict, parsed: dict, opts: dict) -> dict:
     old_circuits = engine["circuits"]
     original_lights = engine["lights"]
     fallback = old_circuits[0] if old_circuits else {}
-    engine["circuits"] = [{**fallback, "id": c["id"], "room": c["name"],
-                           "type": c["name"], "code": "", "price": None}
-                          for c in circuits]
+    # 阶段 1.5 验收①②：三维面板要能报出四组字段、回路开关要和「回路表」对得上。
+    # 字段口＝§7.5/§7.6 ＋产品库；这里只做「读出来带过去」，不另存一份。
+    products = opts.get("products") or {}
+    design_fixtures = {f.get("id"): f for f in (project.get("design") or {}).get("fixtures") or []}
+    fixture_by_code = {f.get("code"): f for f in design_fixtures.values() if f.get("code")}
+
+    def _product_for(f: dict):
+        return products.get(str(f.get("model") or f.get("code") or "")) or None
+
+    def _info_for(f: dict) -> dict:
+        return _fixture_info(f, _product_for(f))
+
+    watt_of = {l["id"]: (l.get("watt") or l.get("power") or 0) for l in lights}
     ownership = {lid: c["id"] for c in circuits for lid in c["members"]}
+
+    def _stored_info(l: dict) -> dict:
+        f = design_fixtures.get(l["id"]) or fixture_by_code.get(l.get("code") or "")
+        if f is not None:
+            return _info_for(f)
+        # 图纸解析出来的三维灯、画布上还没有对应灯位：这不是「点了没反应」，
+        # 是数据缺口，面板要如实说，并给出该灯在三维侧已有的信息。
+        ghost = {"id": l["id"], "code": l.get("code") or l["id"], "name": l.get("room") or "",
+                 "model": l.get("model") or "", "power": l.get("watt") or l.get("power"),
+                 "cct": l.get("cct"), "circuit": l.get("circuit") or "",
+                 "circuitId": ownership.get(l["id"], UNASSIGNED_CIRCUIT_ID),
+                 "d10_1": l.get("cutout") or "", "beamAngle": l.get("half"),
+                 # 三维侧已有位置与安装高度（米），别把它们报成缺件
+                 "x": l.get("x"), "y": l.get("z"), "installHeight": l.get("mount"),
+                 "type": l.get("type") or "灯具"}
+        info = _info_for(ghost)
+        info["missing"] = ["画布上找不到这个灯位（三维侧灯位，尚未回填到设计）"] + info["missing"]
+        info["orphan"] = True
+        return info
+
+    engine["circuits"] = [{**fallback, "id": c["id"], "room": c["name"],
+                           "type": c["name"], "code": "", "price": None,
+                           "members": list(c["members"]), "count": len(c["members"]),
+                           "watt": round(sum(float(watt_of.get(x) or 0) for x in c["members"]), 1),
+                           "tableKey": c["name"]}
+                          for c in circuits]
     engine["lights"] = [{"id": l["id"], "c": ownership.get(l["id"], UNASSIGNED_CIRCUIT_ID),
-                         "x": l.get("x", 0), "z": l.get("z", 0)}
+                         "x": l.get("x", 0), "z": l.get("z", 0), "info": _stored_info(l)}
                         for l in lights]
     # §十.11 第 2 项：补「布灯画布 → 三维灯位」这条通道（原来只有三维 → 二维的反向同步，
     # 人工在画布上布的灯进不了三维）。空间确认过之后，三维灯位也以**设计里的灯具**为准：
@@ -687,19 +834,41 @@ def _engine_view(pid: str, st: dict, parsed: dict, opts: dict) -> dict:
         design_lights = [f for f in (confirmed_design.get("design") or {}).get("fixtures") or []
                          if f.get("type") != "窗帘"]
         if design_lights:
+            # 阶段 1.5 验收②：回路开关要和「回路表」对得上，所以这里的回路条目同样带
+            # members/count/watt/tableKey。分组口与功率口都不重开：分组键＝exports 的
+            # `f.get("circuit") or "未分配"`，功率＝exports.fixture_watts（灯带按 W/m×长度折算）。
+            from .exports import fixture_watts
+
             seen: dict = {}
             for f in design_lights:
                 cid = str(f.get("circuitId") or f.get("circuit") or UNASSIGNED_CIRCUIT_ID)
-                seen.setdefault(cid, {"id": cid, "room": str(f.get("circuit") or ""),
-                                      "type": "灯具", "code": "", "price": None})
+                row = seen.setdefault(cid, {"id": cid, "room": str(f.get("circuit") or ""),
+                                            "type": "灯具", "code": "", "price": None,
+                                            "members": [], "count": 0, "watt": 0.0,
+                                            "tableKey": str(f.get("circuit") or "").strip() or "未分配"})
+                row["members"].append(f["id"])
+                row["count"] += 1
+                row["watt"] += fixture_watts(f)
+            for row in seen.values():
+                row["watt"] = round(row["watt"], 1)
             engine["circuits"] = list(seen.values())
-            engine["lights"] = [{"id": f["id"],
-                                 "c": str(f.get("circuitId") or f.get("circuit") or UNASSIGNED_CIRCUIT_ID),
-                                 "x": round(float(f.get("x") or 0) / DESIGN_UNITS_PER_M, 3),
-                                 "z": round(float(f.get("y") or 0) / DESIGN_UNITS_PER_M, 3),
-                                 "cct": f.get("cct") or 3000,
-                                 "half": float(f.get("beamAngle") or 36) / 2,
-                                 "mount": float(f.get("installHeight") or engine.get("ceiling_net") or 2.8)}
+            from . import ies as _IES
+            def _engine_light(f):
+                spot = _IES.spot_of(f)
+                return {"id": f["id"],
+                        "c": str(f.get("circuitId") or f.get("circuit") or UNASSIGNED_CIRCUIT_ID),
+                        "x": round(float(f.get("x") or 0) / DESIGN_UNITS_PER_M, 3),
+                        "z": round(float(f.get("y") or 0) / DESIGN_UNITS_PER_M, 3),
+                        "cct": f.get("cct") or 3000,
+                        "half": float(f.get("beamAngle") or 36) / 2,
+                        "mount": float(f.get("installHeight") or engine.get("ceiling_net") or 2.8),
+                        # §5.1：光斑半径与来源口径由 spot_of 单点给出（θ_cut 外缘，不是 θ_half）
+                        "photometry": spot["photometry"],
+                        "poolR": round(_IES.pool_radius_m(
+                            spot, _IES.height_m_of(f, confirmed_design)), 3),
+                        # 验收①：四组字段（回路／开孔／SKU／驱动）随灯位一起带进三维
+                        "info": _info_for(f)}
+            engine["lights"] = [_engine_light(f)
                                 for f in design_lights if f.get("type") != "灯带"]
             engine["strips"] = [{"id": f["id"],
                                   "c": str(f.get("circuitId") or f.get("circuit") or UNASSIGNED_CIRCUIT_ID),
@@ -707,11 +876,17 @@ def _engine_view(pid: str, st: dict, parsed: dict, opts: dict) -> dict:
                                             round(float(p["y"]) / DESIGN_UNITS_PER_M, 3)]
                                            for p in f.get("stripPath") or []],
                                   "mount": float(f.get("installHeight") or engine.get("ceiling_net") or 2.8),
-                                  "cct": f.get("cct") or 3000}
+                                  "cct": f.get("cct") or 3000,
+                                  "info": _info_for(f)}
                                  for f in design_lights if f.get("type") == "灯带"]
         else:
             engine["lights"] = []
             engine["strips"] = []
+    # 验收④「不存在点了没反应的灯位」：不管是设计里的灯、三维存的灯，还是图纸解析出来的灯带，
+    # 每一条都必须带 info 出场；确实没数据＝如实报缺件，而不是前端拿不到字段、点了什么也不显示。
+    for row in engine["lights"] + (engine.get("strips") or []):
+        if not row.get("info"):
+            row["info"] = _stored_info(row)
     # 现场 2026-10-16：三维里两盏灯一盏都不亮。根因＝情景等级还挂在**解析时的回路 id**
     # （circuit-159ebb94…）上，而确认后引擎的回路已经换成设计里的（C01…）→ 一条都对不上 →
     # 连「全开」也是 0。这里改成：确认过的项目优先用**设计里的情景**（按灯具状态折成回路等级），
@@ -798,6 +973,81 @@ def put_scenes(pid: str, payload: dict = Body(...)):
         return {"scenes": scenes}
 
 
+# ---------------------------------------------------------------- 阶段 1.5 验收③：三维里换 SKU
+# 换型只写**设计灯位**这一个口（§7.5：D10-2＝产品库型号、D10-1＝开孔孔径），
+# 三维／布灯画布／清单／报价读同一份数据；绝不在三维侧另存一份型号。
+# 口径两条，写清楚免得被当成 bug：
+#  · 精确配光衰减属阶段 3（§5.1），这里只做「参数变→光斑半径跟着变」的几何联动；
+#  · 有实测 IES 的灯，外缘半径由 IES 剖面（θ_cut）决定，换型号**不**改半径——
+#    原件是按换型前的型号上传的，commit(invalidate=True) 会让灯光复核失效，须重新确认配光。
+#  · 产品库里该型号没填的参数（现场 230 款：angle/cutout 全空）如实报「未变＋原因」，
+#    不拿旧值冒充新值，也不静默填一个经验值。
+@router.post("/{pid}/lights/{lid}/sku")
+def swap_sku(pid: str, lid: str, payload: dict = Body(...)):
+    from .app import connect, get, editable, validate_design, commit
+    from . import ies as _IES
+
+    code = str(payload.get("model") or "").strip()
+    if not code or len(code) > 80:
+        raise HTTPException(422, "model（产品库型号）不能为空或超长")
+    product = _products_map_all().get(code)
+    if not product:
+        raise HTTPException(422, f"产品库里没有这个型号：{code}")
+
+    def _num(v):
+        try:
+            f = float(_norm_h(v))
+        except (TypeError, ValueError):
+            return None
+        return f if f and math.isfinite(f) else None
+
+    with connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        project = get(con, pid)
+        editable(project)
+        d = project["design"]
+        fx = next((f for f in d.get("fixtures") or [] if f.get("id") == lid), None)
+        if fx is None:
+            raise HTTPException(404, "灯位不存在")
+        old_model = str(fx.get("model") or fx.get("code") or "")
+        applied, unchanged = [], []
+        for key, label, value in (
+                ("model", "对应 SKU D10-2", code),
+                ("d10_2", "对应 SKU D10-2", code),
+                ("brand", "品牌", str(product.get("brand") or "")),
+                ("name", "灯具名称", str(product.get("name") or "")),
+                ("power", "功率 W", _num(product.get("watt"))),
+                ("cct", "色温 K", _num(product.get("cct"))),
+                ("beamAngle", "光束角 °", _num(product.get("angle"))),
+                ("d10_1", "开孔孔径 D10-1", str(product.get("cutout") or ""))):
+            if value in (None, ""):
+                unchanged.append(f"{label}（产品库 {code} 未填）")
+                continue
+            if fx.get(key) != value:
+                applied.append(f"{label}：{fx.get(key)} → {value}")
+            fx[key] = int(round(value)) if key in ("cct",) else value
+        validate_design(d, project)
+        commit(con, project, "三维换 SKU",
+               f"{fx.get('code') or lid}：{old_model or '空型号'} → {code}；"
+               f"变更 {len(applied)} 项，未变 {len(unchanged)} 项",
+               invalidate=True)
+
+    spot = _IES.spot_of(fx)
+    height = _IES.height_m_of(fx, project)
+    pool_r = round(_IES.pool_radius_m(spot, height), 3)
+    warnings = []
+    if (fx.get("ies") or {}).get("status") == "parsed":
+        warnings.append(f"实测配光原件是按换型前的型号（{old_model or '未注明'}）上传的，"
+                        "光斑半径不随新 SKU 变；灯光复核已失效，请重新确认配光")
+    if unchanged:
+        warnings.append("产品库缺参数，这些字段保持原值：" + "、".join(unchanged))
+    return {"pid": pid, "id": lid, "model": code, "oldModel": old_model,
+            "applied": applied, "unchanged": unchanged, "warnings": warnings,
+            "info": _fixture_info(fx, product), "photometry": spot["photometry"],
+            "poolR": pool_r, "heightM": round(height, 3),
+            "half": float(fx.get("beamAngle") or 36) / 2}
+
+
 # ---------------------------------------------------------------- 图纸灯位 → 灯具配置
 # 导入 DXF 后解析出的空间与灯位，直接写进项目设计（灯具配置 / 三维画布 / 报价同一份数据）。
 # 坐标沿用全站口径：设计单位 = 米 × 26，原点为解析后的图纸原点（导出 DXF 叠图同一套换算）。
@@ -845,7 +1095,7 @@ def _cad_rooms(st: dict, net: float) -> list[dict]:
             "points": points,
             "area": float(r.get("area") or 0), "heightM": net, "color": "#e6e3d8",
             "source": CAD_ROOM_SOURCE, "cadRoomId": r["id"],
-            "notes": "来自 DXF 空间名；边界取外接矩形，需人工核对",
+            "notes": "来自 DXF 空间名；边界按图纸轮廓，尺寸需人工核对",
         })
     return rooms
 
@@ -904,7 +1154,7 @@ def _freeze_preview_space(pid: str, st: dict, reviewer=None, semantic_payload=No
                 # 「预览所见即确认」：这批房间从此就是设计空间，不再是可随手清掉的自动草稿
                 # （source 仍写 cad-3d 的话，sync_design 会把它们当自动房间剔掉 → 变「没有空间」）。
                 r["source"] = "cad-confirmed"
-                r["notes"] = "三维预览确认过的空间（来自图纸解析，边界为外接矩形）"
+                r["notes"] = "三维预览确认过的空间（来自图纸解析，边界按图纸轮廓）"
                 r.pop("cadRoomId", None)
             d["rooms"] = own
         if not own:
@@ -1049,6 +1299,15 @@ def sync_design(pid: str) -> dict:
                 "circuit": circuit, "circuitId": c["id"] if c else UNASSIGNED_CIRCUIT_ID,
                 "length": 1, "powerSupply": "", "controller": "", "stripPath": [],
                 "source": CAD_SOURCE, "cadLabel": label, "cadCct": l.get("cct"),
+                # D01：对象 → 原件/实例。只有文件级来源没有 handle 的，交付时会被标成 sourced-unlocated
+                "sourceFileId": next(
+                    (f.get("id") for f in project.get("files") or []
+                     if f.get("name") == ((st.get("parsed") or {}).get("source") or {}).get("file")),
+                    "") or "",
+                "handle": l.get("handle") or "",
+                "blockPath": [l.get("block")] if l.get("block") else [],
+                "layer": l.get("layer") or "",
+                "layout": l.get("layout") or "Model",
                 "notes": "图纸导入" + (f"（图纸标注 {label}）" if label else "") +
                          "；类型/型号待核" + ("；色温待核（3000K 占位）" if pending else ""),
                 **({"cctPending": True} if pending else {}),
@@ -1439,15 +1698,215 @@ def confirm(pid: str, payload: dict = Body(default_factory=dict)):
             "alreadyConfirmed": already, "rooms": frozen}
 
 
+def _reanchor_openings(openings: list[dict], old_rooms: list[dict], new_rooms: list[dict]) -> tuple[list[dict], int]:
+    """预览把设计房间换成图纸解析那套之后，把门窗挂接搬到新房间上。
+
+    两套房间同源于一次墙线反推，只是比例不同：按归一化后的中心位置就近配对（同名加分），
+    边号与起止比例原样搬。配不上、或边号超出新房间边数的洞口丢掉并计数——挂在已经不存在的
+    房间上会让「空间预览」整步报 422（门窗须属于有效的空间边界），用户看到的就是这一步点不动。
+    """
+    openings = list(openings or [])
+    if not openings:
+        return openings, 0
+
+    def centers(rooms):
+        got = {}
+        cs = [(float(r.get("x") or 0) + float(r.get("width") or 0) / 2,
+               float(r.get("y") or 0) + float(r.get("height") or 0) / 2) for r in rooms]
+        if not cs:
+            return got
+        xs = [c[0] for c in cs]
+        ys = [c[1] for c in cs]
+        sx = max(max(xs) - min(xs), 1e-6)
+        sy = max(max(ys) - min(ys), 1e-6)
+        for r, (cx, cy) in zip(rooms, cs):
+            got[r["id"]] = ((cx - min(xs)) / sx, (cy - min(ys)) / sy)
+        return got
+
+    old_c, new_c = centers(old_rooms), centers(new_rooms)
+    cand = []
+    for nr in new_rooms:
+        for orr in old_rooms:
+            a, b = old_c.get(orr["id"]), new_c.get(nr["id"])
+            if not a or not b:
+                continue
+            d = math.hypot(a[0] - b[0], a[1] - b[1])
+            if str(orr.get("name") or "") == str(nr.get("name") or ""):
+                d -= 0.08
+            cand.append((d, orr["id"], nr["id"]))
+    cand.sort()
+    mapping, used_old, used_new = {}, set(), set()
+    for d, oid, nid in cand:
+        if d > 0.35 or oid in used_old or nid in used_new:
+            continue
+        used_old.add(oid)
+        used_new.add(nid)
+        mapping[oid] = nid
+    new_by_id = {r["id"]: r for r in new_rooms}
+    old_by_id = {r["id"]: r for r in old_rooms}
+    keep, dropped = [], 0
+    for o in openings:
+        rid = o.get("roomId") or ""
+        # 同 id 的房间也要重挂：轮廓可能被改过，老边号照搬会挂到别的墙上
+        source = old_by_id.get(rid)
+        target = new_by_id.get(rid) or new_by_id.get(mapping.get(rid, ""))
+        if target is None:
+            dropped += 1
+            continue
+        if "edgeIndex" in o:
+            # 边号不能照搬：房间从矩形变成 L 形之后，1 号边指的已经不是原来那面墙。
+            # 按归一化坐标找新轮廓上同一处的那条边，找不到就丢（挂错墙比没窗更糟）。
+            pts = [p for p in room_points(target)]
+            if source is not None and pts:
+                m = _remount_edge(room_points(source), pts, o)
+                if not m:
+                    dropped += 1
+                    continue
+                o = {**o, "edgeIndex": m[0], "start": m[1], "end": m[2]}
+            else:
+                ei = o.get("edgeIndex")
+                if not isinstance(ei, int) or isinstance(ei, bool) or not 0 <= ei < len(pts):
+                    dropped += 1
+                    continue
+        keep.append({**o, "roomId": target["id"]})
+    return keep, dropped
+
+
+def _canon_poly(pts: list) -> tuple[list, list, bool]:
+    """轮廓规范化：去闭合重复点、统一逆时针、从字典序最小点起排。
+
+    返回 (xy, idx, flipped)。idx[k] 是 xy[k] 在原轮廓里的下标；flipped=True 表示
+    规范化时整体反了向（原边方向与 xy 的边方向相反），换算起止比例时要翻回来。
+    """
+    xy = [(float(p["x"] if isinstance(p, dict) else p[0]),
+           float(p["y"] if isinstance(p, dict) else p[1])) for p in pts]
+    if len(xy) > 1 and math.dist(xy[0], xy[-1]) < 1e-6:
+        xy.pop()
+    idx = list(range(len(xy)))
+    if len(xy) < 3:
+        return xy, idx, False
+    area = 0.0
+    for i in range(len(xy)):
+        x0, y0 = xy[i]
+        x1, y1 = xy[(i + 1) % len(xy)]
+        area += x0 * y1 - x1 * y0
+    flipped = False
+    if area < 0:
+        xy.reverse()
+        idx.reverse()
+        flipped = True
+    k = min(range(len(xy)), key=lambda i: (round(xy[i][0], 9), round(xy[i][1], 9)))
+    return xy[k:] + xy[:k], idx[k:] + idx[:k], flipped
+
+
+def _norm_xy(xy: list) -> list:
+    """轮廓归一到各自包框内的 0..1，两套不同比例的同源房间就能按位置对上了。"""
+    xs = [p[0] for p in xy]
+    ys = [p[1] for p in xy]
+    sx = max(max(xs) - min(xs), 1e-6)
+    sy = max(max(ys) - min(ys), 1e-6)
+    return [((x - min(xs)) / sx, (y - min(ys)) / sy) for x, y in xy]
+
+
+def _remount_edge(old_pts: list, new_pts: list, opening: dict):
+    """老房间边上的洞口区间 → 新房间轮廓上的 (edgeIndex, start, end)；对不上返回 None。
+
+    重挂保持三件事：同一面墙同一侧、同一归一化中心、同一毫米净宽（不随墙长比例缩放）。
+    """
+    if len(old_pts) < 3 or len(new_pts) < 3:
+        return None
+    o_real = [(float(p[0]), float(p[1])) for p in old_pts]
+    n_real = [(float(p[0]), float(p[1])) for p in new_pts]
+    if len(o_real) > 1 and math.dist(o_real[0], o_real[-1]) < 1e-6:
+        o_real.pop()
+    if len(n_real) > 1 and math.dist(n_real[0], n_real[-1]) < 1e-6:
+        n_real.pop()
+    if len(o_real) < 3 or len(n_real) < 3:
+        return None
+    o_xy, o_idx, o_flip = _canon_poly(o_real)
+    n_xy, n_idx, n_flip = _canon_poly(n_real)
+    a, b = _norm_xy(o_xy), _norm_xy(n_xy)
+    i = opening.get("edgeIndex")
+    if not isinstance(i, int) or isinstance(i, bool) or not 0 <= i < len(o_real):
+        return None
+    if i not in o_idx:
+        return None
+    j = o_idx.index(i)
+    t0 = float(opening.get("start") or 0)
+    t1 = float(opening.get("end") or 0)
+    if o_flip:
+        t0, t1 = 1.0 - t0, 1.0 - t1
+    u, v = a[j], a[(j + 1) % len(a)]
+    q = [(u[0] + (v[0] - u[0]) * t, u[1] + (v[1] - u[1]) * t) for t in (t0, t1)]
+    span = math.dist(q[0], q[1])
+    if span <= 0:
+        return None
+    old_len = math.dist(o_real[i], o_real[(i + 1) % len(o_real)])
+    width_mm = max(abs(t1 - t0), 0.0) * old_len
+    if width_mm <= 0:
+        return None
+    for k, (p, s) in enumerate(zip(b, b[1:] + b[:1])):
+        dx, dy = s[0] - p[0], s[1] - p[1]
+        length = math.hypot(dx, dy)
+        if length < 1e-6:
+            continue
+        if any(abs((t[0] - p[0]) * dy - (t[1] - p[1]) * dx) / length > 0.03 for t in q):
+            continue
+        ts = [((t[0] - p[0]) * dx + (t[1] - p[1]) * dy) / (length * length) for t in q]
+        lo, hi = min(ts), max(ts)
+        if lo < -1e-6 or hi > 1 + 1e-6:
+            # 投影落在边的延长线上：不是这面墙，别把洞口挂到相邻墙上
+            continue
+        if (hi - lo) * length < 0.3 * span:
+            continue
+        e0, e1 = n_idx[k], n_idx[(k + 1) % len(n_idx)]
+        new_len = math.dist(n_real[e0], n_real[e1])
+        if new_len <= 1e-6:
+            continue
+        if width_mm > new_len + 1e-6:
+            # 新墙比洞口还短：维持原净宽就必然越界，宁可丢也不挂一扇穿墙的窗
+            continue
+        mid = (lo + hi) / 2
+        half = (width_mm / new_len) / 2
+        lo2, hi2 = mid - half, mid + half
+        if lo2 < -1e-6 or hi2 > 1 + 1e-6:
+            # 净宽不变就放不下（顶到墙角）：丢了重挂，不缩窗
+            continue
+        lo2, hi2 = max(0.0, lo2), min(1.0, hi2)
+        if n_flip:
+            # 规范方向与原存储方向相反：边号取反向边，比例翻回来
+            return e1, round(1.0 - hi2, 4), round(1.0 - lo2, 4)
+        return e0, round(lo2, 4), round(hi2, 4)
+    return None
+
+
+def _reattach_items(items: list[dict], new_rooms: list[dict]) -> int:
+    """空间被整套换掉后，按落点把灯具/设备/家具重新挂到新空间上，返回挂不上的数量。
+
+    挂不上置成空串（口径：空＝暂未归属，界面上看得到、可手动指定），不静默丢对象。
+    """
+    from .task_geometry import inside
+    lost = 0
+    for it in items:
+        if not it.get("roomId"):
+            continue
+        hit = next((r for r in new_rooms if r.get("floor", 1) == it.get("floor", 1)
+                    and inside(r, it.get("x", 0), it.get("y", 0))), None)
+        it["roomId"] = hit["id"] if hit else ""
+        lost += 0 if hit else 1
+    return lost
+
+
 @router.post("/{pid}/preview-to-design")
-def preview_to_design(pid: str):
+def preview_to_design(pid: str, reapply: bool = False):
     """把「预览里看到的那套空间」落成**可编辑**的设计空间（不冻结）。
 
     2026-10-12 本地口径：导入图纸后的这一界面上，预览与修改在同一处——
     改名字、拖边界要能立刻在预览里看到，所以先把解析/预览的房间写成 design.rooms
     （source=cad-preview，尚未确认），后面的编辑都作用在它上面；
     「确认」仍走 /{pid}/confirm（预览所见即确认，把它冻结）。
-    已经是 confirmed 的项目不动。
+    已经是 confirmed 的项目默认不动（确认＝冻结）；只有 `reapply=1`——用户在界面上
+    对「重新解析会替换已确认空间」明确点过头——才解除冻结、按图纸重落一套（2026-10-27 拍板）。
     """
     from .app import connect, get, editable, validate_design, commit
     st = load_store(pid)
@@ -1466,9 +1925,9 @@ def preview_to_design(pid: str):
                 commit(con, p, "空间预览", "预览已识别的设计空间，待确认", True)
             return {"ok": True, "confirmed": (d.get("spaceDefinition") or {}).get("status") == "confirmed",
                     "rooms": len(d.get("rooms") or []), "revision": p["revision"]}
-        if (d.get("spaceDefinition") or {}).get("status") == "confirmed":
+        if (d.get("spaceDefinition") or {}).get("status") == "confirmed" and not reapply:
             return {"ok": True, "confirmed": True, "rooms": len(d.get("rooms") or [])}
-        if ((d.get("spaceDefinition") or {}).get("status") == "previewing"
+        if (not reapply and (d.get("spaceDefinition") or {}).get("status") == "previewing"
                 and (d.get("spaceDefinition") or {}).get("previewSourceUploadedAt") == st.get("uploaded_at")):
             return {"ok": True, "confirmed": False, "rooms": len(d.get("rooms") or []), "revision": p["revision"]}
         _, net = _ceilings(st, {"ceiling": p.get("ceiling"), "ceilingNet": p.get("ceilingNet")})
@@ -1479,17 +1938,33 @@ def preview_to_design(pid: str):
             r.pop("cadRoomId", None)
         if not rooms:
             raise HTTPException(422, "图纸没有识别到空间；请用「新建空间」手绘后再确认")
+        kept_openings, lost_openings = _reanchor_openings(d.get("openings") or [],
+                                                         d.get("rooms") or [], rooms)
         d["rooms"] = rooms
+        d["openings"] = kept_openings
+        # 空间整套换掉后，老房间 id 全部失效：灯具/设备/家具按落点重新挂到新空间，
+        # 挂不上的置空（＝暂未归属），不能让它们把 validate_design 顶成 422 后整单失败。
+        lost_items = 0
+        for key in ("fixtures", "devices", "furniture"):
+            lost_items += _reattach_items(d.get(key) or [], rooms)
         d["spaceDefinition"] = {
             **(d.get("spaceDefinition") or {}),
             "status": "previewing",
             "previewedAt": time.strftime("%Y-%m-%d %H:%M:%S"),
             "previewSourceUploadedAt": st.get("uploaded_at"),
             "workflowStep": "review", "roomsConfirmedAt": "", "openingsConfirmedAt": "",
+            "lostOpenings": lost_openings,
         }
         validate_design(d, p)
-        commit(con, p, "空间预览", f"图纸解析出 {len(rooms)} 个空间，待确认（可改名 / 改边界）", True)
-    return {"ok": True, "confirmed": False, "rooms": len(rooms), "revision": p["revision"]}
+        note = f"图纸解析出 {len(rooms)} 个空间，待确认（可改名 / 改边界）"
+        if lost_openings:
+            note += f"；{lost_openings} 个门窗挂不到新空间，请到门窗步骤重新指定"
+        if lost_items:
+            note += f"；{lost_items} 个灯具/设备/家具挂不到新空间，已置为暂未归属"
+        commit(con, p, "空间预览", note, True)
+    return {"ok": True, "confirmed": False, "rooms": len(rooms), "revision": p["revision"],
+            "openings": len(d.get("openings") or []), "lostOpenings": lost_openings,
+            "lostItems": lost_items, "reapplied": bool(reapply)}
 
 
 @router.get("/{pid}/quote")
@@ -1500,17 +1975,18 @@ def quote(pid: str, scheme: str = ""):
     approved = ([f for f in project.get("design", {}).get("fixtures", [])
                  if f.get("source") == "outsourcing-approved"]
                 if project.get("outsourcingReview") else [])
-    if not st.get("parsed") and not approved:
+    # §十.11 第 1 项：报价以**设计里的灯具**为准（布灯画布是唯一编辑面）；图纸解析只在
+    # 设计还没有灯时兜底：直接读图纸解析结果。闸门跟着这条口径改 ——
+    # 以前「没有图纸解析」就一口回绝，人工在画布上布的灯（没有 DXF）连报价都出不来。
+    design_lamps = [f for f in project.get("design", {}).get("fixtures", [])
+                    if f.get("type") != "灯带"]
+    if not st.get("parsed") and not design_lamps and not approved:
         raise HTTPException(400, "这个项目还没有图纸数据")
     default_scheme = {"无线": "无线", "KNX": "总线", "无": "开闭"}.get(project.get("smart"), "缓亮缓灭")
     scheme = default_scheme if approved else (scheme if scheme in SCHEMES else default_scheme)
     # A2a：不按空 scheme 过滤；按型号精确取价。scheme 只作展示，不参与过滤。
     prods = _products_map_all()
-    agg, order = {}, []
-    # §十.11 第 1 项：报价以**设计里的灯具**为准（布灯画布是唯一编辑面）；图纸解析只在
-    # 设计还没有灯时兜底：直接读图纸解析结果。
-    design_lamps = [f for f in project.get("design", {}).get("fixtures", [])
-                    if f.get("type") != "灯带"]
+    agg, order, photo = {}, [], {}
     from_design = bool(approved) or bool(design_lamps)
     lamps = ([f for f in approved if f.get("type") != "灯带"] if approved
              else (design_lamps or st["parsed"]["lamps"]))
@@ -1521,7 +1997,11 @@ def quote(pid: str, scheme: str = ""):
         if code not in agg:
             agg[code] = 0
             order.append(code)
+            photo[code] = set()
         agg[code] += 1
+        # §5.1 补全 3：报价每行也标配光来源（同型号里有的没解析出 IES 就并列显示，不取其一）
+        from . import ies as _IES
+        photo[code].add(_IES.spot_of(lp)["photometry"])
     rows, missing, total = [], [], 0.0
     for code in order:
         p = prods.get(code)
@@ -1538,12 +2018,13 @@ def quote(pid: str, scheme: str = ""):
                      "price": price, "qty": qty, "unit": p.get("unit") or "个", "subtotal": sub,
                      "priceMissing": price is None,
                      "priceSource": "零售价" if price is not None else "",
-                     "priceVersion": p.get("synced_at") or ""})
+                     "priceVersion": p.get("synced_at") or "",
+                     "photometrySource": "、".join(sorted(photo.get(code) or []))})
     design_strips = [f for f in project.get("design", {}).get("fixtures", [])
                      if f.get("type") == "灯带" and (f.get("length") or 0)]
     strip_len = round(sum(s.get("length") or 0 for s in (
         [f for f in approved if f.get("type") == "灯带"] if approved
-        else (design_strips or st["parsed"]["strips"])
+        else (design_strips or (st.get("parsed") or {}).get("strips") or [])
     )), 2)
     strip_prod = next((p for p in prods.values() if p.get("category") == "灯带"), None)
     if strip_len and strip_prod:
@@ -1553,6 +2034,7 @@ def quote(pid: str, scheme: str = ""):
                      "cct": strip_prod.get("cct"), "price": strip_prod.get("price"),
                      "qty": strip_len, "unit": "米", "subtotal": sub,
                      "priceMissing": False, "priceSource": "零售价",
+                     "photometrySource": "不适用（无地面光斑）",
                      "priceVersion": strip_prod.get("synced_at") or ""})
     # R5：报价单是提示档，有回路问题照出，带提示原文。
     from .app import connect, get
@@ -1563,7 +2045,7 @@ def quote(pid: str, scheme: str = ""):
             "missing": missing, "total": round(total, 2), "warnings": warnings,
             "priceMode": "generic",
             "priceNote": "方案分类待补：按型号精确取价，暂不按总线/无线/开闭过滤；只含终端零售价",
-            "note": "零售价口径 · 未含智能控制设备（主机、面板、网关）；出厂价不进工作台"}
+            "note": "零售价口径 · 未含智能控制设备（主机、面板、网关）；成本口径不进工作台"}
 
 
 # ---------------------------------------------------------------- 挂载

@@ -78,6 +78,44 @@ export function groupedPositionsForSpace(
     .filter((g) => g.positions.length > 0);
 }
 
+export type SpacePosition = PositionDef & { spaceCode: string };
+
+/**
+ * 多空间合并的位置表（一间房名含两类空间时用，如「餐厅、客厅」）。
+ * 依次取各空间的位置表，分组标签带空间名；同一位置码**且同名**（通用位）只留第一次出现的，
+ * 同一位置码但含义不同（餐厅 a＝吊灯位 / 客厅 a＝单椅）两条都保留——编号里空间码会区分它们。
+ * 单空间走原表，只是给每条位置补上 spaceCode，调用方不必分叉。
+ */
+export function groupedPositionsForSpaces(
+  spaceCodes: string[],
+): { group: string; positions: SpacePosition[] }[] {
+  const codes = spaceCodes.filter(Boolean);
+  if (codes.length <= 1) {
+    const sc = codes[0] || "x";
+    return groupedPositionsForSpace(sc).map((g) => ({
+      group: g.group,
+      positions: g.positions.map((p) => ({ ...p, spaceCode: sc })),
+    }));
+  }
+  const seen = new Set<string>();
+  return codes.flatMap((sc) => {
+    const name = SPACE_CODES.find((s) => s.code === sc)?.name || sc;
+    return groupedPositionsForSpace(sc)
+      .map((g) => ({
+        group: `${name} · ${g.group}`,
+        positions: g.positions
+          .filter((p) => {
+            const key = `${p.code}|${p.name}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .map((p) => ({ ...p, spaceCode: sc })),
+      }))
+      .filter((g) => g.positions.length > 0);
+  });
+}
+
 /** (空间, 位置码) → 位置定义：先按该空间的位置表，再回退老通用表（老编号不被重新解释）。 */
 export function positionDefIn(spaceCode: string, positionCode: string): PositionDef | null {
   const pal = paletteOfSpace(spaceCode);
@@ -458,11 +496,40 @@ const halfAngleRad = (beamAngle: number) =>
 
 /**
  * 半角光束角理论值：地面光斑半径（米）= 安装高度 × tan(半角)。
- * 预留 IES 光度文件后会改为按实测配光曲线计算，目前以理论值为准。
+ * 只作「理论半角」口径（§5.1 配光来源＝理论半角）；有实测 IES 时走下面的 spotBasisForFixture。
  */
 export function spotRadiusMetres(installHeight: number, beamAngle: number): number {
   const h = Number(installHeight) > 0 ? Number(installHeight) : 2.8;
   return h * Math.tan(halfAngleRad(beamAngle));
+}
+
+/** 上传过且解析成功的 IES 剖面（外缘按 R＝tan(θ_cut)×H，θ_half 只作标注）。 */
+export function iesMeasuredProfile(f: Obj): Obj | null {
+  if (f?.ies?.status !== "parsed") return null;
+  const prof = f.ies.profile || f.ies.parsed?.profile;
+  return Number(prof?.rOverH) > 0 ? prof : null;
+}
+
+/**
+ * 一盏灯的地面光斑依据（与后端 IES.spot_of 同一口径）：
+ * 实测 IES → R＝tan(θ_cut)×H；没有配光文件 → 理论半角；
+ * 有文件但解析失败/不支持 → rMetres 为 null（不画光斑，标红「未实测」，不退回理论值）。
+ */
+export function spotBasisForFixture(
+  f: Obj,
+  installHeight?: number,
+  beamAngle?: number,
+): { rMetres: number | null; source: string; profile: Obj | null } {
+  const h = Number(installHeight) > 0 ? Number(installHeight) : SPOT_BASE_HEIGHT_M;
+  const prof = iesMeasuredProfile(f);
+  if (prof) return { rMetres: h * Number(prof.rOverH), source: "实测IES", profile: prof };
+  const st = f?.ies?.status;
+  if (st && st !== "parsed") return { rMetres: null, source: "未实测", profile: null };
+  return {
+    rMetres: spotRadiusMetres(h, Number(beamAngle) > 0 ? Number(beamAngle) : SPOT_BASE_ANGLE),
+    source: "理论半角",
+    profile: null,
+  };
 }
 
 export function spotDiameterMetres(installHeight: number, beamAngle: number): number {
@@ -522,6 +589,21 @@ export function spotRadiusUnits(
   area?: number,
 ): number {
   return Math.max(3, Math.min(1200, spotDiameterUnits(installHeight, beamAngle, area) / 2));
+}
+
+/**
+ * 画布单位下的光斑半径（按灯具的配光来源选口径：实测剖面 R / 理论半角）。
+ * 返回 0 ＝「未实测」：画布不画光斑，只标红（与夜景出图同一口径）。
+ */
+export function spotRadiusUnitsForFixture(
+  f: Obj,
+  installHeight: number,
+  beamAngle: number,
+  area?: number,
+): number {
+  const basis = spotBasisForFixture(f, installHeight, beamAngle);
+  if (basis.rMetres === null) return 0;
+  return Math.max(3, Math.min(1200, basis.rMetres * unitsPerMetre(Number(area) > 0 ? Number(area) : 100)));
 }
 
 /* 光源类型（单色 / 双色 / 彩色）
@@ -614,11 +696,51 @@ export function cctText(f: Obj): string {
   return `${f.cctMin}–${f.cctMax}K`;
 }
 
-/** 套用产品资料里的产品：产品没色温就落成「待核」占位，不把 null 写进灯具（后端会拒存）。 */
+/* 选型落参数（2026-11-03 用户口径）：只有产品真写了的字段才覆盖灯具，空串 / null 不动灯具原值；
+ * 色温与调光按产品信号推断，控制方式不由产品决定，交给项目智能方案收敛。 */
+
+/** 产品这一栏是否真写了值：空串、null、undefined 都算没写。 */
+function prodHas(prod: Obj, k: string): boolean {
+  const v = prod?.[k];
+  return v !== undefined && v !== null && String(v).trim() !== "";
+}
+
+/** 像色温的 K 值：1500–10000K 之外不认，非数字归 0。 */
+function cctValue(v: any): number {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 1500 && n <= 10000 ? Math.round(n) : 0;
+}
+
+/** 产品色温区间：先读 cct 文本（"2700K--6000K"、"3000K-3500K-4000K"），再退到结构化上下限。
+ * 结构化值原样出现在型号里（世聪 SR-SB9101EA 的 9101、SR-2421-SB 的 2421）是型号码串进色温列的假数据，不认。 */
+export function productCctRange(prod: Obj): { min: number; max: number } | null {
+  const nums = (String(prod?.cct ?? "").match(/\d{3,5}/g) || []).map(cctValue).filter(Boolean);
+  if (nums.length) return { min: Math.min(...nums), max: Math.max(...nums) };
+  const lo = cctValue(prod?.cctMin ?? prod?.cct_min);
+  const hi = cctValue(prod?.cctMax ?? prod?.cct_max);
+  if (!lo || !hi) return null;
+  if (String(prod?.model ?? "").includes(String(lo))) return null;
+  return { min: Math.min(lo, hi), max: Math.max(lo, hi) };
+}
+
+/** 产品写了 RGB / 彩色：色温区间是白光通道，灯具仍有彩光通道。 */
+const productIsColorful = (prod: Obj): boolean =>
+  /RGB|彩色/i.test(String(prod?.cct ?? ""));
+
+/** 产品调光信号：写了「调光」、带调光/调色温标记或色温是个区间，就视为可调光。
+ * 产品完全没信号返回 null —— 目录里空文本与「明确不可调光」长得一样，不能据此把灯具判成开闭灯。 */
+export function productDimmable(prod: Obj): boolean | null {
+  if (/调光|可调|dimmable/i.test(String(prod?.dimmable ?? ""))) return true;
+  if (prod?.dimmable === true || prod?.dimmable_flag === 1) return true;
+  if (prod?.tunable === true || prod?.tunable === 1) return true;
+  const range = productCctRange(prod);
+  return range && range.min < range.max ? true : null;
+}
+
+/** 套用产品的色温：产品写了区间就按区间定单色 / 双色 / 彩色，没写就落「待核」占位（后端要求上下限是数字）。 */
 export function applyProductCct(f: Obj, prod: Obj): void {
-  const lo = Number(prod?.cctMin);
-  const hi = Number(prod?.cctMax);
-  if (prod?.cctPending || !(lo > 0) || !(hi > 0)) {
+  const range = productCctRange(prod);
+  if (prod?.cctPending || !range) {
     f.cctPending = true;
     f.cct = CCT_PLACEHOLDER;
     f.cctMin = CCT_PLACEHOLDER;
@@ -629,21 +751,41 @@ export function applyProductCct(f: Obj, prod: Obj): void {
     return;
   }
   delete f.cctPending;
+  if (range.min === range.max && !productIsColorful(prod)) {
+    /* 单色分支不借 applyColorMode：它只认 2700/3000/3500/4000 四档，
+     * 产品写 2200K 会被改成 3000K，参数就不再对应产品了。 */
+    f.colorMode = "单色";
+    f.cct = range.min;
+    f.cctMin = range.min;
+    f.cctMax = range.min;
+    f.tunable = false;
+    f.colored = false;
+    return;
+  }
+  f.cctMin = range.min;
+  f.cctMax = range.max;
+  applyColorMode(f, productIsColorful(prod) ? "彩色" : "双色");
+  const cur = Number(f.cct);
+  f.cct =
+    Number.isFinite(cur) && cur >= range.min && cur <= range.max
+      ? cur
+      : Math.min(Math.max(CCT_PLACEHOLDER, range.min), range.max);
 }
 
-/** 选品写灯具的白名单字段：只取设计需要的值，不把产品备注/来源/路径整包写进灯具。 */
+/** 选品写灯具的白名单字段：只取设计需要的值，不把产品备注/来源/路径整包写进灯具。
+ * 控制方式与协议不在这里 —— 总线/无线方案说了算；category/protocol 灯具侧不消费，写了只会污染存量设计。 */
 const PRODUCT_FIXTURE_KEYS = [
-  "model", "name", "brand", "power", "watt", "cct", "cctMin", "cctMax",
-  "angle", "cutout", "unit", "warranty", "control", "protocol",
-  "dimmable", "tunable", "category",
+  "model", "name", "brand", "unit", "warranty", "angle", "cutout",
 ] as const;
 
 /** 把产品落进灯具：保留灯具自己的备注/来源；无价产品写 0 并打 priceMissing，界面显示「—待补价」。 */
 export function applyProductToFixture(f: Obj, prod: Obj): void {
   const picked: Obj = {};
   for (const k of PRODUCT_FIXTURE_KEYS) {
-    if (prod?.[k] !== undefined) picked[k] = prod[k];
+    if (prodHas(prod, k)) picked[k] = prod[k];
   }
+  const watt = Number(prod?.watt ?? prod?.power);
+  if (Number.isFinite(watt) && watt > 0) picked.power = watt;
   const raw = prod?.price;
   const price = raw === null || raw === undefined || raw === "" ? 0 : Number(raw);
   Object.assign(f, picked, {
@@ -653,6 +795,7 @@ export function applyProductToFixture(f: Obj, prod: Obj): void {
     priceVerified: false,
   });
   applyProductCct(f, prod);
+  if (productDimmable(prod)) f.dimmable = true;
 }
 
 /** 把色温夹取到该灯具允许区间。 */

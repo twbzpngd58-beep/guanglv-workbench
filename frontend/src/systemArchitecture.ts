@@ -227,7 +227,7 @@ export function planArchitecture(design: Obj, project: Obj): ArchPlan {
   checks.push({
     item: "灯具控制", need: "只允许「开闭 / DALI」", made: badControls.length ? `${badControls.length} 盏不合规` : "全部合规",
     ok: badControls.length === 0,
-    note: badControls.length ? `不合规值：${[...new Set(badControls)].join("、")}` : "KNX 方案不出现无线协议",
+    note: badControls.length ? `不合规值：${[...new Set(badControls)].join("、")}` : "KNX 方案不出现无线协议；双色温与彩色灯具经 DALI 网关承载，照常可布",
   });
   if (fixtures.length === 0) warnings.push("这个项目还没有灯具：架构是按灯具/空间算出来的，先布灯再生成。");
 

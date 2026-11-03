@@ -103,7 +103,7 @@
     furn4: new THREE.MeshStandardMaterial({ color: 0x4a5257, roughness: .35, metalness: .55 })
   };
 
-  let walls = [], washes = [], luminaires = [], stripObjs = [], sensorObjs = [], rooms = [];
+  let walls = [], washes = [], luminaires = [], stripObjs = [], stripPicks = [], sensorObjs = [], rooms = [];
   const manual = {};
   let sceneId = null, mode = "night", beamsOn = true, cutOn = true;
   // 情景切换渐变（现场 2026-10-17「情景模式切换时的渐变时间也失效了」）：
@@ -590,6 +590,7 @@
   /* ---------------- 灯具 ---------------- */
   const CONE_GEO = new THREE.ConeGeometry(1, 1, 28, 1, true);
   const POOL_GEO = new THREE.PlaneGeometry(2, 2);
+  const RING_GEO = new THREE.RingGeometry(0.14, 0.2, 20);
 
   /** 灯位动了 / 刚建好：地面光斑与光锥按当前位置重裁一次（裁不出来就回到整圆/整锥）。 */
   function reclipLuminaire(o) {
@@ -624,7 +625,15 @@
       const mount = Math.max(.3, l.mount != null ? +l.mount : NET - drop);
       const halfDeg = l.half || c.half || 20;
       const half = halfDeg * Math.PI / 180;
-      const poolR = Math.max(0.25, mount * Math.tan(half));
+      // 光斑半径以接口给的 poolR 为准（口径＝IES／理论剖面的 θ_cut 外缘，见 ies.pool_radius_m）。
+      // 前端不再自己拿半角重算一遍——两条口径各算各的，改一处另一处不动（阶段 3 换 IES 也会白换）。
+      // 只有老数据没带 poolR 才退回按半角估算。
+      const poolRFromApi = Number(l.poolR);
+      const poolR = isFinite(poolRFromApi) && poolRFromApi > 0
+        ? poolRFromApi : Math.max(0.25, mount * Math.tan(half));
+      // 未实测（IES 解析失败／剖面不能用）不画光斑与光锥：§5.1 不许拿理论值冒充实测。
+      // 改画一个红圈——既看得见这盏灯有问题，也点得中（验收④：不存在「点了没反应」的灯位）。
+      const unverified = l.photometry === "未实测";
       const color = new THREE.Color(c.color || 0xffc98a);
 
       const disc = new THREE.Mesh(DISC_GEO, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.2 }));
@@ -634,6 +643,15 @@
         new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
       grab.position.copy(disc.position);
       G.discs.add(grab);
+
+      let ring = null;
+      if (unverified) {
+        ring = new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({
+          color: 0xff5f57, transparent: true, opacity: .95, side: THREE.DoubleSide, depthWrite: false
+        }));
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(l.x, mount - 0.015, l.z); G.discs.add(ring);
+      }
 
       const cone = new THREE.Mesh(CONE_GEO, new THREE.MeshBasicMaterial({
         map: TEX_CONE, color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending,
@@ -648,7 +666,7 @@
       }));
       pool.position.set(l.x, 0.012, l.z); G.pools.add(pool);
 
-      const obj = { l, c, mount, poolR, cone, pool, disc, grab, lv: 0, segs: SEGS };
+      const obj = { l, c, mount, poolR, cone, pool, disc, grab, ring, unverified, lv: 0, segs: SEGS };
       reclipLuminaire(obj);               // 光斑 + 光锥一起按本空间边界/墙/高柜裁
       return obj;
     });
@@ -659,6 +677,7 @@
     const byc = {};
     (P.circuits || []).forEach(c => byc[c.id] = c);
     stripObjs = [];
+    stripPicks = [];
     (P.strips || []).forEach(s => {
       const c = byc[s.c] || { color: 0xffd6ac };
       const color = new THREE.Color(c.color || 0xffd6ac);
@@ -677,6 +696,9 @@
         }));
         line.rotation.set(-Math.PI / 2, 0, ang);
         line.position.set(mx, s.mount != null ? +s.mount : NET - 0.06, mz); G.strips.add(line);
+        // 灯带也要点得中（验收①④）：只把 7cm 宽的灯带本体挂进拾取——
+        // 洗墙、顶面漫射那两大片不抢点击，否则点哪儿都弹灯带面板，把「进空间」挡死了。
+        line.userData.strip = s; stripPicks.push(line);
 
         const wh = 1.45;
         const wall = new THREE.Mesh(new THREE.PlaneGeometry(len, wh), new THREE.MeshBasicMaterial({
@@ -813,9 +835,9 @@
       o.cone.material.opacity = lv * (mode === "day" ? 0.16 : 0.34);
       // 现场 2026-10-16「白天晚上可以手动切换」：光锥是**独立开关**，白天勾了也要看得见
       // （原来限定 mode === "night"，白天勾「光锥示意」等于没反应）。
-      o.cone.visible = beamsOn && lv > 0.01;
+      o.cone.visible = beamsOn && lv > 0.01 && !o.unverified;
       o.pool.material.opacity = lv * (mode === "day" ? 0.28 : 0.78);
-      o.pool.visible = lv > 0.01;
+      o.pool.visible = lv > 0.01 && !o.unverified;
       o.disc.material.opacity = 0.18 + lv * 0.82;
     });
     stripObjs.forEach(o => {
@@ -839,6 +861,7 @@
       o.ring.material.opacity = any ? 0.75 : 0;
     });
     G.beams.visible = beamsOn;
+    if (sel) syncInfoState();          // 面板开着时同步「开亮／关掉」字样，不重建整块面板
     // 渐变逐帧刷新时不要每帧重建左侧列表（30 秒渐变＝1800 帧）；渐变结束那一帧补一次。
     if (withUi !== false) renderUI();
   }
@@ -874,9 +897,13 @@
     const total = luminaires.length;
     const on = luminaires.filter(o => o.lv > 0.02).length;
     let watts = 0;
+    // 盏数／功率只用接口给的 count、watt（口径＝exports 回路表：fixture_watts ＋ circuit 分组键），
+    // 前端不再自己数一遍——三维写的「约 X W」和交付的回路表对不上，客户第一个发现（阶段 1.5 验收②）。
+    const wattOfCircuit = c => c.watt != null ? +c.watt
+      : (c.watts || 7) * (c.type === "灯带" ? 1
+        : (c.count != null ? c.count : (P.lights || []).filter(l => l.c === c.id).length));
     (P.circuits || []).forEach(c => {
-      const n = (P.lights || []).filter(l => l.c === c.id).length;
-      watts += Math.max(0, Math.min(1, levelOf(c.id))) * (c.watts || 7) * (c.type === "灯带" ? 1 : n);
+      watts += Math.max(0, Math.min(1, levelOf(c.id))) * wattOfCircuit(c);
     });
     const st = $("#status");
     if (st) st.innerHTML = `亮灯 <b>${on}/${total}</b> 盏 · 回路 ${(P.circuits || []).filter(c => levelOf(c.id) > 0.02).length}/${(P.circuits || []).length} · 约 <b>${Math.round(watts)}</b> W`;
@@ -888,13 +915,22 @@
     cw.innerHTML = "";
     (P.circuits || []).forEach(c => {
       const lv = levelOf(c.id), isMan = manual[c.id] !== undefined;
-      const n = (P.lights || []).filter(l => l.c === c.id).length;
+      const n = c.count != null ? c.count : (P.lights || []).filter(l => l.c === c.id).length;
       const row = document.createElement("div");
       row.className = "crow" + (lv > 0.02 ? " on" : "") + (isMan ? " man" : "");
       row.dataset.cid = c.id;
-      row.innerHTML = `<span class="dot"></span><span class="nm">${c.id}</span>` +
-        `<span class="lv">${lv > 0.02 ? Math.round(lv * 100) + "%" : "灭"}</span>` +
-        `<span class="meta">${n ? n + "盏" : "灯带"}${c.price ? " · ¥" + c.price + "/" + (c.unit || "个") : ""}</span>`;
+      // 回路名是人在画布上填的字符串，一律走 textContent，不拼进 innerHTML（注入风险）。
+      const dot = document.createElement("span"); dot.className = "dot";
+      const nm = document.createElement("span"); nm.className = "nm";
+      nm.textContent = c.tableKey || c.id;
+      nm.title = "回路号 " + c.id + (c.tableKey ? " · 进回路表按「" + c.tableKey + "」" : "");
+      const lvEl = document.createElement("span"); lvEl.className = "lv";
+      lvEl.textContent = lv > 0.02 ? Math.round(lv * 100) + "%" : "灭";
+      const meta = document.createElement("span"); meta.className = "meta";
+      meta.textContent = (n ? n + "盏" : "灯带") +
+        (wattOfCircuit(c) ? " · 约" + Math.round(wattOfCircuit(c)) + "W" : "") +
+        (c.price ? " · ¥" + c.price + "/" + (c.unit || "个") : "");
+      [dot, nm, lvEl, meta].forEach(x => row.appendChild(x));
       row.addEventListener("click", () => toggleCircuit(c.id));
       cw.appendChild(row);
     });
@@ -1303,6 +1339,7 @@
   function moveLuminaire(o) {
     o.disc.position.set(o.l.x, o.mount - 0.02, o.l.z);
     o.grab.position.copy(o.disc.position);
+    if (o.ring) { o.ring.position.set(o.l.x, o.mount - 0.015, o.l.z); }
     o.cone.position.set(o.l.x, o.mount / 2, o.l.z);
     o.pool.position.set(o.l.x, 0.012, o.l.z);
     // 拖到哪、光斑与光锥就按哪重裁：不然拖动过程中会越出墙（现场 2026-10-17）
@@ -1315,7 +1352,7 @@
     const hits = ray.intersectObjects(G.discs.children, false);
     if (!hits.length) return null;
     const o = hits[0].object;
-    return luminaires.find(x => x.disc === o || x.grab === o) || null;
+    return luminaires.find(x => x.disc === o || x.grab === o || x.ring === o) || null;
   }
   renderer.domElement.addEventListener("pointermove", e => {
     if (dragging) {
@@ -1370,12 +1407,15 @@
     const r = renderer.domElement.getBoundingClientRect();
     pointer.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(pointer, cam);
-    const hits = ray.intersectObjects([...G.sensors.children, ...G.discs.children], false);
+    const hits = ray.intersectObjects([...G.sensors.children, ...G.discs.children, ...stripPicks], false);
     if (hits.length) {
       const o = hits[0].object;
       if (o.userData.sensor) { pokeSensor(o.userData.sensor); return; }
-      const lum = luminaires.find(x => x.disc === o || x.grab === o);
-      if (lum) { toggleCircuit(lum.c.id); return; }
+      const lum = luminaires.find(x => x.disc === o || x.grab === o || x.ring === o);
+      if (lum) { showInfo("light", lum); return; }
+      // 灯带同样点开（验收①④：不存在「点了没反应」的灯位，灯带也是灯位）
+      const strip = o.userData.strip;
+      if (strip) { showInfo("strip", stripObjs.find(x => x.s === strip) || { s: strip, mats: [] }); return; }
     }
     // 没点到感应器/灯：再试「进空间」——点空间名标签、或点这个空间的地面
     const roomHits = ray.intersectObjects(
@@ -1385,6 +1425,235 @@
       if (idx != null) { enterRoom(idx); return; }
     }
   });
+
+  /* ---------------- 灯位详情面板（阶段 1.5） ----------------
+   * 验收①：点任一灯位出「回路／开孔／SKU／驱动」四组字段。字段口＝接口的 info（§7.5 灯位 +
+   *        §7.6 驱动 + 产品库），这里只做如实展示，绝不前端再算一份——两套口径迟早分家。
+   * 验收②：开关回路降为面板里的次级动作。原来点灯＝直接 toggleCircuit，现场反馈是
+   *        「手一抖灯就关了」；现在点灯先看数，开关要人明确按一下。
+   * 验收③：换 SKU 走 POST /api/lighting3d/<pid>/lights/<lid>/sku，回填字段与光斑半径都用接口
+   *        给的（θ_cut 口径在 ies.pool_radius_m，精确配光衰减属阶段 3）。
+   * 验收④：不存在「点了没反应」的灯位——连字段包都没带的那一盏也开面板，把缺口写在最前面。
+   */
+  const GROUP_TITLES = { circuit: "回路", opening: "开孔", sku: "SKU／产品", driver: "驱动" };
+  const GAP_TEXT = "—（未填）";
+  let sel = null;                     // { kind: "light"|"strip", obj }
+  let infoEl = null, infoToggle = null, skuNote = null, panelSnap = null;
+
+  function mk(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = String(text);
+    return n;
+  }
+  function selRow() { const o = sel && sel.obj; return o ? (o.l || o.s || {}) : {}; }
+  function skuValueOf(info) {
+    const rows = ((info || {}).groups || {}).sku || [];
+    const hit = rows.find(r => r.key === "model");
+    return hit ? String(hit.value || "") : "";
+  }
+  function infoStyle() {
+    if (document.getElementById("gv3d-info-css")) return;
+    const s = mk("style");
+    s.id = "gv3d-info-css";
+    s.textContent = [
+      "#gv3d-info{position:fixed;left:16px;bottom:16px;z-index:60;display:none;",
+      "width:min(372px,calc(100vw - 32px));max-height:min(52vh,460px);overflow:auto;",
+      "padding:11px 13px 13px;border-radius:14px;background:rgba(20,21,26,.94);color:#eceae5;",
+      "border:1px solid rgba(255,255,255,.14);box-shadow:0 10px 34px rgba(0,0,0,.4);",
+      "font:12px/1.5 -apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif}",
+      "#gv3d-info.open{display:block}",
+      "#gv3d-info h4{margin:11px 0 3px;font-size:10.5px;font-weight:600;letter-spacing:.5px;color:#9aa3b2}",
+      "#gv3d-info .gi-t{display:flex;align-items:flex-start;gap:8px;font-size:13px;font-weight:600}",
+      "#gv3d-info .gi-t small{display:block;font-weight:400;font-size:11px;color:#9aa3b2;margin-top:3px}",
+      "#gv3d-info .gi-x{margin-left:auto;flex:0 0 auto;width:22px;height:22px;border:0;border-radius:50%;",
+      "background:rgba(255,255,255,.1);color:#eceae5;font:15px/1 sans-serif;cursor:pointer}",
+      "#gv3d-info .gi-row{display:flex;gap:9px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06)}",
+      "#gv3d-info .gi-k{flex:0 0 112px;color:#9aa3b2}",
+      "#gv3d-info .gi-v{flex:1 1 auto;word-break:break-word}",
+      "#gv3d-info .gi-row.gap .gi-v{color:#ff8f86}",
+      "#gv3d-info .gi-miss{margin-top:9px;padding:8px 10px;border-radius:10px;",
+      "background:rgba(255,95,87,.12);border:1px solid rgba(255,95,87,.34)}",
+      "#gv3d-info .gi-miss b{display:block;font-size:11px;color:#ff9d95;letter-spacing:.4px}",
+      "#gv3d-info .gi-miss li{margin-left:16px}",
+      "#gv3d-info .gi-ok{margin-top:9px;font-size:11px;color:#8fd6a0}",
+      "#gv3d-info .gi-acts{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}",
+      "#gv3d-info .gi-b{font:inherit;padding:6px 11px;border-radius:9px;border:1px solid rgba(255,255,255,.2);",
+      "background:rgba(255,255,255,.08);color:#eceae5;cursor:pointer}",
+      "#gv3d-info .gi-b:hover{border-color:#c9a96e}",
+      "#gv3d-info .gi-b[disabled]{opacity:.45;cursor:not-allowed}",
+      "#gv3d-info .gi-sku{display:flex;gap:6px;margin-top:8px}",
+      "#gv3d-info .gi-sku input{flex:1 1 auto;min-width:0;padding:6px 8px;border-radius:8px;",
+      "border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.3);color:#eceae5;font:inherit}",
+      "#gv3d-info .gi-note{margin-top:9px;font-size:11px;color:#c8c3ba;line-height:1.65}",
+      "#gv3d-info .gi-note .bad{color:#ff9d95}",
+      "@media (max-width:760px){#gv3d-info{left:10px;right:10px;bottom:10px;width:auto;max-height:56vh}}",
+    ].join("");
+    document.head.appendChild(s);
+  }
+  function fieldRow(r) {
+    const raw = r.value === null || r.value === undefined ? "" : String(r.value);
+    const v = raw === "" ? "" : raw;
+    const row = mk("div", "gi-row" + (v ? "" : " gap"));
+    row.appendChild(mk("span", "gi-k", r.label));
+    row.appendChild(mk("span", "gi-v", v || GAP_TEXT));
+    return row;
+  }
+  function showInfo(kind, obj) { sel = { kind, obj }; skuNote = null; renderInfo(); }
+  function hideInfo() { sel = null; infoToggle = null; if (infoEl) infoEl.classList.remove("open"); }
+  function syncInfoState() {
+    if (!sel || !infoToggle) return;
+    const cid = String(selRow().c || "");
+    if (!cid) { infoToggle.textContent = "无回路可开关"; infoToggle.disabled = true; return; }
+    infoToggle.disabled = false;
+    infoToggle.textContent = (levelOf(cid) > 0.02 ? "关掉回路 " : "开亮回路 ") + cid;
+  }
+  function snapshot() {
+    const row = selRow(), info = row.info || null;
+    const fields = {};
+    Object.keys(GROUP_TITLES).forEach(k => {
+      fields[k] = (((info || {}).groups || {})[k] || []).map(r => r.label);
+    });
+    return {
+      open: !!(infoEl && infoEl.classList.contains("open")),
+      kind: sel && sel.kind, id: row.id || "", code: (info && info.code) || row.code || "",
+      hasInfo: !!info, groups: info ? Object.keys(info.groups || {}) : [],
+      fields: fields, missing: (info && info.missing) || [],
+      circuit: row.c || "", poolR: row.poolR != null ? +(+row.poolR).toFixed(3) : null,
+      photometry: row.photometry || "", orphan: !!(info && info.orphan),
+      text: infoEl ? infoEl.textContent : "",
+    };
+  }
+  async function applySku(model) {
+    const row = selRow(), pid = (P && P.pid) || "";
+    if (!pid) { skuNote = { warn: ["这个页面没带项目编号：换 SKU 请在工作台的三维页里操作。"] }; renderInfo(); return; }
+    if (!row.id) { skuNote = { warn: ["这一盏没有灯位号，接口对不上是谁。"] }; renderInfo(); return; }
+    let res = null, body = null;
+    try {
+      res = await fetch("/api/lighting3d/" + encodeURIComponent(pid) + "/lights/" +
+        encodeURIComponent(row.id) + "/sku", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: model }),
+      });
+      body = await res.json().catch(() => null);
+    } catch (e) { skuNote = { warn: ["换 SKU 请求没发出去：" + (e && e.message)] }; renderInfo(); return; }
+    if (!res.ok) {
+      skuNote = { warn: [((body && (body.detail || body.error)) || ("HTTP " + res.status)) + ""] };
+      renderInfo(); return;
+    }
+    row.info = body.info; row.photometry = body.photometry; row.half = body.half;
+    if (sel && sel.kind === "light") {
+      row.poolR = body.poolR;
+      const o = sel.obj;
+      o.poolR = Math.max(0.05, +body.poolR || o.poolR);
+      if (body.heightM) o.mount = +body.heightM;
+      o.unverified = body.photometry === "未实测";
+      if (o.ring) o.ring.visible = o.unverified;
+      reclipLuminaire(o);              // 光斑跟着新参数走：换 24°→60° 半径要肉眼看得见变大
+      applyLevels();
+    }
+    skuNote = { rows: body.applied || [], same: body.unchanged || [], warn: body.warnings || [] };
+    renderInfo();
+  }
+  function renderInfo() {
+    if (!sel) return;
+    infoStyle();
+    if (!infoEl || infoEl.parentNode !== document.body) {
+      infoEl = mk("aside"); infoEl.id = "gv3d-info";
+      infoEl.setAttribute("role", "dialog"); infoEl.setAttribute("aria-label", "灯位详情");
+      document.body.appendChild(infoEl);
+    }
+    const row = selRow();
+    const info = row.info || null;
+    infoEl.textContent = "";            // 只清面板内部（值一律走 textContent，不拼 HTML）
+    infoToggle = null;
+
+    const head = mk("div", "gi-t"), headText = mk("div");
+    headText.appendChild(mk("span", null,
+      ((info && info.code) || row.code || row.id || "（无编号）") + " · " + ((info && info.type) || "灯具")));
+    headText.appendChild(mk("small", null, [
+      sel.kind === "strip" ? "灯带" : "灯位",
+      row.c ? ("回路 " + row.c) : "回路未归属",
+      row.poolR != null ? ("光斑 R " + (+row.poolR).toFixed(2) + "m") : null,
+      row.photometry || null,
+    ].filter(Boolean).join(" · ")));
+    head.appendChild(headText);
+    const x = mk("button", "gi-x", "×"); x.type = "button"; x.setAttribute("aria-label", "关闭详情");
+    x.addEventListener("click", hideInfo);
+    head.appendChild(x);
+    infoEl.appendChild(head);
+
+    if (!info) {
+      const box = mk("div", "gi-miss");
+      box.appendChild(mk("b", null, "数据缺口"));
+      box.appendChild(mk("p", null,
+        "接口没给这一盏的字段包（回路／开孔／SKU／驱动都取不到）。这不是「点了没反应」——" +
+        "是它在数据口上就没有内容，请回布灯画布补录或重新同步灯位。"));
+      infoEl.appendChild(box);
+      infoEl.classList.add("open");
+      panelSnap = snapshot();
+      return;
+    }
+
+    const miss = info.missing || [];
+    if (miss.length) {
+      const box = mk("div", "gi-miss");
+      box.appendChild(mk("b", null, "数据缺口 " + miss.length + " 项（不是这盏灯没有，是这一格没填）"));
+      const ul = mk("ul");
+      miss.forEach(m => ul.appendChild(mk("li", null, m)));
+      box.appendChild(ul);
+      infoEl.appendChild(box);
+    } else {
+      infoEl.appendChild(mk("div", "gi-ok", "§7.5／§7.6 必填字段齐"));
+    }
+    if (info.orphan) {
+      const n = mk("div", "gi-note");
+      n.appendChild(mk("div", null,
+        "这一盏是图纸解析出来的三维灯位，还没回填到设计：开孔、驱动等字段要在设计侧录入后才显示。"));
+      infoEl.appendChild(n);
+    }
+
+    Object.keys(GROUP_TITLES).forEach(k => {
+      const rows = (info.groups || {})[k] || [];
+      infoEl.appendChild(mk("h4", null, GROUP_TITLES[k] + (rows.length ? "" : "（接口没给这一组）")));
+      rows.forEach(r => infoEl.appendChild(fieldRow(r)));
+    });
+
+    if (skuNote) {
+      const n = mk("div", "gi-note");
+      (skuNote.rows || []).forEach(t => n.appendChild(mk("div", null, "✓ " + t)));
+      (skuNote.same || []).forEach(t => n.appendChild(mk("div", null, "－ " + t + "（产品库这格空着，不替它编值）")));
+      (skuNote.warn || []).forEach(t => n.appendChild(mk("div", "bad", "！ " + t)));
+      infoEl.appendChild(n);
+    }
+
+    const acts = mk("div", "gi-acts");
+    infoToggle = mk("button", "gi-b"); infoToggle.type = "button";
+    infoToggle.addEventListener("click", () => {
+      const cid = String(selRow().c || "");
+      if (cid) toggleCircuit(cid);     // 验收②：走回路同一条路（manual + applyLevels），不另开一份状态
+      renderInfo();
+    });
+    acts.appendChild(infoToggle);
+    infoEl.appendChild(acts);
+    syncInfoState();
+
+    const skuWrap = mk("div", "gi-sku");
+    const inp = mk("input"); inp.type = "text";
+    inp.placeholder = "产品库型号（D10-2）"; inp.value = skuValueOf(info);
+    inp.setAttribute("aria-label", "换 SKU 型号");
+    const btn = mk("button", "gi-b", "换 SKU"); btn.type = "button";
+    const go = () => { const v = String(inp.value || "").trim(); if (v) void applySku(v); };
+    btn.addEventListener("click", go);
+    inp.addEventListener("keydown", ev => { if (ev.key === "Enter") go(); });
+    skuWrap.appendChild(inp); skuWrap.appendChild(btn);
+    infoEl.appendChild(skuWrap);
+
+    infoEl.classList.add("open");
+    panelSnap = snapshot();
+  }
+  document.addEventListener("keydown", e => { if (e.key === "Escape") hideInfo(); });
 
   /* ---------------- 验收 API ---------------- */
   function luminanceStats() {
@@ -1432,8 +1701,9 @@
     bindCanvas();     // 画布可能已经被 React 换过了
     // 工作台里同一个页面可能换项目/重新生成：先把上一份场景清干净，再建这一份。
     Object.values(G).forEach(g => { while (g.children.length) g.remove(g.children[0]); });
-    walls = []; washes = []; luminaires = []; stripObjs = []; sensorObjs = []; rooms = [];
+    walls = []; washes = []; luminaires = []; stripObjs = []; stripPicks = []; sensorObjs = []; rooms = [];
     Object.keys(manual).forEach(k => delete manual[k]);
+    hideInfo();
     CEIL = +P.ceiling || 2.8;
     NET = +P.ceiling_net || CEIL;
     CUT = +P.wall_cut || 1.5;
@@ -1480,6 +1750,15 @@
         on: luminaires.filter(o => o.lv > 0.02).length
       }),
       accept: luminanceStats, probe: probeUnderlight,
+      /** 阶段 1.5 验收：程序化点开第 i 个灯位／灯带，读与面板同源的数据（不必靠人截图核对）。 */
+      pick: i => { const o = luminaires[i || 0]; if (!o) return null; showInfo("light", o); return snapshot(); },
+      pickStrip: i => { const o = stripObjs[i || 0]; if (!o) return null; showInfo("strip", o); return snapshot(); },
+      panel: () => snapshot(),
+      closePanel: () => { hideInfo(); return true; },
+      swapSku: (i, model) => {
+        const o = luminaires[i || 0]; if (!o) return null;
+        showInfo("light", o); void applySku(String(model || "").trim()); return snapshot();
+      },
       enter: enterRoom, exit: exitRoom,
       next: stepRoom,
       place: (kind, w, d, h, rot, cb, onEnd) => { placeStart(kind, w, d, h, rot, cb, onEnd); return true; },

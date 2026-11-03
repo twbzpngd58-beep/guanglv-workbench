@@ -40,6 +40,11 @@ from . import panels
 from . import product_library as PL
 from . import access
 from . import review_scope
+from . import quality as Q
+from . import v3_fields as V
+from . import delivery as DL
+from . import brandwall as W
+from . import license as LICENSE
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
@@ -387,6 +392,7 @@ def commit(c, p, action, detail="", invalidate=False, status=None):
     dict{复核项: [原因]} 额外指定失效项（再叠加设计差异）；"all" 全部设计类复核失效。"""
     before=c.execute("SELECT doc FROM projects WHERE id=?",(p['id'],)).fetchone()
     before_design=json.loads(before['doc']).get('design') if before else None
+    Q.ensure(p)
     if before and before_design!=p.get('design'):
         coop.assert_design_edit(p)
         p['cooperation']['packageReviews']={}
@@ -420,6 +426,19 @@ def commit(c, p, action, detail="", invalidate=False, status=None):
     event(c, p, action, detail)
     if lost:
         event(c, p, "复核失效", f"{action}：" + "；".join(lost))
+
+
+def commit_note(c, p, action, detail=""):
+    """台账留痕但不涨 revision。交底签字/出图登记确认的是「当时那一版图」，
+    本身不是设计改动；若也走 commit()，签完第 2 条就把第 1 条的签字作废，
+    12 条永远签不齐（§8.3）。真正改设计的 PUT /design 才升 revision、让旧签字失效。"""
+    p["updatedAt"] = now()
+    c.execute(
+        "UPDATE projects SET doc=? WHERE id=?",
+        (json.dumps(p, ensure_ascii=False), p["id"]),
+    )
+    snapshot(c, p, action)
+    event(c, p, action, detail)
 
 
 class ProjectInput(BaseModel):
@@ -456,6 +475,166 @@ class DesignInput(BaseModel):
     design: dict[str, Any]
 
 
+def _numeric(v, low, high, label):
+    if (
+        not isinstance(v, (float, int))
+        or isinstance(v, bool)
+        or not math.isfinite(v)
+        or not low <= v <= high
+    ):
+        raise HTTPException(422, label + " 数值超出范围")
+
+
+def _as_num(v, label):
+    """闸门里的可选数值：没填＝缺件（不是错），填了不是数＝坏数据，直接拒。"""
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        raise HTTPException(422, label + " 必须是数字")
+    if not math.isfinite(f):
+        raise HTTPException(422, label + " 数值无效")
+    return f
+
+
+def validate_v3_objects(d, p):
+    """§7 对象层：老项目没有这些数组＝照常放行（向后兼容）；一旦出现必须结构合法。
+
+    只校验形态（列表/id 唯一/取值域/引用完整），不校验缺件——缺件进缺件单，
+    不在这拦，否则 1.0 卡死（§7.1 字段三档的理由）。
+    """
+    def rows_of(key, limit=2000):
+        if key not in d or d[key] is None:
+            return []
+        rows = d[key]
+        if not isinstance(rows, list) or len(rows) > limit:
+            raise HTTPException(422, f"{key} 必须是列表且不能超过 {limit} 条")
+        ids = [x.get("id") for x in rows if isinstance(x, dict)]
+        if len(ids) != len(rows) or any(not isinstance(i, str) or not i for i in ids) or len(set(ids)) != len(ids):
+            raise HTTPException(422, f"{key} 对象 ID 缺失或重复")
+        return rows
+
+    circuits = rows_of("circuits")
+    cids = {c["id"] for c in circuits}
+    nos = set()
+    fids = {f.get("id") for f in d.get("fixtures") or [] if isinstance(f, dict)}
+    for c in circuits:
+        no = str(c.get("circuit_no") or "").strip()
+        if no:
+            if no in nos:
+                raise HTTPException(422, f"回路号重复：{no}")
+            nos.add(no)
+        members = c.get("fixture_ids")
+        if members is not None:
+            if not isinstance(members, list) or any(m not in fids for m in members):
+                raise HTTPException(422, f"回路 {no or c['id']} 的所辖灯位引用了不存在的灯位")
+        g = _as_num(c.get("wire_gauge"), "线径")
+        if g is not None and g not in V.WIRE_GAUGES:
+            raise HTTPException(422, f"回路 {no or c['id']} 线径只允许 1.5 / 2.5 / 4 mm²")
+        if c.get("control_mode") not in (None, "") and c["control_mode"] not in V.CONTROL_MODES:
+            raise HTTPException(422, f"回路 {no or c['id']} 控制方式取值无效")
+
+    cabs = rows_of("cabinets")
+    for cab in cabs:
+        cells = cab.get("cells") or []
+        if not isinstance(cells, list) or len(cells) > 500:
+            raise HTTPException(422, "柜格必须是列表且不能超过 500 格")
+        cell_ids = [x.get("cell_id") for x in cells if isinstance(x, dict)]
+        if len(cell_ids) != len(cells) or len(set(cell_ids)) != len(cell_ids):
+            raise HTTPException(422, "柜格号缺失或在柜内重复")
+        for axis in ("width_mm", "depth_mm", "height_mm"):
+            if cab.get(axis) is not None:
+                _numeric(cab[axis], 0, 100000, "柜体尺寸")
+        for cell in cells:
+            th = cell.get("plate_thickness")
+            th = _as_num(cell.get("plate_thickness"), "板厚")
+            if th is not None and not 5 <= th <= 25:
+                raise HTTPException(422, f"柜格 {cell.get('cell_id')} 板厚只允许 5–25mm")
+            plates = cell.get("plates") or []
+            if not isinstance(plates, list) or len(plates) > 20:
+                raise HTTPException(422, "板面必须是列表且不能超过 20 块")
+            codes = [str(x.get("plate_code") or "")[-1:] for x in plates if isinstance(x, dict)]
+            if any(cd not in V.PLATE_CODES for cd in codes):
+                raise HTTPException(422, f"柜格 {cell.get('cell_id')} 有板代号不在 L/R/B/T/K/D 六种里")
+            if len(set(codes)) != len(codes):
+                raise HTTPException(422, f"柜格 {cell.get('cell_id')} 板代号重复")
+
+    entries = rows_of("powerEntries")
+    for e in entries:
+        kind = str(e.get("d8_1") or "")
+        if kind and not any(k in kind for k in ("220", "380", "单相", "三相")):
+            raise HTTPException(422, "进户电源要写单相 220V 或三相 380V")
+
+    mounts = rows_of("mounts")
+    mids = {m["id"] for m in mounts}
+    plate_ids = set()
+    for cab in cabs:
+        for cell in cab.get("cells") or []:
+            if isinstance(cell, dict):
+                for plate in cell.get("plates") or []:
+                    if isinstance(plate, dict) and plate.get("id"):
+                        plate_ids.add(plate["id"])
+    for m in mounts:
+        if m.get("kind") not in (None, "") and m["kind"] not in ("灯具", "开孔", "取电", "线槽"):
+            raise HTTPException(422, "挂载类型只允许 灯具／开孔／取电／线槽")
+        host = m.get("plate_id")
+        if host and plate_ids and host not in plate_ids:
+            raise HTTPException(422, f"挂载 {m.get('id')} 的宿主板面不存在——柜内灯不允许无宿主板面")
+        cut = m.get("cutout_id")
+        if cut and cut not in mids:
+            raise HTTPException(422, f"挂载 {m.get('id')} 的关联开孔号指向不存在的挂载")
+        for axis in ("u", "v"):
+            if m.get(axis) is not None:
+                _numeric(m[axis], -100000, 100000, "板面局部坐标")
+
+    for f in d.get("fixtures") or []:
+        if not isinstance(f, dict):
+            continue
+        cid = f.get("circuitId")
+        if cid and circuits and cid not in cids:
+            raise HTTPException(422, f"灯具 {f.get('code') or cid} 挂到了不存在的回路")
+        st = f.get("d11")
+        if isinstance(st, str) and st and st not in V.D11_STATES:
+            raise HTTPException(422, f"灯具 {f.get('code')} 的避让状态取值无效")
+        if isinstance(st, dict) and st.get("state") in V.D11_STATES:
+            if st["state"] == "已避让" and not (st.get("avoided") and st.get("gap_mm") is not None):
+                raise HTTPException(422, f"灯具 {f.get('code')} 标了「已避让」但没引用被避让对象与净距")
+        box = f.get("d9_1")
+        if box and str(box) not in V.D9_BOX_KINDS and not str(box).startswith("项目自定义"):
+            raise HTTPException(422, f"灯具 {f.get('code')} 暗盒规格取值无效（项目自定义请写明规格）")
+
+    # 交底签字与图号登记是系统写的，但老项目/外部包可能带进脏值——形态拦在这里，
+    # 免得导出交底页时因一条垃圾记录整包出不了图。
+    hs = d.get("handoverSigns")
+    if hs is not None and (not isinstance(hs, list) or len(hs) > 200):
+        raise HTTPException(422, "handoverSigns 必须是列表且不能超过 200 条")
+
+    # A9：不过 L0 的 SKU 保存不了。人工改选（L3）可以留痕进来，但必须带改选人，
+    # 否则「独家品牌把装不上的灯顶回第一」这条口子就是从这里开的（§5.2）。
+    pls = d.get("placements")
+    if pls is not None:
+        if not isinstance(pls, list) or len(pls) > 5000:
+            raise HTTPException(422, "placements 必须是列表且不能超过 5000 条")
+        by_sku = {str(x.get("sku") or ""): x for x in W.load_products()}
+        for i, r in enumerate(pls):
+            if not isinstance(r, dict):
+                raise HTTPException(422, f"第 {i + 1} 条落位不是对象")
+            prod = by_sku.get(str(r.get("sku") or ""))
+            if prod is None:
+                raise HTTPException(422, f"第 {i + 1} 条落位的 SKU 不在产品库：{r.get('sku') or '（空）'}")
+            bad = W.l0_failures(prod, r.get("params") or {})
+            if bad and not str(r.get("override_by") or "").strip():
+                raise HTTPException(422, f"第 {i + 1} 条落位参数不符（L0 硬闸）："
+                                         + "；".join(bad[:3])
+                                         + "；人工改选须写 override_by 与 override_note")
+    if isinstance(hs, list) and any(not isinstance(x, dict) or not x.get("key") for x in hs):
+        raise HTTPException(422, "交底签字记录必须带 key")
+    reg = d.get("drawingRegistry")
+    if reg is not None and not isinstance(reg, dict):
+        raise HTTPException(422, "drawingRegistry 必须是对象")
+
+
 def validate_design(d, p):
     for key in ("rooms", "fixtures", "walls", "openings", "scenes", "devices", "texts"):
         if not isinstance(d.get(key), list):
@@ -470,14 +649,7 @@ def validate_design(d, p):
         ):
             raise HTTPException(422, f"{key} 对象 ID 缺失或重复")
 
-    def numeric(v, low, high, label):
-        if (
-            not isinstance(v, (float, int))
-            or isinstance(v, bool)
-            or not math.isfinite(v)
-            or not low <= v <= high
-        ):
-            raise HTTPException(422, label + " 数值超出范围")
+    numeric = _numeric
 
     room_ids = {r["id"] for r in d["rooms"]}
     if "furniture" in d:
@@ -517,6 +689,9 @@ def validate_design(d, p):
     for key in ("rooms", "fixtures", "walls", "openings"):
         for obj in d[key]:
             for axis in ("x", "y"):
+                # 边界挂接的门窗（edgeIndex）没有 x/y，坐标由空间边界推导；老口径门窗仍必须带 x/y。
+                if key == "openings" and "edgeIndex" in obj and obj.get(axis) is None:
+                    continue
                 numeric(obj.get(axis), -10000, 10000, axis)
             numeric(obj.get("floor", 1), 1, p["floors"], "楼层")
             if not isinstance(obj.get("floor", 1), int):
@@ -533,9 +708,11 @@ def validate_design(d, p):
         if not r.get("name"):
             raise HTTPException(422, "房间名称不能为空")
         if r.get("points"):
-            if len(r["points"]) < 3:
+            if not isinstance(r["points"], list) or len(r["points"]) < 3:
                 raise HTTPException(422, "房间至少需要三个边界点")
             for v in r["points"]:
+                if not isinstance(v, dict):
+                    raise HTTPException(422, "房间边界点无效")
                 for k in ("x", "y"):
                     numeric(v.get(k), -10000, 10000, "边界点")
     codes = set()
@@ -572,6 +749,8 @@ def validate_design(d, p):
                 if not isinstance(path, list) or len(path) < 2:
                     raise HTTPException(422, "灯带必须至少包含两个线形路径点")
                 for point in path:
+                    if not isinstance(point, dict):
+                        raise HTTPException(422, "灯带路径点无效")
                     for axis in ("x", "y"):
                         numeric(point.get(axis), -10000, 10000, "灯带路径点")
             if not f.get("powerSupply") or not f.get("controller"):
@@ -595,6 +774,21 @@ def validate_design(d, p):
         numeric(opening.get("heightM"), .1, room.get("heightM", 3), "洞口高度")
         if opening.get("sillHeight", 0) + opening["heightM"] > room.get("heightM", 3) + 1e-6:
             raise HTTPException(422, "门窗洞口不能超出完成面层高")
+    for dev in d["devices"]:
+        # 设备允许暂未落位（x/y 缺失＝待放），但一旦有值就必须成对且有限：
+        # NaN/Inf/字符串会画到原点或消失，以前能一路带到成品 DXF，导出时才炸成 500。
+        x, y = dev.get("x"), dev.get("y")
+        if (x is None) != (y is None):
+            raise HTTPException(422, "设备坐标 x/y 要成对填写")
+        if x is not None:
+            for axis in ("x", "y"):
+                numeric(dev.get(axis), -10000, 10000, "设备位置")
+        if dev.get("floor") is not None:
+            numeric(dev["floor"], 1, p["floors"], "设备楼层")
+            if not isinstance(dev["floor"], int):
+                raise HTTPException(422, "设备楼层必须为整数")
+        if dev.get("roomId") and dev["roomId"] not in room_ids:
+            raise HTTPException(422, "设备所属空间不存在")
     for s in d["scenes"]:
         if not s.get("name"):
             raise HTTPException(422, "场景名称不能为空")
@@ -602,6 +796,9 @@ def validate_design(d, p):
         if not isinstance(s.get("states", {}), dict):
             raise HTTPException(422, "场景状态格式不正确")
         for fid, st in s.get("states", {}).items():
+            if not isinstance(st, dict):
+                # 旧草稿里出现过 {"灯id": 1} 的写法；不拦会在下面 st.get() 抛 AttributeError → 500
+                raise HTTPException(422, "场景状态格式不正确：每盏灯要写开关/亮度/色温")
             if fid not in fixtures:
                 raise HTTPException(422, "场景引用了不存在的灯具")
             f = fixtures[fid]
@@ -624,6 +821,7 @@ def validate_design(d, p):
                 raise HTTPException(422, detail)
             if not isinstance(st.get("on"), bool):
                 raise HTTPException(422, "开关必须为布尔值")
+    validate_v3_objects(d, p)
 
 
 @asynccontextmanager
@@ -1431,6 +1629,7 @@ def save_design(request: Request, pid: str, payload: DesignInput):
         # 面板键位随项目落库即对齐（每键短按/长按两条刻字，4 键＝4键8功能）。
         panels.normalize_panels(payload.design)
         p["design"] = payload.design
+        Q.stamp_first_seen(p)
         commit(c, p, "保存设计", "结构化设计已保存；受影响的复核已失效", True)
     # L3: 过滤敏感字段
     return _filter_project_sensitive_fields(p, user)
@@ -1438,10 +1637,10 @@ def save_design(request: Request, pid: str, payload: DesignInput):
 
 @app.post("/api/projects/{pid}/fixtures/{fid}/ies")
 async def upload_fixture_ies(pid: str, fid: str, file: UploadFile = File(...)):
-    """Reserved IES (photometric) upload for one fixture.
+    """IES 光度文件上传：解析结果直接决定该灯的光斑画法（§5.1 补全 3）。
 
-    The file is stored and referenced on the fixture, but the light spot keeps
-    using the theoretical half-beam-angle value until an IES parser is added.
+    parsed → 实测剖面 p(r) 与 R=tan(θ_cut)·H；parse_failed/unsupported → 该灯标红
+    「未实测」且不画光斑。任何分支都不把失败折回理论值冒充实测（不做静默降级）。
     """
     name = Path((file.filename or "fixture.ies").replace(chr(92), "/")).name
     if not name.lower().endswith(".ies"):
@@ -1457,21 +1656,23 @@ async def upload_fixture_ies(pid: str, fid: str, file: UploadFile = File(...)):
         folder.mkdir(parents=True, exist_ok=True)
         stored = ident() + ".ies"
         target = folder / stored
-        size = 0
-        with target.open("wb") as out:
-            while chunk := await file.read(1024 * 1024):
-                size += len(chunk)
-                if size > 4 * 1024 * 1024:
-                    raise HTTPException(413, "IES 文件过大")
-                out.write(chunk)
+        blob = bytearray()
+        while chunk := await file.read(1024 * 1024):
+            blob.extend(chunk)
+            if len(blob) > 4 * 1024 * 1024:
+                raise HTTPException(413, "IES 文件过大")
+        size = len(blob)
+        # 先收齐再落盘：超限时不会留下半份文件被当成配光原件
+        target.write_bytes(bytes(blob))
         from . import ies as ies_mod
-        parsed = ies_mod.parse(target.read_bytes())
-        ok = bool(parsed.get("ok"))
-        status = parsed.get("status") or ("parsed" if ok else "parse_failed")
+        parsed = ies_mod.parse_cached(bytes(blob))
+        status = parsed.get("status") or ("parsed" if parsed.get("ok") else "parse_failed")
+        data = parsed.get("data") if isinstance(parsed.get("data"), dict) else None
+        profile = (data or {}).get("profile")
         notes = {
-            "parsed": "已解析配光参考；光斑仍按光束角理论值，不做正式照度计算",
-            "unsupported": "文件已留存，但配光不能按 C 平面半角使用；光斑仍按理论值",
-            "parse_failed": "文件已留存，但解析失败；光斑仍按理论值",
+            "parsed": "已按实测剖面绘制光斑：外缘取 R＝tan(θ_cut)·H，θ_half 只作标注",
+            "unsupported": "配光不能用（非 C 型或无可用下降沿）：该灯标红「未实测」，不画光斑，不退回理论值",
+            "parse_failed": "解析失败：该灯标红「未实测」，不画光斑，不退回理论值",
         }
         fixture["ies"] = {
             "file": stored,
@@ -1479,12 +1680,23 @@ async def upload_fixture_ies(pid: str, fid: str, file: UploadFile = File(...)):
             "bytes": size,
             "uploadedAt": now(),
             "status": status,
-            "parsed": parsed.get("data") if ok else None,
+            "parsed": ies_mod.drop_heavy(data) if data else None,
+            "profile": profile,
+            "sha256": parsed.get("sha256", ""),
+            "cacheHit": bool(parsed.get("cacheHit")),
             "parseError": parsed.get("error", "") if status == "parse_failed" else "",
+            "unsupportedReason": (data or {}).get("unsupportedReason", ""),
             "note": notes.get(status, notes["parse_failed"]),
         }
-        commit(c, p, "上传 IES 光度文件", f"{fixture.get('code') or fixture['id']}：{name}")
-    return p
+        # 配光来源在入库时就固化：脱敏/瘦身后清单仍能如实标「实测IES / 理论半角 / 未实测」
+        fixture["ies"]["photometry"] = ies_mod.spot_of(fixture)["photometry"]
+        # 配光文件换了：灯光复核与交付复核都要跟着失效（光斑依据变了）
+        commit(c, p, "上传 IES 光度文件", f"{fixture.get('code') or fixture['id']}：{name}", invalidate=True)
+    photometry = ies_mod.spot_of(fixture)["photometry"]
+    body = dict(p)
+    body["ies_status"] = status
+    body["photometry_source"] = photometry
+    return body
 
 
 @app.post("/api/projects/{pid}/site-evidence")
@@ -1618,6 +1830,8 @@ def new_version(pid: str):
         old_version = p["version"]
         p["version"] += 1
         p["frozen"] = False
+        # 冻结记录属于旧版本：新建版本还留着它，会让新版本被当成已冻结/已定稿
+        p["cooperation"].pop("designFreeze", None)
         p["reviews"] = {}
         p.pop("invalidatedReviews", None)
         p["approved"] = False
@@ -1638,11 +1852,39 @@ def restore(pid: str, vid: str):
         if not r:
             raise HTTPException(404, "历史版本不存在")
         coop.assert_design_edit(p)
-        p["design"] = unpack_snapshot(r["doc"])["design"]
+        restored = unpack_snapshot(r["doc"])["design"]
+        # 附件不随版本回滚：先核对恢复后的设计引用的文件还在不在，缺了就明说，不带病恢复
+        missing = attachment_gaps(pid, restored, p)
+        if missing:
+            raise HTTPException(409, "历史版本引用的附件已不存在，不能直接恢复：" + "；".join(missing[:8]))
+        p["design"] = restored
         p["version"] += 1
         p["frozen"] = False
         commit(c, p, "从历史创建新版本", "恢复设计，不恢复已删除的附件", "all")
     return p
+
+
+def attachment_gaps(pid: str, design: dict, p: dict) -> list[str]:
+    """恢复/交付前的附件闭包：设计里引用的文件必须真的存在。"""
+    gaps = []
+    file_ids = {f.get("id") for f in (p.get("files") or []) if isinstance(f, dict)}
+    base = (design or {}).get("baseFileId")
+    if base and base not in file_ids:
+        gaps.append(f"底图 {base}")
+    # 逐对象来源也要闭合：只查底图会让恢复后的模型引着一份已删图纸。
+    seen = set()
+    for key in ("rooms", "walls", "openings", "texts", "fixtures", "devices", "furniture"):
+        for obj in (design or {}).get(key) or []:
+            fid = obj.get("sourceFileId") if isinstance(obj, dict) else ""
+            if fid and fid not in file_ids and fid not in seen:
+                seen.add(fid)
+                gaps.append(f"{key} 引用的图纸 {fid}")
+    for f in (design or {}).get("fixtures") or []:
+        ies = f.get("ies") if isinstance(f, dict) else None
+        name = ies.get("file") if isinstance(ies, dict) else ""
+        if name and not (UPLOADS / pid / name).is_file():
+            gaps.append(f"配光文件 {f.get('code') or f.get('id')}：{name}")
+    return gaps
 
 
 @app.post("/api/projects/{pid}/reviews")
@@ -1736,6 +1978,8 @@ def review(request: Request, pid: str, payload: dict = Body(...)):
             "reviewer": reviewer,
             "at": now(),
             "revision": p["revision"],
+            # D10：签名绑定「本版本·本范围」，并列出没核到的高风险未知项
+            "cover": Q.review_cover(p, key),
             **({"pricingRisk": pricing_risk} if key == "pricing" else {}),
         }
         (p.get("invalidatedReviews") or {}).pop(key, None)
@@ -2069,11 +2313,14 @@ def analyze_uploaded_file(path: Path, meta: dict) -> dict:
         result.setdefault("unresolvedRegions", [])
         # Semantic vision already returns one bounded outer polygon (3-16 points)
         # per space, so those drafts stay editable instead of being discarded for
-        # being non-rectangular. The classical geometry path keeps its tighter
-        # 8-point invariant.
+        # being non-rectangular. The 0-layer CAD geometry path is the same kind of
+        # honest grid outline (an L-shaped bathroom that wraps a WC stall is 12
+        # points), so it gets the same budget; the image-boundary path keeps its
+        # tighter 8-point invariant.
         max_vertices = (
             16
             if result.get("semantic", {}).get("provider") == "external-vision"
+            or result.get("provider") == "ezdxf-layer0-geometry"
             else 8
         )
         over_limit = [
@@ -2162,14 +2409,27 @@ def apply_detection_to_design(project: dict, result: dict):
         project["design"]["rooms"]=[x for x in project["design"]["rooms"] if x.get("source") not in auto_sources or not _same_floor(x)]
         for key in ("walls", "openings", "texts"):
             project["design"][key]=[x for x in project["design"][key] if x.get("source") not in auto_sources or not _same_floor(x)]
+    confirmed = draft.get("status") == "confirmed"
     for key in ("rooms", "walls", "openings", "texts"):
         incoming=copy.deepcopy(result.get(key, []))
+        if confirmed and key == "rooms":
+            # 已确认的空间就是真源：新解析只作候选，不再往上叠一层（会叠出重叠房间）
+            result["roomsNotApplied"] = len(incoming)
+            continue
+        seen = {x.get("id") for x in project["design"][key] if isinstance(x, dict)}
+        added = 0
         for obj in incoming:
             obj.setdefault("floor", target_floor)
-        project["design"][key].extend(incoming)
+            if obj.get("id") in seen:
+                continue
+            seen.add(obj.get("id"))
+            project["design"][key].append(obj)
+            added += 1
+        if key == "rooms":
+            result["roomsApplied"] = added
     # Every imported room candidate becomes an editable spatial draft immediately.
     # A drawing is never treated as a confirmed colour plan until a human confirms it.
-    if result.get("rooms"):
+    if result.get("rooms") and not confirmed:
         project["design"]["spaceDefinition"] = {
             "status": "draft",
             "fileId": result.get("fileId"),
@@ -2360,7 +2620,12 @@ async def upload(
                     im.save(preview)
                     meta["preview"] = preview.name
             except Exception as e:
-                raise HTTPException(422, f"{name} 无法读取：{str(e)[:140]}")
+                # 解析库的异常会带绝对路径（含 data/ 根目录）；先整体换成文件名再截断，
+                # 否则 140 字截在路径中间，残留半截目录反而被当成文件名复制出去。
+                detail = str(e)
+                for pth in (str(path), str(path.resolve()), str(dest)):
+                    detail = detail.replace(pth, name)
+                raise HTTPException(422, f"{name} 无法读取：{detail[:140]}")
             if recognize:
                 result = await run_in_threadpool(analyze_uploaded_file, path, meta)
                 save_file_recognition(meta, result)
@@ -2883,8 +3148,9 @@ def apply_recognition(pid: str, payload: dict = Body(default={})):
             r = p.get("recognition")
         if not r or r.get("applied"):
             raise HTTPException(422, "没有可追加的草稿，或该草稿已经追加")
-        if any(len(v.get("points", [])) > 8 for v in r.get("rooms", [])):
-            raise HTTPException(422, "旧草稿存在超过8点的空间，请重新识别")
+        cap = int(r.get("maxRoomVertices") or 8)
+        if any(len(v.get("points", [])) > cap for v in r.get("rooms", [])):
+            raise HTTPException(422, f"旧草稿存在超过{cap}点的空间，请重新识别")
         if r.get("replacements"):
             raise HTTPException(
                 422, "草稿已部分用于替换，请继续逐空间替换，不能整份追加造成重叠"
@@ -2943,8 +3209,8 @@ def replace_recognition_room(pid: str, payload: dict = Body(...)):
         )
         if not candidate or not room:
             raise HTTPException(422, "请选择有效的候选空间和需要替换的画布房间")
-        if len(candidate.get("points", [])) > 8:
-            raise HTTPException(422, "候选空间超过8点，请重新识别后再替换")
+        if len(candidate.get("points", [])) > int(r.get("maxRoomVertices") or 8):
+            raise HTTPException(422, "候选空间超过本份草稿的顶点上限，请重新识别后再替换")
         if r.get("simulated") or not candidate.get("points"):
             raise HTTPException(422, "只允许使用真实图像边界替换")
         if any(v["candidateId"] == candidate["id"] for v in r.get("replacements", [])):
@@ -3141,12 +3407,22 @@ def export(pid: str, fmt: str, floor: int | None = None, audience: str = "intern
             "导出资料",
             name + " · " + ("已复核设计数据" if p["approved"] else "草稿"),
         )
+    # D09：文档状态不等于施工许可。有高风险未知项时，复核状态照实写，但不给「可施工」字样。
+    sc = Q.scale_state(p)
+    unknowns = Q.high_risk_unknowns(p)
+    unknown_labels = [f"{u['kind']}:{u.get('code') or u.get('id')}:{u.get('field')}" for u in unknowns]
+    status = ("reviewed-design-with-unknowns" if unknowns else "reviewed-design") if p["approved"] else "draft"
+    can_build = bool(p["approved"]) and not unknowns and sc["status"] == Q.SCALE_VERIFIED
     return Response(
         content,
         media_type=media,
         headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}",
-            "X-Document-Status": "reviewed-design" if p["approved"] else "draft",
+            "X-Document-Status": status,
+            "X-Construction-Permission": "allowed" if can_build else "denied",
+            "X-Scale-Status": sc["status"],
+            "X-Quality-Unknowns": str(len(unknowns)),
+            **({"X-Not-Verified": quote("；".join(unknown_labels)[:800])} if unknown_labels else {}),
             "X-Business-Status": "NOT_RELEASED",
             # C9：交付对象与去价状态（frontend/验收脚本可直接断言）。
             # 2026-10-23 老板拍板：owner（给业主）保留零售价，只有 site（给施工）excluded。
@@ -3158,6 +3434,243 @@ def export(pid: str, fmt: str, floor: int | None = None, audience: str = "intern
     )
 
 
+
+
+@app.get("/api/projects/{pid}/quality")
+def quality_report(pid: str):
+    """D04：把四态检查、尺度状态与必交文件清单如实交出去（只读）。"""
+    with connect() as c:
+        p = get(c, pid)
+    rows = Q.project_checks(p)
+    return {"scale": Q.scale_state(p), "fourState": Q.four_state(rows),
+            "checks": rows[:500], "requiredFiles": Q.required_files(p)}
+
+
+@app.post("/api/projects/{pid}/scale-calibration")
+def scale_calibration(pid: str, payload: dict = Body(...)):
+    """D02：用一处已知尺寸校准图纸尺度；两处独立校准一致才算「已核」。"""
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        p = get(c, pid)
+        editable(p)
+        coop.assert_design_edit(p)
+        try:
+            st = Q.add_calibration(
+                p, str(payload.get("fileId") or ""), payload.get("knownM"),
+                payload.get("drawingValue"), str(payload.get("note") or ""),
+                str(payload.get("by") or ""),
+            )
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        commit(c, p, "尺度校准", f"{st['label']}：{st['basis']}",
+               {"layout": ["尺度校准变更"], "delivery": ["尺度校准变更"]})
+    return {"scale": st, "project": p}
+
+
+@app.get("/api/projects/{pid}/missing-items")
+def missing_items_report(pid: str):
+    """§7.8 缺件单＋§7.2 指名率＋§12.0 版本级别（只读）：闸门现在真的有人管了吗。"""
+    with connect() as c:
+        p = get(c, pid)
+    items = Q.missing_items(p)
+    return {"items": items[:2000], "count": len(items),
+            "bySeverity": {"阻断": len([r for r in items if r["severity"] == "阻断"]),
+                           "提示": len([r for r in items if r["severity"] == "提示"]),
+                           "封板后": len([r for r in items if r["stage_group"] == "封板后"
+                                          and r["severity"] == "阻断"])},
+            "naming": Q.naming_coverage(p), "version": Q.version_level(p),
+            "dictionary": {"tables": list(Q.V3_TABLES), "tiers": list(V.TIERS),
+                           "fieldCount": sum(len(V.fields_of(t)) for t in V.FIELD_TABLES)}}
+
+
+@app.post("/api/projects/{pid}/backfill")
+def backfill_field(pid: str, payload: dict = Body(...)):
+    """§7.8 硬规矩 1＋4：值只能从 field_path 这一个口写进来，写进来才算关闭，且留人留时间。"""
+    field_path = str(payload.get("fieldPath") or "")
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        p = get(c, pid)
+        editable(p)
+        coop.assert_design_edit(p)
+        try:
+            row = Q.backfill(p, field_path, payload.get("value"), str(payload.get("by") or ""))
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        Q.stamp_first_seen(p)
+        commit(c, p, "缺件回填", f"{row['field_path']} 已回填（{row['closed_by']}）",
+               {"lighting": ["缺件回填"], "delivery": ["缺件回填"]})
+    return {"row": row, "version": Q.version_level(p), "project": p}
+
+
+@app.post("/api/projects/{pid}/waive-missing")
+def waive_missing(pid: str, payload: dict = Body(...)):
+    """豁免不是解除：必须写理由并留人，否则 422（§7.8 硬规矩 4）。"""
+    field_path = str(payload.get("fieldPath") or "")
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        p = get(c, pid)
+        editable(p)
+        coop.assert_design_edit(p)
+        try:
+            row = Q.waive(p, field_path, str(payload.get("reason") or ""),
+                          str(payload.get("by") or ""))
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        commit(c, p, "缺件豁免", f"{row['field_path']} 豁免：{row['closed_by']}",
+               {"delivery": ["缺件豁免留痕"]})
+    return {"row": row, "version": Q.version_level(p), "project": p}
+
+
+@app.get("/api/projects/{pid}/handover")
+def handover_report(pid: str):
+    """§8.3 十二条＋判定线＋图框三字段（只读）：回答「这套图我能不能直接干」。"""
+    with connect() as c:
+        p = get(c, pid)
+    return DL.handover(p)
+
+
+@app.post("/api/projects/{pid}/handover-sign")
+def handover_sign(pid: str, payload: dict = Body(...)):
+    """Q16 交底逐项签字：签字必须留人，并记下当时的 revision——设计一改，旧签字即失效。"""
+    key = str(payload.get("key") or "").strip()
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        p = get(c, pid)
+        editable(p)
+        coop.assert_design_edit(p)
+        try:
+            rec = DL.sign(p, key, str(payload.get("by") or ""), str(payload.get("note") or ""))
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        commit_note(c, p, "交底签字", f"{key} 由 {rec['by']} 确认（{DL.version_tag(p)}）")
+    return {"record": rec, "handover": DL.handover(p), "version": Q.version_level(p)}
+
+
+@app.post("/api/projects/{pid}/issue-frames")
+def issue_frames(pid: str, payload: dict = Body(...)):
+    """出图登记：把这一批图号/版本/日期记成「已发出」。之后再改设计，交底页第 12 条就会
+    报「旧版未回收」——防的是返工 Top10 第 10 条「按旧图干」（§8.2/Q17）。"""
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        p = get(c, pid)
+        editable(p)
+        coop.assert_design_edit(p)
+        by = str(payload.get("by") or "").strip()
+        if not by:
+            raise HTTPException(422, "出图登记必须留人")
+        reg = DL.register_frames(p)
+        commit_note(c, p, "出图登记", f"{len(reg)} 个图号按 {DL.version_tag(p)} 发出（{by}）")
+    return {"registry": reg, "state": DL.registry_state(p), "handover": DL.handover(p)}
+
+
+def _edition(p_unused: dict = None) -> str:
+    """授权层级与 L1 排序只在企业版露出（§5.2 Q4 数据分层）。"""
+    lic = LICENSE.load()
+    return "enterprise" if (lic.get("valid") and lic.get("edition") == "enterprise") else "personal"
+
+
+@app.get("/api/projects/{pid}/brand-wall")
+def brand_wall_page(pid: str):
+    """§5.2 品牌墙：合作品牌＋logo＋终端零售价；授权明细只在企业版出。"""
+    with connect() as c:
+        get(c, pid)
+    edition = _edition()
+    prods = W.load_products()
+    wall = W.brand_wall(prods, edition=edition)
+    prices = [x for x in (W.retail_of(p) for p in prods) if x is not None]
+    return {"wall": wall, "edition": edition,
+            "productCount": len(prods), "pricedCount": len(prices),
+            "priceRange": [min(prices), max(prices)] if prices else [],
+            "priceScope": W.PRICE_SCOPE,
+            "gates": {"schema": "产品 DTO 无成本字段", "scope": W.PRICE_SCOPE}}
+
+
+@app.post("/api/projects/{pid}/select")
+def select_products(pid: str, payload: dict = Body(...)):
+    """§5.2 四层选品：L0 是 WHERE 不是权重；无合格品就返回空，绝不降级推荐。"""
+    with connect() as c:
+        get(c, pid)
+    edition = str(payload.get("edition") or _edition())
+    edition = edition if edition in W.EDITIONS else "personal"
+    req = payload.get("params") or {}
+    cands = W.rank_candidates(W.load_products(), req, edition=edition)
+    snap = W.rank_snapshot(cands, req, edition=edition)
+    if cands["noQualified"]:
+        return {"snapshot": snap, "noQualified": True, "label": W.NO_QUALIFIED,
+                "checked": cands["checked"], "candidates": [],
+                "note": "无合格品：不做近似替代，也不因独家品牌放回不合格 SKU"}
+    return {"snapshot": snap, "noQualified": False, "checked": cands["checked"],
+            "qualified": cands["qualified"], "candidates": cands["rows"][:40],
+            "edition": edition, "rule": cands["rule"]}
+
+
+@app.post("/api/projects/{pid}/placements")
+def save_placements(pid: str, payload: dict = Body(...)):
+    """§7.9 选品落位：不过 L0 的 SKU 保存不了（A9 出现＝0）；改选必须留人留理由（L3）。"""
+    rows_in = payload.get("placements") or []
+    by = str(payload.get("by") or "").strip()
+    if not isinstance(rows_in, list) or len(rows_in) > 5000:
+        raise HTTPException(422, "placements 必须是列表且不超过 5000 条")
+    if not by:
+        raise HTTPException(422, "选品落位必须留人")
+    products = W.load_products()
+    by_sku = {str(x.get("sku") or ""): x for x in products}
+    clean = []
+    for i, r in enumerate(rows_in):
+        if not isinstance(r, dict):
+            raise HTTPException(422, f"第 {i + 1} 条落位不是对象")
+        sku = str(r.get("sku") or "").strip()
+        fid = str(r.get("fixture_id") or f"placement{i + 1}").strip()
+        try:
+            W.assert_retail_scope(r.get("priceScope"))
+        except W.ScopeError as e:
+            raise HTTPException(422, str(e))
+        prod = by_sku.get(sku)
+        if prod is None:
+            raise HTTPException(422, f"{fid} 选的 {sku or '（空）'} 不在产品库，无法核 L0")
+        bad = W.l0_failures(prod, r.get("params") or {})
+        if bad and not str(r.get("overrideNote") or "").strip():
+            raise HTTPException(422, f"{fid} 的 {prod.get('model') or sku} 参数不符（L0 硬闸）："
+                                     + "；".join(bad))
+        if bad and not str(r.get("overrideBy") or "").strip():
+            raise HTTPException(422, f"{fid} 要人工改选不合格 SKU 必须写改选人（L3 不静默）")
+        clean.append({"fixture_id": fid, "sku": sku, "params": r.get("params") or {},
+                      "qty": r.get("qty") or 1, "hard_gate_pass": not bad,
+                      "price_scope": W.PRICE_SCOPE, "retail_price": W.retail_of(prod),
+                      "manual_override": bool(bad),
+                      "override_by": str(r.get("overrideBy") or "")[:100],
+                      "override_note": str(r.get("overrideNote") or "")[:300]})
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        p = get(c, pid)
+        editable(p)
+        coop.assert_design_edit(p)
+        p.setdefault("design", {})["placements"] = clean
+        p["design"]["selectionSnapshot"] = W.rank_snapshot(
+            {"rows": clean}, {"count": len(clean)})
+        commit(c, p, "选品落位", f"{len(clean)} 条落位（{by}）",
+               {"delivery": ["选品落位变更"]})
+    gate = Q.a9_state(p)
+    return {"placements": clean, "a9": gate, "version": Q.version_level(p),
+            "snapshot": p["design"]["selectionSnapshot"]}
+
+
+@app.get("/api/projects/{pid}/quote")
+def quote_page(pid: str):
+    """报价单品牌区：金额＝Σ(零售价×数量)，只从 retail_price 读；快照随报价出（§7.9）。"""
+    with connect() as c:
+        p = get(c, pid)
+    prods = W.load_products()
+    by_sku = {str(x.get("sku") or ""): x for x in prods}
+    lines = [{"sku": r.get("sku"), "qty": r.get("qty") or 1,
+              "manual_override": r.get("manual_override")}
+             for r in W.placements_of(p)]
+    try:
+        q = W.quote_lines(lines, by_sku, snapshot=str(p["design"].get("selectionSnapshot") or ""))
+    except W.ScopeError as e:
+        raise HTTPException(422, str(e))
+    q["edition"] = _edition()
+    return q
 
 
 @app.get("/api/projects/{pid}/scene")
@@ -3206,6 +3719,27 @@ def products(category: str = "", brand: str = "", q: str = "", scheme: str = "",
     # 产品库还没灌 → 退回本地索引快照，别让页面空着
     items = knowledge_index().get("products", [])
     return [x for x in items if not category or x.get("category") == category]
+
+
+CATALOG_DIR = ROOT / "backend" / "catalog"
+_catalog_cache: dict[str, Any] = {"mtime": 0.0, "data": None}
+
+
+@app.get("/api/catalog")
+def catalog_api():
+    """灯具选型目录（飞利浦 WiZ/Hue + FLOS）：品牌 → 型号 → 参数 / 图片 / 统一零售价。
+
+    数据由 scripts/build_catalog.py 从知识库生成，不进 SQLite、不动库表。
+    """
+    path = CATALOG_DIR / "catalog.json"
+    try:
+        mtime = path.stat().st_mtime
+    except FileNotFoundError:
+        raise HTTPException(404, "选型目录未生成：先跑 .venv/bin/python scripts/build_catalog.py")
+    if _catalog_cache["data"] is None or _catalog_cache["mtime"] != mtime:
+        _catalog_cache["data"] = json.loads(path.read_text(encoding="utf-8"))
+        _catalog_cache["mtime"] = mtime
+    return _catalog_cache["data"]
 
 
 @app.get("/api/products/status")
@@ -3396,6 +3930,14 @@ capabilities_mod.register(app)
 from . import lighting3d as lighting3d_mod  # noqa: E402
 lighting3d_mod.register(app)
 
+# 协同包 → 回传合图（§10 阶段 4，走文件不做登录）——/api/supplierpack/*
+from . import supplier_pack as SUP_PACK_MOD  # noqa: E402
+SUP_PACK_MOD.register(app)
+
+# 冲突扫描（§10.4 阶段 5：开孔／回路／空间三条阻断级，只标记不自动修）——/api/conflict/*
+from . import conflict_scan as CONFLICT_MOD  # noqa: E402
+CONFLICT_MOD.register(app)
+
 # 本机版本历史 / 回退（设置 → 版本与更新）——必须在 SPA 兜底路由之前
 from . import app_versions as app_versions_mod  # noqa: E402
 app_versions_mod.register(app)
@@ -3423,6 +3965,8 @@ if LOCAL_FEATURE_FILE.is_file():
 
 
 DIST = ROOT / "frontend" / "dist"
+if (CATALOG_DIR / "img").exists():
+    app.mount("/catalog-img", StaticFiles(directory=CATALOG_DIR / "img"), name="catalog-img")
 if DIST.exists():
     app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
 

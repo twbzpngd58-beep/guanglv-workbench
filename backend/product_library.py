@@ -18,8 +18,8 @@
 模板 / 规则 / 说明 / 目录 / 附录 / 总览 / 选型指南 / 方案这类小节不当产品（见 SKIP_SECTION_KW）。
 
 ## 价格口径（沿用 2026-09-25 确认，别改）
-**只进市场零售价**。出厂价 / 含运费出厂价 / 预估运费 / 备注（备注里常写出厂价）一律不进工作台——
-写入时只取 `零售价` / `市场价` 列，出厂价列连读都不读。灯具图片是 DISPIMG 公式，跳过。
+**只进市场零售价**。成本口径的列（含运费那一档、运费预估）、备注（备注里常写成本数）一律不进工作台——
+写入时只取 `零售价` / `市场价` 列，成本口径的列连读都不读。灯具图片是 DISPIMG 公式，跳过。
 
 ## 冲突不静默
 同一图纸编号在不同资料里零售价不一致时，两条都留着（各自带来源），并在同步报告里列出来让人核对。
@@ -40,7 +40,7 @@ from . import kbtext as KB
 DEFAULT_DB = Path(os.getenv("DATA_DIR", str(Path(__file__).resolve().parent.parent / "data"))) / "studio.sqlite3"
 TABLE = "products"
 
-PRICE_SCOPE = "只进市场零售价（出厂价 / 含运费出厂价 / 预估运费 / 备注不进工作台）"
+PRICE_SCOPE = "只进市场零售价（成本口径 / 运费 / 备注不进工作台；成本口径词表见 price_terms.py）"
 # 解析口径指纹：改了抽取规则就改它，启动时会自动重灌一次产品库。
 BUILD_ID = "pl-2026-10-18-philips"
 
@@ -105,7 +105,7 @@ CREATE INDEX IF NOT EXISTS idx_products_brand ON {TABLE}(brand);
 CREATE INDEX IF NOT EXISTS idx_products_model ON {TABLE}(model);
 """
 
-# 允许写入的列（白名单：多一列都得先想清楚，尤其别把出厂价带进来）
+# 允许写入的列（白名单：多一列都得先想清楚，尤其别把成本口径带进来）
 COLS = ["id", "category", "type", "name", "model", "brand", "scheme", "unit", "warranty",
         "cutout", "dimmable", "watt", "cct", "cct_min", "cct_max", "angle", "price",
         "price_source", "control", "protocol", "dimmable_flag", "tunable",
@@ -275,7 +275,7 @@ def rows_from_markdown(path: Path, source: str, default_brand: str, synced_at: s
     """按 markdown 标题层级走。
 
     两种写法都认：
-      · 产品表 —— `| 产品名称 | 型号 | 零售价 |`（价格只取零售价/市场价，出厂价不读）
+      · 产品表 —— `| 产品名称 | 型号 | 零售价 |`（价格只取零售价/市场价，成本口径列不读）
       · 标题＋规格表 —— `### 五孔插座 `SC-SW1-01`` 这种，标题带型号就算一件产品（价格没有就留空，报价按待补）
     品牌按一级标题认；模板 / 目录 / 附录 / 总览这类小节整段跳过。
     """

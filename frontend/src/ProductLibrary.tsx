@@ -3,7 +3,7 @@
  *
  * 内容来自随源码分发的产品资料（各品牌产品清单），
  * 由后端 product_library.py 写进工作台的 `products` 表。
- * 口径：只带**市场零售价**（出厂价 / 运费 / 备注不进工作台）；价格与参数使用前逐项核实。
+ * 口径：只带**市场零售价**（成本口径 / 运费 / 备注不进工作台）；价格与参数使用前逐项核实。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, ArrowUpRight, Lightbulb, Loader2, RefreshCw, Search } from "lucide-react";
@@ -95,7 +95,7 @@ export function ProductLibrary({
           <h1>为每个空间，找到合适的光。</h1>
           <p>
             产品来自随源码分发的产品资料：统一灯具报价表 + 各品牌产品清单。
-            只带市场零售价，出厂价与运费不进工作台；价格与参数使用前须逐项核实。
+            只带市场零售价，成本口径与运费不进工作台；价格与参数使用前须逐项核实。
           </p>
         </div>
         <Button disabled={syncing} onClick={syncLibrary}>

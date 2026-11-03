@@ -44,6 +44,8 @@ INCLUDE = [
     "frontend/package-lock.json",
     "frontend/tsconfig.json",
     "frontend/vite.config.ts",
+    # 验收脚本 accept_reparse_ui.py 要 node 跑这个探针；漏了它发行包里就复跑不了验收
+    "frontend/probe_reparse.mjs",
     "scripts",
     "start.py",
     "start.sh",

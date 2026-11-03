@@ -1,0 +1,12 @@
+{
+  "_note": "与 backend/quality.py REFERENCE_LIMITS 同源；改数要两边一起改。没有型号手册时只作读数参考，不当作已验证上限。",
+  "relay": {
+    "maxDrivers": 12,
+    "maxWatts": 300,
+    "basis": "D3 参考值（未附继电器型号手册，不作判据）"
+  },
+  "dali": {
+    "maxAddresses": 55,
+    "basis": "D3 参考值（未附网关型号手册；SC-DK2-1C 标称 64 地址）"
+  }
+}

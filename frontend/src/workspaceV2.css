@@ -246,3 +246,26 @@
 .wsv2 .wsv2-dsec[open]>summary:after{content:"−"}
 .wsv2 .wsv2-dsec>summary:hover{color:#b9b2a4}
 .wsv2.wsv2-dexport .wsv2-baseline-notice{display:none!important}
+/* 协同与冲突面板（外壳 v2 深色）：CollabPanel 三块的填充色跟随金色主题 */
+.wsv2 .collab-chip,.wsv2 .collab-c,.wsv2 .collab-reasons span{background:#1a1a1d!important;border-color:#2d2d33!important;color:#b9b2a4!important}
+.wsv2 .collab-chip b,.wsv2 .collab-c b{color:#e9e3d6!important}
+.wsv2 .collab-chip.hot{border-color:#5a3a34!important;background:#241a19!important}
+.wsv2 .collab-chip.hot b,.wsv2 .collab-bad{color:#e08b7c!important}
+.wsv2 .collab-err{background:#241a19!important;border-color:#5a3a34!important;border-left-color:#d0604e!important;color:#e6a49a!important}
+.wsv2 .collab-warn{background:#1d1a14!important;border-color:#4a3d27!important;color:#c9b58c!important}
+.wsv2 .collab-reasons b,.wsv2 .collab-report h3,.wsv2 .collab-reject h3{color:#e9e3d6!important}
+.wsv2 .collab-reasons span,.wsv2 .collab-note,.wsv2 .collab-c em,.wsv2 .collab-unknown{color:#8b8477!important}
+.wsv2 .collab-report{background:#18181a!important;border-color:#2d2d33!important}
+.wsv2 .collab-hard{color:#e6a49a!important}
+.wsv2 .collab-c.pass{border-color:#2e4a38!important;background:#1b2620!important;color:#9bc7a3!important}
+.wsv2 .collab-c.fail{border-color:#5a3a34!important;background:#241a19!important;color:#e08b7c!important}
+.wsv2 .collab-sev{background:#202024!important;border-color:#3a3a41!important;color:#b9b2a4!important}
+.wsv2 .collab-sev.bad{border-color:#5a3a34!important;background:#241a19!important;color:#e08b7c!important}
+.wsv2 .collab-sev.warn{border-color:#4a3d27!important;background:#1d1a14!important;color:#c9b58c!important}
+.wsv2 .collab-reject{background:#1d1a14!important;border-color:#4a3d27!important}
+.wsv2 .collab-fields input{background:#202024!important;border-color:#3a3a41!important;color:#e9e3d6!important}
+.wsv2 .collab-form button:not([class]),.wsv2 .collab-ops button:not([class]),.wsv2 .collab-reject button:not([class]){background:#202024!important;border:1px solid #3a3a41!important;color:#b9b2a4!important}
+.wsv2 .collab-form button:not([class]):hover,.wsv2 .collab-ops button:not([class]):hover{border-color:#5a4a2e!important;color:#e3bf7f!important}
+.wsv2 .collab-unknown summary{color:#c9b58c!important}
+.wsv2 .collab-table{min-width:760px}
+.wsv2 .collab-reason{background:#202024!important;border-color:#3a3a41!important;color:#e9e3d6!important}

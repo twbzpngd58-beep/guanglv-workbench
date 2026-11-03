@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>优邑呈现 · 零渲染 / 带渲染</title>
+<style>
+  :root { --bar: #14161a; --line: rgba(255,255,255,.14); --gold: #c9a96e; --sub: #9aa0a8; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0d0e12; color: #e8e2d6;
+    font: 12px/1.4 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  /* 竖排：工具栏换几行都行，3D 画面吃剩下的高度。
+     以前 #frame 写死 calc(100% - 45px)，工具栏一变两行画面就被顶出容器底部。 */
+  body { display: flex; flex-direction: column; }
+  #top { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 6px 10px; background: var(--bar); border-bottom: 1px solid var(--line); }
+  #top b { font-size: 13px; font-weight: 600; letter-spacing: .3px; }
+  #top .sep { flex: 0 0 1px; width: 1px; height: 18px; background: var(--line); margin: 0 2px; }
+  #top button, #top .file { font: inherit; font-size: 12px; color: #d9d3c7; background: rgba(255,255,255,.06);
+    border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; cursor: pointer; white-space: nowrap; }
+  #top button.on { background: var(--gold); border-color: var(--gold); color: #1b1710; }
+  #top .file { position: relative; overflow: hidden; }
+  #top .file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  /* 状态文案只缩自己，不给工具栏多占一行 */
+  #status { color: var(--sub); font-size: 11px; margin-left: auto; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #frame { flex: 1 1 auto; min-height: 0; display: block; width: 100%; border: 0; background: #0d0e12; }
+  /* 面板窄（iframe 视口＝面板宽）时：收起竖分隔线、状态另起一行，工具栏压到最少行数 */
+  @media (max-width: 620px) {
+    #top .sep { display: none; }
+    #status { flex: 1 1 100%; margin-left: 0; text-align: right; }
+  }
+</style>
+</head>
+<body>
+<div id="top">
+  <b>优邑呈现</b>
+  <span class="sep"></span>
+  <button type="button" data-render="zero" class="on">零渲染</button>
+  <button type="button" data-render="full">带渲染</button>
+  <span class="sep"></span>
+  <button type="button" data-view="top">户型图</button>
+  <button type="button" data-view="bird">鸟瞰</button>
+  <button type="button" data-view="inside">室内视角</button>
+  <span class="sep"></span>
+  <button type="button" data-text="min" class="on">精简</button>
+  <button type="button" data-text="full">完整</button>
+  <span class="sep"></span>
+  <button type="button" id="iesNarrow">IES 窄光 10°</button>
+  <button type="button" id="iesWide">IES 宽光 57°</button>
+  <button type="button" id="iesClear">还原光锥</button>
+  <span id="status">加载中…</span>
+</div>
+<iframe id="frame" title="优邑三维呈现"></iframe>
+<script src="/scene3d/ref/hud-night.js"></script>
+<script src="/scene3d/ref/ies.js"></script>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var pid = q.get('project') || '';
+  var floor = q.get('floor') || '1';
+  var frame = document.getElementById('frame');
+  var status = document.getElementById('status');
+  var renderMode = 'zero', textMode = 'min';
+  var inner = null, ready = false;
+  // 工作台传进来的真实情景；为空时保留内核自带的 6 个预置。
+  var scenesList = [], activeSceneId = '', lastLevelsScene = '';
+
+  function say(t) { if (status) status.textContent = t || ''; }
+  function frameWin() { return frame.contentWindow; }
+  function viewer() { try { return frameWin().__viewer; } catch (e) { return null; } }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function sceneDoc() { try { return frameWin().document; } catch (e) { return null; } }
+
+  function activeScene() {
+    for (var i = 0; i < scenesList.length; i++) {
+      if (scenesList[i].id === activeSceneId) return scenesList[i];
+    }
+    return null;
+  }
+
+  // 用项目真实情景替换内核写死的「全开 / 会客 / 观影 / 就餐 / 起夜 / 全关」。
+  function renderScenes() {
+    if (!ready || !scenesList.length) return;
+    var doc = sceneDoc(); if (!doc) return;
+    var box = doc.getElementById('scenes'); if (!box) return;
+    box.innerHTML = scenesList.map(function (s) {
+      return '<button type="button" data-gv-scene="' + esc(s.id) + '" class="' +
+        (s.id === activeSceneId ? 'on' : '') + '">' + esc(s.name) + '</button>';
+    }).join('');
+    Array.prototype.forEach.call(box.querySelectorAll('[data-gv-scene]'), function (b) {
+      b.onclick = function () { pickScene(b.getAttribute('data-gv-scene')); };
+    });
+    updateSceneNote();
+  }
+
+  function updateSceneNote() {
+    var doc = sceneDoc(); if (!doc) return;
+    var note = doc.getElementById('sceneNote');
+    var s = activeScene();
+    if (note) note.textContent = s ? (s.note || '已同步工作台情景') : '';
+  }
+
+  function markScene(id) {
+    if (!id) return;
+    if (!activeScene()) return;
+    activeSceneId = id;
+    var doc = sceneDoc(); if (!doc) return;
+    Array.prototype.forEach.call(doc.querySelectorAll('[data-gv-scene]'), function (b) {
+      b.classList.toggle('on', b.getAttribute('data-gv-scene') === id);
+    });
+    updateSceneNote();
+  }
+
+  // 内核 setCircuit / ns() 把任何非零回路都当 100% 点亮，情景里的 42% / 80% 会失真。
+  // 这里先让回路状态进内核，再按情景真实百分比回填每盏灯与回路读数。
+  function applySceneLevels(levels) {
+    var v = viewer(); if (!v || !v.setCircuit) return;
+    var lum = levels || {};
+    Object.keys(lum).forEach(function (name) {
+      try { v.setCircuit(name, lum[name]); } catch (err) {}
+    });
+    try {
+      (v.lumList || []).forEach(function (t) {
+        var name = t.meta.circuit || '未分区';
+        if (lum[name] === undefined) return;
+        var n = Math.max(0, Math.min(1, Number(lum[name]) || 0));
+        t.level = n;
+        t.body.material.emissiveIntensity = n * 1.4;
+        t.pool.material.opacity = Math.min(1, n * 1.05);
+        t.pool.visible = n > 0.02;
+        if (t.cone) {
+          t.cone.material.opacity = n * 0.26;
+          t.cone.visible = n > 0.02;
+        }
+      });
+      var doc = sceneDoc();
+      if (doc) {
+        Array.prototype.forEach.call(doc.querySelectorAll('#circuits [data-cir]'), function (el) {
+          var name = el.getAttribute('data-cir');
+          if (lum[name] === undefined) return;
+          var n = Math.max(0, Math.min(1, Number(lum[name]) || 0));
+          el.classList.toggle('on', n > 0.02);
+          var b = el.querySelector('b');
+          if (b) b.textContent = Math.round(n * 100) + '%';
+        });
+      }
+      v.renderer.render(v.scene, v.camera);
+    } catch (err) {}
+  }
+
+  // 点右栏的灯具编号 → 在三维里定点打光：地面光圈 + 竖直光柱 + 灯位顶环 + 编号牌，
+  // 并把镜头对准这盏灯。场景切换或超时后自动撤掉，不留在模型里。
+  var focusGroup = null, focusTimer = 0;
+  function clearFocus() {
+    if (focusTimer) { clearTimeout(focusTimer); focusTimer = 0; }
+    if (!focusGroup) return;
+    var v = viewer();
+    try {
+      if (v && v.scene) v.scene.remove(focusGroup);
+      focusGroup.traverse(function (o) {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+          if (o.material.map) o.material.map.dispose();
+          o.material.dispose();
+        }
+      });
+    } catch (e) {}
+    focusGroup = null;
+  }
+
+  function fixtureTag(text) {
+    var c = document.createElement('canvas');
+    c.width = 320; c.height = 112;
+    var x = c.getContext('2d');
+    if (!x) return null;
+    x.fillStyle = 'rgba(26, 22, 17, 0.88)';
+    x.beginPath();
+    if (x.roundRect) x.roundRect(6, 6, 308, 100, 18);
+    else x.rect(6, 6, 308, 100);
+    x.fill();
+    x.strokeStyle = 'rgba(255, 214, 138, 0.85)'; x.lineWidth = 4; x.stroke();
+    x.fillStyle = '#ffe2a6';
+    x.font = 'bold 52px -apple-system, "PingFang SC", sans-serif';
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(String(text || '灯具'), 160, 58);
+    var T = viewer().THREE;
+    var tex = new T.CanvasTexture(c);
+    tex.minFilter = T.LinearFilter;
+    var sp = new T.Sprite(new T.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false }));
+    sp.scale.set(0.62, 0.217, 1);
+    return sp;
+  }
+
+  function focusFixture(id, code, token) {
+    var v = viewer();
+    if (!v || !v.THREE || !v.lumList) return;
+    clearFocus();
+    var T = v.THREE;
+    var hits = v.lumList.filter(function (l) { return l.meta && l.meta.id === id; });
+    if (!hits.length) return;
+    var g = new T.Group();
+    g.userData.token = token;
+    var floorY = 0;
+    try {
+      var fb = new T.Box3().setFromObject(v.groups.floor);
+      if (isFinite(fb.min.y)) floorY = fb.min.y + 0.02;
+    } catch (e) {}
+    var first = null, tags = 0;
+    hits.forEach(function (l) {
+      var p = new T.Vector3();
+      l.body.getWorldPosition(p);
+      if (!first) first = p.clone();
+      var ringMat = new T.MeshBasicMaterial({ color: 0xffc75a, transparent: true, opacity: 0.95, side: T.DoubleSide, depthWrite: false });
+      var ring = new T.Mesh(new T.RingGeometry(0.3, 0.4, 48), ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(p.x, floorY, p.z);
+      ring.userData.isRing = true;
+      g.add(ring);
+      var beamH = Math.max(0.4, p.y - floorY);
+      var beam = new T.Mesh(
+        new T.CylinderGeometry(0.014, 0.014, beamH, 8, 1, true),
+        new T.MeshBasicMaterial({ color: 0xffd88a, transparent: true, opacity: 0.5, depthWrite: false }),
+      );
+      beam.position.set(p.x, floorY + beamH / 2, p.z);
+      g.add(beam);
+      var halo = new T.Mesh(
+        new T.RingGeometry(0.2, 0.28, 40),
+        new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, side: T.DoubleSide, depthWrite: false }),
+      );
+      halo.rotation.x = -Math.PI / 2;
+      halo.position.set(p.x, p.y - 0.03, p.z);
+      halo.userData.isRing = true;
+      g.add(halo);
+      if (tags < 3) {
+        var tag = fixtureTag(code || '灯具');
+        if (tag) {
+          // 编号牌挂灯位下方：灯位常在吊顶高处，放上方会被镜头裁掉，等于没标。
+          tag.position.set(p.x, Math.max(floorY + 0.4, p.y - 0.5 - tags * 0.26), p.z);
+          g.add(tag); tags += 1;
+        }
+      }
+    });
+    v.scene.add(g);
+    focusGroup = g;
+    if (first) {
+      var c = v.controls, cam = v.camera;
+      if (c && cam) {
+        var off = cam.position.clone().sub(c.target);
+        if (off.length() < 0.001) off.set(2.2, 2.2, 2.2);
+        off.normalize().multiplyScalar(Math.min(6.5, Math.max(3.6, off.length())));
+        var target = new T.Vector3(first.x, Math.max(0.9, first.y * 0.5), first.z);
+        c.target.copy(target);
+        cam.position.copy(target.clone().add(off));
+        c.update();
+      }
+      v.renderer.render(v.scene, v.camera);
+    }
+    var t0 = performance.now();
+    (function pulse() {
+      if (!focusGroup) return;
+      var k = (performance.now() - t0) / 1000;
+      focusGroup.children.forEach(function (o) {
+        if (!o.userData.isRing || !o.material) return;
+        o.material.opacity = 0.45 + 0.45 * Math.abs(Math.sin(k * 2.4));
+      });
+      if (k < 12) requestAnimationFrame(pulse);
+    })();
+    focusTimer = setTimeout(clearFocus, 20000);
+  }
+
+  function pickScene(id) {
+    var s = null;
+    for (var i = 0; i < scenesList.length; i++) if (scenesList[i].id === id) s = scenesList[i];
+    if (!s) return;
+    clearFocus();
+    activeSceneId = id;
+    applySceneLevels(s.levels || {});
+    markScene(id);
+    try { window.parent.postMessage({ type: 'guanglv:pick-scene', sceneId: id }, location.origin); } catch (e) {}
+  }
+
+  // 家具构件表挂在最外层工作台窗口上（frontend/src/furnitureModels.ts），
+  // 这里显式递给 hud-night，省得它自己找；带渲染才有实体家具，零渲染留体块。
+  function furnApi() {
+    var w = window, i, p;
+    for (i = 0; i < 4 && w; i++) {
+      if (w.GUANGLV_FURN && typeof w.GUANGLV_FURN.parts === 'function') return w.GUANGLV_FURN;
+      p = null;
+      try { p = w.parent; } catch (e) { p = null; }
+      if (!p || p === w) break;
+      w = p;
+    }
+    return null;
+  }
+
+  function whenReady(cb) {
+    var t0 = Date.now();
+    (function tick() {
+      var w = frameWin();
+      if (w && w.__ready && w.__viewer) { inner = w; ready = true; return cb(); }
+      if (Date.now() - t0 > 30000) { say('加载失败：渲染内核未就绪'); return; }
+      setTimeout(tick, 150);
+    })();
+  }
+
+  function setSpace(zero) {
+    var v = viewer(); if (!v) return;
+    ['floor', 'wall', 'open'].forEach(function (k) { if (v.groups[k]) v.groups[k].visible = true; });
+    if (v.groups.ceil) v.groups.ceil.visible = false;
+    if (v.groups.ceilLine) v.groups.ceilLine.visible = false;
+    ['wall', 'floor', 'open'].forEach(function (k) {
+      var g = v.groups[k]; if (!g) return;
+      g.traverse(function (o) {
+        if (!o.isMesh || !o.material || !o.material.color) return;
+        o.material = o.material.clone();
+        // 零渲染：空间暗轮廓；带渲染：参考亮墙 + 木地
+        if (zero) o.material.color.set(0x23262b);
+        else o.material.color.set(k === 'floor' ? 0xcbb08c : 0xf0e8da);
+      });
+    });
+    try { v.renderer.render(v.scene, v.camera); } catch (e) {}
+  }
+
+  function applyRender(mode) {
+    renderMode = mode;
+    document.querySelectorAll('#top [data-render]').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-render') === mode);
+    });
+    if (!ready) return;
+    setSpace(mode === 'zero');
+    try {
+      if (window.GVHudNight) window.GVHudNight.setFurnitureMode(mode === 'zero' ? 'blocks' : 'solid');
+    } catch (e) { say('家具呈现切换失败：' + (e.message || e)); }
+    say(mode === 'zero' ? '零渲染：空间暗轮廓 + 灯光 + 家具体块' : '带渲染：完整空间 + 实体家具');
+  }
+
+  function applyText(mode) {
+    textMode = mode;
+    document.querySelectorAll('#top [data-text]').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-text') === mode);
+    });
+    try { if (window.GVHudNight && inner) window.GVHudNight.setTextMode(mode); } catch (e) {}
+  }
+
+  function applyView(view) {
+    document.querySelectorAll('#top [data-view]').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-view') === view);
+    });
+    try {
+      var btn = inner && inner.document.querySelector('[data-view="' + view + '"]');
+      if (btn) btn.click();
+    } catch (e) { say('视角切换失败：' + (e.message || e)); }
+  }
+
+  async function quickIes(url, label) {
+    try {
+      var text = await (await fetch(url)).text();
+      var parsed = window.GVIes.parse(text);
+      var res = window.GVIes.apply(frameWin(), parsed);
+      say(label + '：半峰 ' + parsed.halfAngleDeg.toFixed(1) + '° · ' + res.applied + ' 盏');
+    } catch (e) { say('IES 应用失败：' + (e.message || e)); }
+  }
+
+  frame.src = '/api/lighting3d/refnight?project=' + encodeURIComponent(pid) + '&floor=' + encodeURIComponent(floor);
+  frame.addEventListener('load', function () {
+    whenReady(function () {
+      try { window.GVHudNight.init(frameWin(), frameWin().document, { notify: say, furn: furnApi() }); } catch (e) {}
+      try { window.GVHudNight.setNight(true); } catch (e) {}
+      window.GVHudNight.setTextMode('min');
+      window.GVIes.init(frameWin(), { notify: say });
+      applyRender('zero');
+      renderScenes();
+      say('场景已就绪 · 零渲染');
+    });
+  });
+
+  document.querySelectorAll('#top [data-render]').forEach(function (b) {
+    b.onclick = function () { applyRender(b.getAttribute('data-render')); };
+  });
+  document.querySelectorAll('#top [data-text]').forEach(function (b) {
+    b.onclick = function () { applyText(b.getAttribute('data-text')); };
+  });
+  document.querySelectorAll('#top [data-view]').forEach(function (b) {
+    b.onclick = function () { applyView(b.getAttribute('data-view')); };
+  });
+  document.getElementById('iesNarrow').onclick = function () { quickIes('/scene3d/ref/fixtures/narrow-ies.ies', 'IES 窄光 10°'); };
+  document.getElementById('iesWide').onclick = function () { quickIes('/scene3d/ref/fixtures/wide-ies.ies', 'IES 宽光 57°'); };
+  document.getElementById('iesClear').onclick = function () {
+    try { window.GVIes.clear(frameWin()); say('已还原光锥'); } catch (e) { say('还原失败：' + (e.message || e)); }
+  };
+
+  // 工作台外层 postMessage：
+  //   guanglv:scenes = 项目真实情景列表（替换内核写死的预置按钮）
+  //   guanglv:levels = 当前情景的回路亮度
+  window.addEventListener('message', function (e) {
+    if (e.origin !== location.origin) return;
+    var d = e.data || {};
+    if (d.type === 'guanglv:scenes') {
+      scenesList = Array.isArray(d.scenes) ? d.scenes : [];
+      if (d.activeId) activeSceneId = d.activeId;
+      renderScenes();
+      return;
+    }
+    if (d.type === 'guanglv:focus-fixture') {
+      if (ready) focusFixture(String(d.id || ''), d.code, d.token);
+      return;
+    }
+    if (d.type !== 'guanglv:levels') return;
+    if (d.sceneId) {
+      markScene(d.sceneId);
+      if (lastLevelsScene && d.sceneId !== lastLevelsScene) clearFocus();
+      lastLevelsScene = d.sceneId;
+    }
+    applySceneLevels(d.levels || {});
+  });
+})();
+</script>
+</body>
+</html>

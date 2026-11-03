@@ -2994,6 +2994,9 @@ hr {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  /* 栏窄时让右边的图层/楼层/全屏整体换到下一行；不许去挤标题（挤出来的就是每行一个字） */
+  flex-wrap: wrap;
+  gap: 8px 10px;
   padding: 18px 21px;
   border-bottom: 1px solid #5e55492e;
 }
@@ -3003,6 +3006,11 @@ hr {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* 标题自己不断字（中文逐字断行＝竖排），要放不下就让副标题或右边的控件换行 */
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  row-gap: 2px;
+  white-space: nowrap;
 }
 .scene-canvas-title i {
   height: 5px;
@@ -3022,6 +3030,25 @@ hr {
   color: #afa89e;
   font-size: 10px;
   padding: 5px 7px;
+}
+/* 三维「全屏看」：跟楼层下拉同一套暗色小控件，不抢标题栏视觉 */
+.scene-canvas-title .scene-3d-full,
+.scene-canvas-title .scene-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #3d3830;
+  border: 1px solid #534c42;
+  border-radius: 6px;
+  color: #cfc7ba;
+  font-size: 10px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.scene-canvas-title .scene-3d-full:hover,
+.scene-canvas-title .scene-view-toggle:hover {
+  border-color: #c9a96e;
+  color: #fff;
 }
 .scene-settings {
   padding: 22px 20px;
@@ -5115,6 +5142,16 @@ hr {
 .setup-excluded { margin: 10px 0 14px; font-size: 12px; color: #8a8072; }
 .setup-excluded summary { cursor: pointer; color: #928d86; }
 .setup-excluded .setup-items { margin-top: 9px; }
+.setup-empty-note {
+  margin: 2px 0 14px;
+  padding: 10px 12px;
+  border: 1px dashed #ded9d2;
+  border-radius: 8px;
+  background: #faf9f7;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #8a8072;
+}
 .setup-actions { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 14px 0 4px; padding-top: 12px; border-top: 1px solid var(--line); }
 .setup-check { font-size: 12px; color: #6c6255; display: flex; align-items: center; gap: 7px; cursor: pointer; }
 
@@ -5129,6 +5166,42 @@ hr {
 .scene-model-viewport { position: absolute; inset: 0; }
 /* 三维 = 优邑珺和渲染内核（iframe）。编辑只在二维，这里只负责看。 */
 .scene-model-iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: #0d0f12; }
+/* 全屏看三维时右栏检查器被隐藏：给一个唯一出口回二维改情景，避免「进来就出不去」。 */
+.scene-3d-edit {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #d8cba9;
+  background: #fffdf6;
+  color: #5f4a1f;
+  border-radius: 999px;
+  padding: 9px 15px;
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: 0 6px 20px #00000033;
+  cursor: pointer;
+}
+.scene-3d-edit:hover { background: #fff; border-color: #c9a35e; }
+/* 「全屏看」：Fullscreen API 直接作用在容器上，容器撑满屏幕，iframe 靠 inset:0 自动铺满。
+   分开写两条，避免不认识 -webkit- 前缀的浏览器把整条规则丢掉。 */
+.scene-model-3d:fullscreen { width: 100vw; height: 100vh; min-height: 0; background: #0d0f12; }
+.scene-model-3d:-webkit-full-screen { width: 100vw; height: 100vh; min-height: 0; background: #0d0f12; }
+/* ── 看三维时页头让位给画布（2026-10-26）────────────────────────────────────
+ * 病根：情景页「不做智能」分支用的是默认页头（25px 大标题 + 两行说明）和 13px 内边距的
+ * 提示条，1192×629 的窗口里画布被推到 y≈300，500px 高的三维要滚快两屏才看得全。
+ * 做法：只在「情景页 + 正在看三维」时把页头压到情景页那档的小标题、提示条收成一行。
+ * 二维平面图、其它页签、以及智能情景三栏布局都不受影响。 */
+.studio-shell.scene3d-compact .studio-content { padding-top: 14px; }
+.studio-shell.scene3d-compact .page-heading { margin-bottom: 12px; }
+.studio-shell.scene3d-compact .page-heading .eyebrow { font-size: 9px; letter-spacing: 1.4px; margin-bottom: 3px; }
+.studio-shell.scene3d-compact .page-heading h1 { font-size: 19px; line-height: 1.35; letter-spacing: -.2px; }
+.studio-shell.scene3d-compact .page-heading p { font-size: 11.5px; margin-top: 2px; line-height: 1.5; }
+.studio-shell.scene3d-compact .notice { padding: 9px 14px; margin-bottom: 12px; align-items: center; }
+.studio-shell.scene3d-compact .notice > div > span { display: inline; margin: 0 0 0 10px; }
 
 /* ── D-05 手机（≤700px）三维竖屏全屏 ────────────────────────────────────────
  * 落地口径：只在「外壳 v2 + 情景页 + 正在看 3D」时生效（根节点 .scene3d-full 由
@@ -5424,6 +5497,16 @@ hr {
   box-shadow: 0 1px 3px #8f6f3d0b;
 }
 .scene-canvas-title .layer-switch { margin-left: auto; }
+/* 图层 / 楼层 / 全屏 整组：窄栏时整组换到下一行，组内再按需折行，不让「全屏」落单 */
+.scene-canvas-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+}
 .sensor-light { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 3px 4px;
   border-radius: 6px; cursor: pointer; }
 .sensor-light.on { background: #eef3f7; color: #33566f; font-weight: 600; }
@@ -6149,6 +6232,25 @@ hr {
 }
 .space-preview-panel > header h3 { margin: 0 0 4px; font-size: 16px; }
 .space-preview-panel > header p { margin: 0; font-size: 12px; color: #6b7568; }
+/* 解析过期提示（旧项目不会自己变新）：就在这一层给「重新解析」，不必绕去三维工作台 */
+.space-preview-stale {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 16px 8px; padding: 8px 11px;
+  border: 1px solid rgba(224, 179, 65, .5); border-radius: 9px;
+  background: rgba(224, 179, 65, .1); color: #6b5a1e; font-size: 12px;
+}
+.space-preview-stale svg { flex: none; color: #b58a1e; }
+.space-preview-stale span { flex: 1; min-width: 0; }
+/* 已确认项目的「重新解析」是可选操作，不是解析器过期告警：用中性色，别把黄条当警报刷。 */
+.space-preview-stale.info { border-color: rgba(120, 140, 120, .45); background: rgba(120, 140, 120, .1); color: #46513f; }
+.space-preview-stale.info svg { color: #6b7568; }
+.space-preview-stale.info .space-preview-reparse { border-color: rgba(120, 140, 120, .5); background: #f4f6f2; color: #46513f; }
+.space-preview-reparse {
+  flex: none; padding: 6px 11px; border: 1px solid rgba(224, 179, 65, .6);
+  border-radius: 8px; background: #fff8e6; color: #6b5a1e;
+  font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.space-preview-reparse:disabled { opacity: .6; cursor: progress; }
 .space-preview-view { flex: 1; min-height: 0; position: relative; overflow: hidden; }
 /* 关键：.gv3d 默认是全屏 position:fixed（inset:0 / z-index:60）。放进这个弹层里必须改回
    「留在面板里」，否则三维视图会整屏盖住本层的标题、页签与「确认空间」按钮——
@@ -6346,12 +6448,20 @@ table.owner-clients td small { white-space:normal; }
   padding: 5px 10px;
   font-size: 12px;
 }
+/* 这一行以前永不换行：按钮条固定 937px，视口 ≤1280 时把标题挤成「一个字一行」，
+   右边「自动建立系统架构 / 新增情景 / 导出演示页 / 小人漫游」直接跑出视口点不到
+   （2026-10-27 反馈「这个排版不对吧」）。放不下就让按钮整行换到下面。 */
+.studio-content.scene-page .page-heading .heading-line { flex-wrap: wrap; }
+.studio-content.scene-page .page-heading .heading-line > div:first-child { flex: 1 1 320px; min-width: 260px; }
+.studio-content.scene-page .page-heading .heading-line > .flex {
+  flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; row-gap: 6px;
+}
 
 .scene-stage {
   flex: 1;
-  min-height: 0;
+  min-height: 420px;
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr) 372px;
+  grid-template-columns: 236px minmax(220px, 1fr) 372px;
   gap: 10px;
 }
 
@@ -6451,6 +6561,16 @@ table.owner-clients td small { white-space:normal; }
   color: #3a3630;
 }
 .scene-rail-item.active .nm { font-weight: 600; }
+.scene-rail-item.dirty .nm::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: #c98a2e;
+  vertical-align: middle;
+}
 .scene-rail-item .n {
   grid-row: 1;
   grid-column: 2;
@@ -6459,6 +6579,15 @@ table.owner-clients td small { white-space:normal; }
   font-variant-numeric: tabular-nums;
 }
 .scene-rail-item.active .n { color: var(--green); font-weight: 600; }
+/* 0 盏灯的情景：写进来了但本项目没有它控制的灯，左栏直接标「无灯」，别让人点开猜。 */
+.scene-rail-item.empty .nm,
+.scene-rail-item.empty .sub { color: #ada79e; }
+.scene-rail-item.empty .n {
+  color: #b08a5a;
+  font-size: 10px;
+  letter-spacing: .2px;
+}
+.scene-rail-item.empty .bar { display: none; }
 .scene-rail-item .sub {
   grid-column: 1 / -1;
   font-size: 10px;
@@ -6500,10 +6629,13 @@ table.owner-clients td small { white-space:normal; }
   flex: 1;
   min-height: 0;
 }
-/* 三维容器填满画布（iframe 是 absolute inset:0，容器必须有高度） */
+/* 三维容器填满画布（iframe 是 absolute inset:0，容器必须有高度）。
+   注意：下面那条 min-height:0 会盖掉这里的 320。中栏高度被页面锁死、.scene-canvas 又是
+   overflow:hidden——把 min-height 抬高只会把三维底部切掉（实测 1280×800 抬到 420 → 被切 129px），
+   所以小窗口三维想放大走「全屏」，别指望这里兜底。 */
 .scene-center .scene-canvas > .scene-model-3d {
   flex: 1;
-  min-height: 0;
+  min-height: 320px;
   position: relative;
   display: block;
 }
@@ -6546,6 +6678,24 @@ table.owner-clients td small { white-space:normal; }
   border-radius: 2px;
   background: var(--green);
 }
+/* 灯具页签计数：当前草稿里有几盏灯改过 */
+.scene-insp-tabs button .tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #f0e4c8;
+  color: #8a6d33;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: 1px;
+}
+.scene-insp-tabs button.active .tab-count { background: #ead9b4; }
 .scene-insp-body {
   flex: 1;
   min-height: 0;
@@ -6574,6 +6724,16 @@ table.owner-clients td small { white-space:normal; }
   line-height: 1.7;
   color: #b0aba4;
   padding: 14px 4px;
+}
+/* 灯具页：草稿和已保存情景有差异时的说明 */
+.scene-insp-note {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: #f7f1e4;
+  color: #8a6d33;
+  font-size: 10.5px;
+  line-height: 1.55;
 }
 .scene-insp-select {
   width: 100%;
@@ -6675,6 +6835,25 @@ table.owner-clients td small { white-space:normal; }
 }
 .lamp-line > span b { color: #3a3630; font-weight: 600; }
 .lamp-line input[type="range"] { width: 100%; height: 3px; }
+/* 单灯滑块灰掉时：写清原因 + 卡片里就地解锁 */
+p.lamp-lock,
+.lamp-lock {
+  margin-top: 8px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #8a6d33;
+}
+.lamp-lock-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 7px;
+  border-radius: 7px;
+  background: #f4eee2;
+}
+.lamp-lock-row + .lamp-lock-row { margin-top: 5px; }
+.lamp-lock-row .mini-btn { flex: 0 0 auto; }
 .lamp-row {
   display: grid;
   grid-template-columns: auto 1fr auto auto;
@@ -6714,6 +6893,208 @@ table.owner-clients td small { white-space:normal; }
   text-align: right;
 }
 .lamp-row.is-on .pct { color: var(--green); font-weight: 600; }
+/* 已改灯具：五列排布（编号 / 名称 / 已改 / 状态点 / 亮度+色温现值） */
+.lamp-row {
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+}
+.lamp-row .chg {
+  grid-column: 3;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: #f0e4c8;
+  color: #8a6d33;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 15px;
+  white-space: nowrap;
+}
+.lamp-row .dot { grid-column: 4; }
+.lamp-row .pct {
+  grid-column: 5;
+  min-width: 60px;
+}
+.lamp-row.is-changed { background: #fbf7ee; }
+.lamp-row.is-changed:hover { background: #f7f1e4; }
+/* 单灯卡：草稿 vs 已保存的差异（原值 → 现值） */
+.lamp-changed {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  background: #f7f1e4;
+  color: #8a6d33;
+  font-size: 10.5px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.lamp-changed .tag {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: #c9a35e;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 15px;
+}
+/* 灯具卡上的「编号」＝定位入口：点一下在图上圈出这盏灯 */
+.lamp-card-locate {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 7px;
+}
+.lamp-card-locate:hover .badge { background: #ecdfc4; }
+.lamp-card-locate .tt { flex: 1; min-width: 0; }
+.lamp-card-locate .locate-ico {
+  flex: 0 0 auto;
+  color: #b9b2a7;
+  opacity: .55;
+  transition: opacity .12s, color .12s;
+}
+.lamp-card-locate:hover .locate-ico { opacity: 1; color: var(--green); }
+.lamp-card-locate:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
+/* 画布上的「选中的这盏灯」：双圈 + 十字 + 编号牌，比原来的 13px 细圈醒目 */
+.plan-fixture-locate .locate-halo {
+  fill: #c9a35e;
+  opacity: .16;
+}
+.plan-fixture-locate .locate-ring {
+  fill: none;
+  stroke: #8a6d33;
+  stroke-width: 2.5;
+  stroke-dasharray: 7 4;
+  animation: locate-spin 9s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.plan-fixture-locate .locate-cross {
+  stroke: #8a6d33;
+  stroke-width: 1.6;
+  opacity: .8;
+}
+.plan-fixture-locate .locate-tag {
+  fill: #3a3630;
+  rx: 7;
+}
+.plan-fixture-locate .locate-code {
+  fill: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .3px;
+}
+@keyframes locate-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-fixture-locate .locate-ring { animation: none; }
+}
+/* 编号本身可点：画布上点编号＝选中这盏灯 */
+.plan-fixture-code.clickable { cursor: pointer; }
+.plan-fixture-code.clickable:hover text { fill: #6b5327; }
+.plan-fixture-code.clickable:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
+
+/* 右栏底部常驻保存条：有改动变黄，无改动显示已保存 */
+.scene-insp-savebar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 11px;
+  border-top: 1px solid #f0eeeb;
+  background: #fff;
+}
+.scene-insp-savebar.is-dirty {
+  background: #fdf6e6;
+  border-top-color: #ecd9a8;
+}
+.scene-insp-savebar .savebar-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 10.5px;
+  color: #a29c94;
+}
+.scene-insp-savebar.is-dirty .savebar-state { color: #8a6d33; }
+.scene-insp-savebar .savebar-state span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scene-insp-savebar .savebar-state i {
+  width: 6px; height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #c9c4bc;
+}
+.scene-insp-savebar.is-dirty .savebar-state i { background: #c98a2e; }
+.scene-insp-savebar .savebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+/* ── 窄窗情景编辑（≤1250px）────────────────────────────────────────────
+ * 三栏最小 236 + 220 + 372 + 间距 = 848px；窗口不够时右栏整块被挤出屏幕，
+ * 检查器和保存条都点不到（实测 1100 宽：检查器右边界 1166，保存条不可见）。
+ * 做法：左栏与画布并排，检查器落到下一行吃满宽度；内部滚动、保存条仍常驻底部。 */
+@media (max-width: 1250px) {
+  .scene-stage {
+    flex: 0 0 auto;
+    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-rows: 430px 470px;
+  }
+  .scene-stage > .scene-rail { grid-column: 1; grid-row: 1; }
+  .scene-stage > .scene-center { grid-column: 2; grid-row: 1; }
+  .scene-stage > .scene-insp { grid-column: 1 / -1; grid-row: 2; }
+  .scene-insp-body { max-height: none; }
+  /* 保存条在第二行底部（800 高窗口 y≈1088），首屏看不到。
+     页面内容区只到 100vh−108，底部正好留出 82px 空白带（状态条上方）：
+     把保存条钉在那条空白里，不遮画布也不遮检查器，滚到哪都能点保存。
+     左右与内容区对齐——结构树展开 318，收起 68（见 workspaceV2.css）。
+     右下角还有本地功能的「编号/功能清单」浮标（fixed right:16，z 260），
+     右边留 176 让它不被压住。 */
+  .scene-insp { overflow: visible; }
+  .scene-insp-savebar {
+    position: fixed;
+    left: 68px;
+    right: 176px;
+    bottom: 30px;
+    z-index: 39;
+    border: 1px solid #e5e0d8;
+    border-radius: 10px;
+    box-shadow: 0 10px 26px rgba(20, 18, 14, .16);
+  }
+  .wsv2-treeopen .scene-insp-savebar { left: 318px; }
+}
+@media (max-width: 700px) {
+  .scene-insp-savebar { left: 68px; right: 166px; }
+  .wsv2-treeopen .scene-insp-savebar { left: 56px; }
+}
+@media (max-width: 480px) {
+  .scene-insp-savebar .savebar-state span { display: none; }
+}
+@media (max-width: 760px) {
+  .scene-stage {
+    grid-template-columns: 168px minmax(0, 1fr);
+    grid-template-rows: 390px 500px;
+  }
+  .scene-rail-search { font-size: 11px; }
+}
 
 /* ── 批 4（N1）：三维空态要看得见 ───────────────────────────────
  * 病根：.scene-canvas 是 .scene-page 里可收缩的 flex 子项，窗口矮时塌到 104px，
@@ -7235,7 +7616,9 @@ table.owner-clients td small { white-space:normal; }
 .confirm-modal-mask {
   position: fixed;
   inset: 0;
-  z-index: 120;
+  /* 必须高于空间预览全屏层（.space-preview-overlay: 300）：在预览层里点「重新解析」
+     要弹的确认框原本被压在下面，用户看不见就等于没弹（2026-10-27）。 */
+  z-index: 400;
   background: rgba(28, 25, 21, 0.46);
   display: flex;
   align-items: center;
@@ -7424,3 +7807,119 @@ table.owner-clients td small { white-space:normal; }
 .appver-overlay > div { width: min(360px, calc(100vw - 40px)); padding: 24px 26px; border-radius: 16px; background: #fff; box-shadow: 0 24px 70px rgba(0,0,0,.25); text-align: center; }
 .appver-overlay b { display: block; margin-top: 10px; font-size: 15px; color: var(--ink); }
 .appver-overlay p { margin: 6px 0 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+/* ===== 协同与冲突面板（§10.1–10.4／§7.8 闸门可见可操作）· CollabPanel ===== */
+.collab-sec { margin-top: 14px; overflow-x: auto; }
+.collab-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.collab-chip { display: flex; align-items: baseline; gap: 6px; padding: 6px 11px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.collab-chip span { font-size: 11px; color: var(--muted); }
+.collab-chip b { font-size: 15px; color: var(--ink); }
+.collab-chip.hot { border-color: #d8a0a0; background: #fdf6f5; }
+.collab-chip.hot b { color: #b23a3a; }
+.collab-err { display: flex; gap: 6px; align-items: flex-start; margin: 10px 0; padding: 9px 12px; border: 1px solid #d8a0a0; border-left: 3px solid #b23a3a; border-radius: 8px; background: #fdf6f5; color: #8f2b2b; font-size: 12px; line-height: 1.55; }
+.collab-reasons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -4px 0 12px; font-size: 11px; color: #6f6a63; }
+.collab-reasons b { color: var(--ink); }
+.collab-reasons span { padding: 2px 8px; border: 1px solid var(--line); border-radius: 7px; background: #faf9f7; }
+.collab-warn { margin: 8px 0; padding: 8px 11px; border: 1px solid #e0c79a; border-radius: 8px; background: #fdf8ee; color: #8a5a19; font-size: 11.5px; line-height: 1.6; }
+.collab-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin: 0 0 12px; }
+.collab-form label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #6f6a63; }
+.collab-form input, .collab-form select { min-width: 130px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; font-size: 12px; background: #fff; color: var(--ink); }
+.collab-form button:not([class]), .collab-ops button:not([class]), .collab-reject button:not([class]) {
+  padding: 5px 12px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink); font-size: 11.5px; white-space: nowrap; cursor: pointer; }
+.collab-form button:not([class]):hover, .collab-ops button:not([class]):hover { border-color: var(--green); color: var(--green); }
+.collab-form button:disabled, .collab-ops button:disabled { opacity: .45; cursor: not-allowed; }
+.collab-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.collab-table th { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--line); color: var(--muted); font-weight: 600; white-space: nowrap; }
+.collab-table td { padding: 8px 9px; border-bottom: 1px solid #eeebe6; vertical-align: top; color: #4b4640; line-height: 1.5; }
+.collab-table td small { display: block; margin-top: 3px; color: var(--muted); font-size: 10.5px; }
+.collab-table code { font-size: 10.5px; color: #5a554e; word-break: break-all; }
+.collab-ops { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.collab-ops a { font-size: 11.5px; color: var(--green); text-decoration: none; }
+.collab-upload { display: inline-flex; align-items: center; padding: 5px 12px; border: 1px dashed var(--line); border-radius: 7px; font-size: 11.5px; color: #6f6a63; cursor: pointer; }
+.collab-upload:hover { border-color: var(--green); color: var(--green); }
+.collab-bad { color: #b23a3a; font-style: normal; font-size: 10.5px; }
+.collab-report { margin: 14px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #faf9f7; }
+.collab-report h3 { margin: 0 0 8px; font-size: 13px; color: var(--ink); }
+.collab-hard { margin: 0 0 10px; padding-left: 18px; font-size: 11.5px; color: #8f2b2b; line-height: 1.6; }
+.collab-cs { display: flex; flex-wrap: wrap; gap: 6px; }
+.collab-c { display: inline-flex; align-items: baseline; gap: 5px; padding: 4px 9px; border: 1px solid var(--line); border-radius: 7px; background: #fff; font-size: 11px; color: #6f6a63; }
+.collab-c b { font-size: 11px; color: var(--ink); }
+.collab-c em { font-style: normal; font-size: 10px; color: var(--muted); }
+.collab-c.pass { border-color: #a9c9a2; background: #f4f9f2; color: #3f6b3a; }
+.collab-c.fail { border-color: #d8a0a0; background: #fdf6f5; color: #b23a3a; }
+.collab-c.unknown { border-style: dashed; }
+.collab-note { margin: 9px 0 0; font-size: 11px; color: var(--muted); line-height: 1.65; }
+.collab-unknown { margin-top: 10px; font-size: 11.5px; color: #6f6a63; }
+.collab-unknown summary { cursor: pointer; color: #8a5a19; }
+.collab-unknown ul { margin: 7px 0 0; padding-left: 18px; line-height: 1.6; }
+.collab-sev { display: inline-block; padding: 2px 8px; border-radius: 7px; font-size: 10.5px; white-space: nowrap; border: 1px solid var(--line); background: #f3f1ee; color: #6f6a63; }
+.collab-sev.bad { border-color: #d8a0a0; background: #fdf6f5; color: #b23a3a; }
+.collab-sev.warn { border-color: #e0c79a; background: #fdf8ee; color: #8a5a19; }
+.collab-reject { margin-top: 14px; padding: 12px 14px; border: 1px solid #e0c79a; border-radius: 10px; background: #fdf8ee; }
+.collab-reject h3 { margin: 0 0 10px; font-size: 12.5px; color: #8a5a19; }
+.collab-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 9px; margin-bottom: 12px; }
+.collab-fields label { display: flex; flex-direction: column; gap: 4px; font-size: 10.5px; color: #6f6a63; }
+.collab-fields input { padding: 5px 7px; border: 1px solid #e6d9bd; border-radius: 6px; font-size: 11.5px; background: #fff; }
+.collab-reason { min-width: 120px; padding: 5px 7px; border: 1px dashed var(--line); border-radius: 6px; font-size: 11px; }
+
+/* 选型目录：品牌 → 型号 → 参数（型号锁死的参数不出控件） */
+.catalog-picker { margin-bottom: 10px; min-width: 0; }
+.form-grid > .catalog-picker { grid-column: 1 / -1; }
+.catalog-picker .two-fields { margin-bottom: 10px; }
+.catalog-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid #e3e0db;
+  border-radius: 10px;
+  background: #fbfaf8;
+}
+.catalog-shot {
+  flex: 0 0 92px;
+  width: 92px;
+  height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid #ece9e4;
+  border-radius: 8px;
+  background: #fff;
+}
+.catalog-shot img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.catalog-shot.empty {
+  border-style: dashed;
+  color: #a29a8f;
+  font-size: 10.5px;
+  line-height: 1.4;
+  text-align: center;
+}
+.catalog-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.catalog-name { font-size: 13px; font-weight: 600; color: #37322b; line-height: 1.45; }
+.catalog-sub { font-size: 11px; color: #857f76; line-height: 1.5; }
+.catalog-price { font-size: 13px; font-weight: 600; color: #8a5a19; }
+.catalog-price em { margin-left: 8px; font-style: normal; font-weight: 400; font-size: 10.5px; color: #a29a8f; }
+.catalog-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.catalog-chip {
+  padding: 1px 7px;
+  border: 1px solid #e7e3dd;
+  border-radius: 999px;
+  background: #f2f0ed;
+  color: #6f6a63;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.catalog-params {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0 11px;
+  margin-bottom: 4px;
+}
+.catalog-note { margin: 0 0 10px; font-size: 10.5px; color: #8e887e; line-height: 1.6; }
+/* 右侧检视栏很窄：品牌 / 型号各占一行，图片放到文字上方，避免型号名被挤成竖条 */
+.fixture-fields .catalog-picker .two-fields { grid-template-columns: 1fr; }
+.fixture-fields .catalog-card { flex-direction: column; gap: 8px; }
+.fixture-fields .catalog-shot { flex: none; width: 100%; height: 108px; }
+.fixture-fields .catalog-name { font-size: 12px; }

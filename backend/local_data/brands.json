@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "priceScope": "只含市场零售价；成本口径不进系统（§5.2 闸① 结构上无这些字段，词表见 backend/price_terms.py）",
+  "brands": [
+    {"id": "shicong", "name": "世聪", "logo_path": "logos/shicong.svg", "status": "合作中", "sort_hint": 10},
+    {"id": "philips", "name": "飞利浦", "logo_path": "logos/philips.svg", "status": "合作中", "sort_hint": 20}
+  ],
+  "auth": []
+}

@@ -23,7 +23,8 @@ import {
 } from "lucide-react";
 import { api, uid, type Project, type Obj } from "./types";
 import { confirmDanger } from "./dangerConfirm";
-import { SPACE_CODES, ROLE_CODES, buildFixtureCode, nextSerial, positionsForSpace } from "./codes";
+import { SPACE_CODES, ROLE_CODES, buildFixtureCode, nextSerial, positionNameIn, groupedPositionsForSpaces, parseFixtureCode } from "./codes";
+import { spaceCodesOfRoomName } from "./spaces";
 import {
   addRow, addRowAt, batchChange, defaultSize, dupRow, payloadFromRows, removeRow, roomNames,
   rotateRow, rowsFromSummary, setKind, setSize, type FurnRow, type RoomLike,
@@ -676,6 +677,8 @@ function LightingEditor({ id, rooms, active, readonly = false, onSaved, onError 
   const [draft, setDraft] = useState<Obj>({ x: 0, z: 0, code: "", room: "", type: "", product_id: "", cct: null });
   const [busy, setBusy] = useState(false);
   const [position, setPosition] = useState("q");
+  // 合并空间（「餐厅、客厅」）里同一位置码在两类空间含义不同，记下所选位置属于哪类空间。
+  const [positionSpacePicked, setPositionSpacePicked] = useState("");
   const [role, setRole] = useState("M");
   const refreshAll = useCallback(async () => {
     const [l, c, s] = await Promise.all([
@@ -703,11 +706,30 @@ function LightingEditor({ id, rooms, active, readonly = false, onSaved, onError 
     if (target) target.members = [...target.members, lid];
     setCircuits(next);
   };
-  const nextCode = () => {
-    const roomName = rooms.find((r) => r.id === draft.room)?.name || draft.room;
-    const space = SPACE_CODES.find((x) => x.name === roomName)?.code || "x";
-    return buildFixtureCode(space, position, nextSerial(lights, space, position, role), role);
+  // 房间名可能是一个合并空间（「餐厅、客厅」）：位置表按所含空间合并，编号前缀跟所选位置走。
+  const roomSpaceCodesOf = (roomId: string): string[] => {
+    const rm = rooms.find((r) => r.id === roomId);
+    const named = spaceCodesOfRoomName(rm?.name || roomId || "").map((s) => s.code);
+    if (named.length) return named;
+    const fallback = SPACE_CODES.find((x) => x.name === (rm?.name || roomId))?.code;
+    return fallback ? [fallback] : [];
   };
+  const draftSpaceCodes = (() => {
+    const codes = roomSpaceCodesOf(draft.room);
+    return codes.length ? codes : ["x"];
+  })();
+  const positionGroups = groupedPositionsForSpaces(draftSpaceCodes);
+  const positionOptions = positionGroups.flatMap((g) => g.positions);
+  // 同一位置码在两类空间里含义可能不同，值用「空间码:位置码」区分来源。
+  const posOption =
+    positionOptions.find((p) => p.code === position && p.spaceCode === positionSpacePicked) ||
+    positionOptions.find((p) => p.code === position);
+  const positionSpace = posOption?.spaceCode || positionSpacePicked || draftSpaceCodes[0];
+  const qualified = draftSpaceCodes.length > 1;
+  const positionValue = qualified ? `${positionSpace}:${position}` : position;
+  const stalePosition = posOption ? "" : position;
+  const nextCode = () =>
+    buildFixtureCode(positionSpace, position, nextSerial(lights, positionSpace, position, role), role);
   // 拍板 2026-10-12（本地口径）：空间确认后三维只读 —— 布灯/回路/场景一律在布灯画布改。
   // 这里保留只读清点（看得见已同步的灯具、回路、场景），但不给任何写入口。
   if (readonly) {
@@ -720,6 +742,9 @@ function LightingEditor({ id, rooms, active, readonly = false, onSaved, onError 
       </p>
     </div>;
   }
+  // 位置表跟着空间走：位置码不在该空间（或合并空间所含空间）的位置表里时，<select> 会回退显示
+  // 第一项、编号却仍按旧码生成（2026-10-27 用户报的就是这一类）。换空间即收敛到新表的第一个
+  // 位置，渲染时再兜一个「旧位置」选项，保证显示与真实取值一致。
   return <div className="gv3d-edit">
     <nav>{(["lights", "circuits", "scenes"] as const).map((t) =>
       <button key={t} className={"gv3d-btn " + (tab === t ? "primary" : "")} onClick={() => setTab(t)}>
@@ -730,8 +755,16 @@ function LightingEditor({ id, rooms, active, readonly = false, onSaved, onError 
       <div className="gv3d-edit-form">
         {(["room", "code", "type", "product_id", "x", "z", "cct"] as const).map((key) =>
           <label key={key}>{({ room: "空间", code: "编号", type: "灯具类型", product_id: "选型", x: "X", z: "Z", cct: "色温 K（可空）" })[key]}
-            {key === "room" ? <select value={draft.room || ""} onChange={(e) =>
-              setDraft({ ...draft, room: e.target.value })}>
+            {key === "room" ? <select value={draft.room || ""} onChange={(e) => {
+              const room = e.target.value;
+              setDraft({ ...draft, room });
+              const codes = roomSpaceCodesOf(room);
+              const list = groupedPositionsForSpaces(codes.length ? codes : ["x"])
+                .flatMap((g) => g.positions);
+              const hit = list.find((p) => p.code === position);
+              setPositionSpacePicked(hit?.spaceCode || list[0]?.spaceCode || "");
+              if (!hit) setPosition(list[0]?.code || "q");
+            }}>
               <option value="">请选择空间</option>
               {draft.room && !rooms.some((r) => r.id === draft.room) &&
                 <option value={draft.room}>{draft.room}（旧数据）</option>}
@@ -740,10 +773,24 @@ function LightingEditor({ id, rooms, active, readonly = false, onSaved, onError 
               [key]: key === "x" || key === "z" ? Number(e.target.value) :
                 key === "cct" ? (e.target.value ? Number(e.target.value) : null) : e.target.value })} />}
           </label>)}
-        <label>安装位置<select value={position} onChange={(e) => setPosition(e.target.value)}>
-          {positionsForSpace(SPACE_CODES.find((x) => x.name ===
-            (rooms.find((r) => r.id === draft.room)?.name || draft.room))?.code || "x").map((p) =>
-            <option key={p.code} value={p.code}>{p.code} · {p.name}</option>)}
+        <label>安装位置<select value={positionValue} onChange={(e) => {
+          const raw = e.target.value;
+          const sep = raw.indexOf(":");
+          if (sep > 0) {
+            setPositionSpacePicked(raw.slice(0, sep));
+            setPosition(raw.slice(sep + 1));
+          } else {
+            setPosition(raw);
+          }
+        }}>
+          {stalePosition && <option value={positionValue}>{stalePosition} · {positionNameIn(positionSpace, stalePosition) || "该空间无此位置"}（请重选）</option>}
+          {positionGroups.map((g) =>
+            <optgroup key={g.group} label={g.group}>
+              {g.positions.map((p) =>
+                <option key={`${p.spaceCode}:${p.code}`} value={qualified ? `${p.spaceCode}:${p.code}` : p.code}>
+                  {p.code} · {p.name}
+                </option>)}
+            </optgroup>)}
         </select></label>
         <label>灯光职能<select value={role} onChange={(e) => setRole(e.target.value)}>
           {ROLE_CODES.map((r) => <option key={r.code} value={r.code}>{r.code} · {r.name}</option>)}
@@ -758,7 +805,11 @@ function LightingEditor({ id, rooms, active, readonly = false, onSaved, onError 
       </div>
       {lights.map((l) => <div className="gv3d-edit-row" key={l.id}>
         <span>{l.code || "未编号"} · {rooms.find((r) => r.id === l.room)?.name || l.room || "未分房"} · ({l.x}, {l.z}) · {l.product_id || l.type || "未选型"} · {l.cct == null ? "色温待补" : `${l.cct}K`}</span>
-        <button className="gv3d-btn" onClick={() => setDraft({ ...l })}>编辑/移动</button>
+        <button className="gv3d-btn" onClick={() => {
+          setDraft({ ...l });
+          const parsed = parseFixtureCode(String(l.code || ""));
+          if (parsed) setPositionSpacePicked(parsed.spaceCode);
+        }}>编辑/移动</button>
         <button className="gv3d-btn" disabled={busy} onClick={() => perform(() => send(`lights/${l.id}`, "DELETE", {}))}>删除</button>
       </div>)}
     </>}

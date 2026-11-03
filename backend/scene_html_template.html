@@ -1216,7 +1216,7 @@ if (!SENSORS.length) sensorToggleBtn.style.display = "none";
   draw("delivery-external", ["编号", "类型", "型号", "空间", "地址"],
     external.map(f => [f.code, f.name, f.model, f.room, f.circuit]));
   draw("delivery-prices", ["编号", "产品", "数量", "单价", "小计"],
-    list.map(f => [f.code, f.name, 1, "待补", "待补"]));
+    list.map(f => [f.code, f.name, String(f.qty ?? 1) + (f.unit || "个"), "待补", "待补"]));
 })();
 </script>
 </body>

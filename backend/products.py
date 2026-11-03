@@ -4,7 +4,8 @@
 
 唯一真相源：随源码分发的产品资料
 用户口径（2026-09-25 确认）：**只同步市场零售价**。
-出厂价 / 含运费出厂价 / 预估运费 / 备注（备注里常写出厂价）一律不进工作台。
+采集侧的排除清单（成本口径的列、备注、内嵌图片）以 `price_terms.SRC_DROP_COLUMNS`
+为唯一正本，写在这里的列一律不进工作台。
 灯具图片是 DISPIMG 公式，无意义，跳过。
 
 表落在光律自己的库 `data/studio.sqlite3`，表名 `lighting3d_products`（新表，不动任何既有表）。
@@ -23,7 +24,15 @@ TABLE = "lighting3d_products"
 # 允许进工作台的列（白名单，不是黑名单——多一列都得先想清楚）
 KEEP = ["图纸编号", "品牌", "产品名称", "产品分类", "方案类型", "功率(W)", "色温(K)",
         "开孔尺寸", "是否调光", "单位", "质保", "零售价(元)"]
-DROP = ["出厂价(元)", "含运费出厂价(元)", "预估运费(元)", "备注", "灯具图片"]
+# 排除清单的字面量只写在 price_terms（闸③的 grep 正本），这里只做引用
+try:
+    from . import price_terms as _PT
+except ImportError:  # 直接跑 backend/products.py 同步时没有包上下文
+    import price_terms as _PT
+
+DROP = _PT.SRC_DROP_COLUMNS
+# 同步结果里给界面看的口径说明（§5.2 闸③：成本口径的词只在 price_terms 出现）
+SYNC_SCOPE = "只同步市场零售价；成本口径/运费/备注不进工作台（词表见 price_terms.py）"
 
 ANGLE_RE = re.compile(r"(\d{1,2})\s*°")
 
@@ -79,7 +88,7 @@ def _rows_from_json(path):
 def load_rows(path=SRC_XLSX):
     if str(path).lower().endswith(".json"):
         return _rows_from_json(path)
-    """读报价表 → 只保留白名单字段。永远不会带回出厂价/运费。"""
+    """读报价表 → 只保留白名单字段。成本口径与运费永远不会被带回来。"""
     import openpyxl
     wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
     ws = wb[wb.sheetnames[0]]
@@ -151,7 +160,7 @@ def sync(db_path=None, path=SRC_XLSX):
     total = con.execute(f"SELECT COUNT(*) FROM {TABLE}").fetchone()[0]
     con.close()
     return {"rows": len(rows), "inserted": ins, "updated": upd, "total": total,
-            "synced_at": ts, "src": path, "scope": "只同步市场零售价（出厂价/运费/备注不进）",
+            "synced_at": ts, "src": path, "scope": SYNC_SCOPE,
             "warn": warn}
 
 

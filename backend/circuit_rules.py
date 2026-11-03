@@ -12,6 +12,8 @@ D3 上限（智能工程师）：模块网关还没有「LED 负载额定」「�
 import json
 from pathlib import Path
 
+from . import quality as Q
+
 TEXT = json.loads((Path(__file__).resolve().parents[1] / "frontend" / "src" / "data"
                    / "circuit-rules-text.json").read_text("utf-8"))
 
@@ -25,7 +27,10 @@ def t(key, **kw):
 
 
 WIRELESS = ("Zigbee", "Wi-Fi", "蓝牙 Mesh")
-RELAY_MAX_DRIVERS, RELAY_MAX_WATTS, DALI_MAX_ADDRESSES = 12, 300, 55
+# 未附型号手册时的参考值，唯一来源是 quality.REFERENCE_LIMITS（D03/D05：参考值不是已验证上限）。
+RELAY_MAX_DRIVERS = Q.REFERENCE_LIMITS["relay"]["maxDrivers"]
+RELAY_MAX_WATTS = Q.REFERENCE_LIMITS["relay"]["maxWatts"]
+DALI_MAX_ADDRESSES = Q.REFERENCE_LIMITS["dali"]["maxAddresses"]
 UNASSIGNED = TEXT["unassigned"]
 # 拦截档：施工包（zip、dxf、pdf、xlsx、docx）+ 厂家包（panels）+ 订货单（order，S9a 再接入口）。
 # 只提示档：业主 HTML、png、jpg、报价单（/quote）。json 是数据备份，不拦也不提示。
@@ -102,16 +107,47 @@ def reading(members):
     return t("readingOther", n=n, w=num(w))
 
 
-def _over_d3(members):
-    ctrls = controls(members)
+def reference_limits(ctrls, members=None):
+    """本条回路可用的容量依据。附了逐灯型号依据就用它；否则返回参考值并标未附手册。"""
     if len(ctrls) != 1:
+        return None
+    kind = {"开关控制": "relay", "DALI": "dali"}.get(ctrls[0])
+    if not kind:
+        return None
+    specs = []
+    for f in members or []:
+        spec = f.get("resourceSpec") if isinstance(f.get("resourceSpec"), dict) else None
+        if not spec:
+            continue
+        key = "maxDrivers" if kind == "relay" else "maxAddresses"
+        if isinstance(spec.get(key), (int, float)) and spec.get(key) > 0:
+            specs.append(spec)
+    if specs:
+        spec = min(specs, key=lambda s: float(s.get("maxDrivers") or s.get("maxAddresses") or 0))
+        out = {"kind": kind, "verified": True, "basis": str(spec.get("source") or "逐灯型号依据")}
+        if kind == "relay":
+            out["maxDrivers"] = int(spec["maxDrivers"])
+            out["maxWatts"] = int(spec.get("maxWatts") or Q.REFERENCE_LIMITS["relay"]["maxWatts"])
+        else:
+            out["maxAddresses"] = int(spec["maxAddresses"])
+        return out
+    return {**Q.REFERENCE_LIMITS[kind], "kind": kind, "verified": False}
+
+
+def over_reference(members):
+    """超参考值也按「未知·从严」处理：没有手册时不宣布这是已验证的失败。"""
+    ctrls = controls(members)
+    ref = reference_limits(ctrls, members)
+    if not ref:
         return False
     n, w = drivers(members), watts(members)
-    if ctrls[0] == "开关控制":
-        return n > RELAY_MAX_DRIVERS or w > RELAY_MAX_WATTS
-    if ctrls[0] == "DALI":
-        return n > DALI_MAX_ADDRESSES
-    return False
+    if ref["kind"] == "relay":
+        return n > ref["maxDrivers"] or w > ref["maxWatts"]
+    return n > ref["maxAddresses"]
+
+
+def _over_d3(members):
+    return over_reference(members)
 
 
 def _room_counts(members, rooms):

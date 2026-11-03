@@ -186,6 +186,25 @@ def _ceil_lines(rooms: list[dict]) -> list[list[list[float]]]:
     return out
 
 
+def _compact_info(info: dict) -> dict:
+    """灯位四组字段（回路／开孔／SKU／驱动）压缩版：只留有值的行。
+
+    空字段在 missing 里已经逐条说了，再留一行「—（未填）」只会把 JSON 撑大；
+    字段的取值一律来自 `lighting3d._fixture_info`（§7.5/§7.6 ＋产品库同一口），这里不重算。
+    """
+    if not info:
+        return {}
+    return {
+        "code": info.get("code") or "",
+        "type": info.get("type") or "",
+        "orphan": bool(info.get("orphan")),
+        "missing": list(info.get("missing") or []),
+        "groups": {k: [{"label": r.get("label"), "value": r.get("value")}
+                       for r in rows if str(r.get("value") or "").strip()]
+                   for k, rows in (info.get("groups") or {}).items()},
+    }
+
+
 def build(view: dict, floor: int = 1) -> dict:
     """`_engine_view()` 的输出 → `__SCENE__`。
 
@@ -258,10 +277,22 @@ def build(view: dict, floor: int = 1) -> dict:
         room = _room_of(x, z, rooms) or circuit.get("room") or "未分区"
         name = f"{room}·{kind}"
         r = round(DEFAULT_LIGHT_R, 3)
+        # 光斑半径只带接口算好的那一个（θ_cut 外缘，见 ies.pool_radius_m）；内核/外壳都不再按半角重算，
+        # 否则「换 SKU 光斑跟着变」在这条渲染路径上永远是假的。未实测的不画光斑（§5.1）。
+        pool_r = light.get("poolR")
+        photometry = str(light.get("photometry") or "")
+        try:
+            pool_r = round(max(0.0, float(pool_r)), 3) if pool_r is not None else None
+        except (TypeError, ValueError):
+            pool_r = None
         lights.append([round(x, 4), round(z, 4), r])
         lights_meta.append({"x": round(x, 4), "y": round(z, 4), "r": r,
                             "room": room, "kind": kind, "circuit": name,
-                            "half": round(half, 1), "mount": round(mount, 3)})
+                            "half": round(half, 1), "mount": round(mount, 3),
+                            "poolR": pool_r, "photometry": photometry,
+                            "unverified": photometry == "未实测",
+                            "id": light.get("id") or "",
+                            "info": _compact_info(light.get("info") or {})})
         # 工作台的灯具 id → 内核的回路名。前端切情景/拖回路时按这张表发亮度，
         # 三维才会跟着变（否则内核只按它自己的预置亮灯，跟设计没关系）。
         if light.get("id"):

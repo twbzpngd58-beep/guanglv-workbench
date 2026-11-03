@@ -30,6 +30,7 @@ export function SpacePreviewLayer({
   geometryPath,
   notify,
   onClose,
+  reparse,
   job,
   floor = 1,
   background = "",
@@ -49,6 +50,8 @@ export function SpacePreviewLayer({
   geometryPath?: string;
   notify: (s: string) => void;
   onClose: () => void;
+  /** 按当前解析器重跑这张图纸（不用再传 DXF）；解析过期时用。 */
+  reparse?: () => Promise<unknown>;
   /** 生成进度（state=idle/running/done/error）；done 之后才给「确认 / 修改」。 */
   job: Obj;
   /** 当前楼层（多层的项目只显示本层的空间）。 */
@@ -70,6 +73,8 @@ export function SpacePreviewLayer({
   const [legacyAvailable, setLegacyAvailable] = useState(false);
   const [legacyLoading, setLegacyLoading] = useState(loadPlanBackground && !Array.isArray(design.furniture));
   const [legacyRetry, setLegacyRetry] = useState(0);
+  // 解析器版本对比（旧项目不会自己变新）：过期时在这一层给「重新解析」，不必绕去三维工作台。
+  const [parseInfo, setParseInfo] = useState<Obj>({ checked: false, stale: false });
   useEffect(() => {
     if (!loadPlanBackground) return;
     setLegacyLoading(!Array.isArray(design.furniture));
@@ -79,6 +84,7 @@ export function SpacePreviewLayer({
       try {
         const s: Obj = await api(`/lighting3d/${id}`);
         if (dead) return;
+        setParseInfo({ checked: true, stale: !!s?.parse_stale, parsed: s?.parsed_version || "", current: s?.parser_version || "" });
         setLegacyFurniture(furnitureFromModel(s?.furniture || [], design.rooms || []));
         setLegacyAvailable(true);
         setLegacyLoading(false);
@@ -364,6 +370,22 @@ export function SpacePreviewLayer({
               onClick={() => { setPhase("furniture"); setTab("furniture"); setTool("select"); setPlacingFurn(""); setMovingFurn(false); }}>修改家具</button>
           </div>
         </header>
+        {(parseInfo.stale || alreadyConfirmed) && reparse ? (
+          <div className={`space-preview-stale${parseInfo.stale ? "" : " info"}`}>
+            <AlertCircle size={14} />
+            <span>
+              {parseInfo.stale
+                ? <>这份三维是<strong>旧版解析器</strong>{parseInfo.parsed ? `（v${parseInfo.parsed}）` : ""}跑的，
+                    当前 v{parseInfo.current}：空间、墙、门窗名可能都是旧的。点右边按当前解析器重跑一次，不用再传图纸。</>
+                : <>空间<strong>已确认</strong>（当前这套是按上次解析冻结的）。按图纸重新解析会用图纸结果替换已确认空间——
+                    改过的名字、边界会丢，点右边确认后才会执行。</>}
+            </span>
+            <button className="space-preview-reparse" disabled={state !== "done"}
+              onClick={() => { void reparse().catch((e: any) => notify(`重新解析失败：${e.message}`)); }}>
+              重新解析
+            </button>
+          </div>
+        ) : null}
         <DrawingProgress project={project} design={design} job={job} phase={phase} confirmed={alreadyConfirmed}
           onStep={step => {
             if (step === "review") setTab("preview");
