@@ -30,6 +30,16 @@ def data_dir() -> Path:
     return base / "guanglv-workbench"
 
 
+def soften_console_encoding() -> None:
+    """英文 Windows 控制台是 cp1252，中文日志会抛 UnicodeEncodeError，这里只替换不崩。"""
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(errors="replace")
+            except Exception:
+                pass
+
+
 def attach_console_logger(data: Path) -> None:
     """双击启动时没有终端，日志必须落盘，否则用户只会看到「打不开」。"""
     log_dir = data / "logs"
@@ -144,6 +154,7 @@ def main() -> int:
     os.environ["DATA_DIR"] = str(data)
     os.chdir(APP_DIR)
     sys.path.insert(0, str(APP_DIR))
+    soften_console_encoding()
     attach_console_logger(data)
 
     preferred = args.port or int(os.getenv("GUANGLV_PORT") or os.getenv("PORT") or "8000")
