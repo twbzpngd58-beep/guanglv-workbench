@@ -45,7 +45,7 @@ PLIST
 cat > "$APP/Contents/MacOS/guanglv" <<'LAUNCH'
 #!/bin/sh
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
-exec "$DIR/Resources/runtime/bin/python3" -I -B "$DIR/Resources/app/installer/serve.py" "$@"
+exec "$DIR/Resources/runtime/bin/python3" -I -B -X utf8 "$DIR/Resources/app/installer/serve.py" "$@"
 LAUNCH
 chmod +x "$APP/Contents/MacOS/guanglv"
 

@@ -36,11 +36,11 @@ Source: "{#SrcDir}\runtime\*"; DestDir: "{app}\runtime"; Flags: recursesubdirs c
 Source: "{#Ico}"; DestDir: "{app}"; DestName: "app-icon.ico"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\runtime\pythonw.exe"; Parameters: "-I -B ""{app}\app\installer\serve.py"""; WorkingDir: "{app}\app"; IconFilename: "{app}\app-icon.ico"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\runtime\pythonw.exe"; Parameters: "-I -B ""{app}\app\installer\serve.py"""; WorkingDir: "{app}\app"; IconFilename: "{app}\app-icon.ico"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\runtime\pythonw.exe"; Parameters: "-I -B -X utf8 ""{app}\app\installer\serve.py"""; WorkingDir: "{app}\app"; IconFilename: "{app}\app-icon.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\runtime\pythonw.exe"; Parameters: "-I -B -X utf8 ""{app}\app\installer\serve.py"""; WorkingDir: "{app}\app"; IconFilename: "{app}\app-icon.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\runtime\pythonw.exe"; Parameters: "-I -B ""{app}\app\installer\serve.py"""; WorkingDir: "{app}\app"; Description: "立即启动 {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\runtime\pythonw.exe"; Parameters: "-I -B -X utf8 ""{app}\app\installer\serve.py"""; WorkingDir: "{app}\app"; Description: "立即启动 {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 Type: dirifempty; Name: "{app}"
