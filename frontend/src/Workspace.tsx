@@ -5,7 +5,7 @@ import { RecognitionCompare } from "./RecognitionCompare";
 import { Lighting3DView } from "./Lighting3DView";
 import { SpacePreviewLayer } from "./SpacePreview";
 import { revealFlash } from "./reveal";
-import { withSpaceShell, boundary, snapToWall, WALL_SNAP_MAX } from "./spaceGeometry";
+import { withSpaceShell, boundary, snapToWall, containsPoint, interiorPoint, WALL_SNAP_MAX } from "./spaceGeometry";
 import { FurniturePanel, createFurniture, furnitureFromModel, pointInSpace } from "./FurniturePanel";
 import { withFurniturePolygon } from "./furniturePolygon";
 import { mountHeight } from "./wallMount";
@@ -152,6 +152,7 @@ import {
   clampSceneStates,
   cctIssuesOf,
   cctNeedsReason,
+  isProductSourced,
   cctText,
   isCctPending,
   applyProductToFixture,
@@ -242,6 +243,16 @@ type LampDelta = {
   brightness: [number, number] | null;
   cct: [number, number] | null;
 };
+/** 基础情景：00.1 全开 / 00.2 全关 是「固定写入」的，必须自带定义。
+ *  以前从 /api/scene-templates 里找这两个模板——本地知识库没同步时该接口返回空，
+ *  弹窗写着「固定写入」，套用后情景里却没有全开/全关（2026-11-04 现场）。 */
+const BASE_SCENE_TEMPLATES = [
+  { id: "base-00.1", code: "00.1", name: "全开", mode: "all-on", trigger: "手动", fade: 1,
+    description: "全屋可调灯全开：亮度取各灯上限，色温夹到各灯允许范围" },
+  { id: "base-00.2", code: "00.2", name: "全关", mode: "all-off", trigger: "手动", fade: 1,
+    description: "全屋灯全关（窗帘不动）" },
+];
+
 /** 回路编号：空＝未分配回路。 */
 const circuitOf = (f: Obj) =>
   (f && f.circuit ? String(f.circuit).trim() : "") || "未分配回路";
@@ -1230,9 +1241,12 @@ export function Workspace({
         ? (lampCatalogSel.cct ?? lampCatCct.default)
         : null
     : lampSingleCct;
+  // 选了目录型号 = 色温口径是产品标称，不套「手动布灯默认单色 3000K」那套偏离判定：
+  // 要求补原因甚至不让布灯，最后下单的型号参数就和灯具上的实际参数对不上了。
   const lampNeedsReason =
-    (lampCatColorMode ?? lampColorMode) !== "单色" ||
-    (lampEffectiveCct !== null && lampEffectiveCct !== SINGLE_CCT_DEFAULT);
+    !lampCatModel &&
+    ((lampColorMode) !== "单色" ||
+      (lampEffectiveCct !== null && lampEffectiveCct !== SINGLE_CCT_DEFAULT));
   // 添加设备 / 传感器 / 窗帘：先选类型与空间再落到图纸（楼层跟当前页，空间只列本层，与布灯一致）。
   const [addObject, setAddObject] = useState<"" | "device" | "curtain">("");
   const [addType, setAddType] = useState("传感器");
@@ -1827,9 +1841,11 @@ export function Workspace({
           return;
         }
       }
+      // 按真实边界找落点所在的那间，不按外接框：L 形/C 形空间的外接框把隔壁的缺角也圈进来了，
+      // 灯带于是挂错房间（后端 lighting3d.room_for 同一口径，2026-11-04）。
       const room =
         n.rooms.find(
-          (r) => r.floor === floor && x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height,
+          (r) => r.floor === floor && containsPoint(r, x, y),
         ) || n.rooms.find((r) => r.floor === floor);
       const sc = (room ? roomSpaceCodeOf(room)?.code : "") || "x";
       const id = uid();
@@ -2174,8 +2190,10 @@ export function Workspace({
         const r = n.rooms.find((r) => r.id === value);
         if (r) {
           o.floor = r.floor;
-          o.x = r.x + r.width / 2;
-          o.y = r.y + r.height / 2;
+          // 落到房间内部一点：外接框中心对凹形房来说可能在隔壁的缺角里，灯一换房间就飘到墙外。
+          const anchor = interiorPoint(r);
+          o.x = anchor.x;
+          o.y = anchor.y;
         }
       }
     });
@@ -2710,17 +2728,19 @@ export function Workspace({
     const slot = noGeometry
       ? n.fixtures.filter((f) => f.roomId === r.id).length
       : 0;
-    // 画布落点优先：点哪放哪；没给落点才回退到空间中心 / 无边界空间的网格排布。
+    // 画布落点优先：点哪放哪；没给落点才回退到空间内部点 / 无边界空间的网格排布。
+    // 内部点＝最宽扫描线的中点，不是外接框中心——凹形房的框中心会掉进隔壁的缺角。
+    const inRoom = noGeometry ? null : interiorPoint(r);
     const baseX = at
       ? at.x
       : noGeometry
         ? 110 + (slot % 6) * 64
-        : r.x + r.width / 2;
+        : inRoom!.x;
     const baseY = at
       ? at.y
       : noGeometry
         ? 100 + Math.floor(slot / 6) * 64
-        : r.y + r.height / 2;
+        : inRoom!.y;
     const fx: Obj = {
       id: uid(),
       code: nextCode,
@@ -2798,8 +2818,12 @@ export function Workspace({
     update((n) => {
       const room = picked ? n.rooms.find((r) => r.id === picked.id) : undefined;
       // 点哪放哪：优先用画布落点，没有落点才退回空间中心。
-      const x = placePoint ? placePoint.x : room ? room.x + room.width / 2 : 200;
-      const y = placePoint ? placePoint.y : room ? room.y + room.height / 2 : 200;
+      // 中心取「房间内部一点」：凹形房的外接框中心在隔壁的缺角里，设备一放就出界。
+      const anchor = room ? (containsPoint(room, room.x + room.width / 2, room.y + room.height / 2)
+        ? { x: room.x + room.width / 2, y: room.y + room.height / 2 }
+        : interiorPoint(room)) : null;
+      const x = placePoint ? placePoint.x : anchor ? anchor.x : 200;
+      const y = placePoint ? placePoint.y : anchor ? anchor.y : 200;
       // 位置属于哪个空间就以它为名称依据：合并房里同一位置码在两类空间含义不同。
       const devSpaceCode =
         addPositionCode && addSpaceCodes.includes(addPositionSpace)
@@ -2860,8 +2884,12 @@ export function Workspace({
         (picked ? n.rooms.find((r) => r.id === picked.id) : undefined) ||
         n.rooms.find((r) => r.floor === floor);
       // 点哪放哪：优先用画布落点，没有落点才退回空间上方居中。
-      const x = placePoint ? placePoint.x : room ? room.x + room.width * 0.5 : 200;
-      const y = placePoint ? placePoint.y : room ? room.y + room.height * 0.15 : 120;
+      // 「上方居中」对凹形房可能落在缺角（隔壁房间）里，这时改用房间内部一点。
+      const topCenter = room ? { x: room.x + room.width * 0.5, y: room.y + room.height * 0.15 } : null;
+      const anchor = topCenter && containsPoint(room!, topCenter.x, topCenter.y)
+        ? topCenter : room ? interiorPoint(room) : null;
+      const x = placePoint ? placePoint.x : anchor ? anchor.x : 200;
+      const y = placePoint ? placePoint.y : anchor ? anchor.y : 120;
       const sc = roomSpaceCodeOf(room)?.code || "x";
       const serial = n.fixtures.filter((f) => f.type === "窗帘").length + 1;
       const cid = uid();
@@ -3180,7 +3208,12 @@ export function Workspace({
     setActiveScene(id);
   }
   function presets() {
-    const standard = sceneTemplates.map((item) => [item.code + " " + item.name, item.description, item]);
+    // 基础情景 + 接口里的标准情景；按 code 去重（接口哪天也带了 00.x 不会写两遍）
+    const merged = new Map<string, Obj>();
+    for (const t of [...BASE_SCENE_TEMPLATES, ...(sceneTemplates as Obj[])]) {
+      if (t && t.code) merged.set(String(t.code), t);
+    }
+    const standard = [...merged.values()].map((item: Obj) => [item.code + " " + item.name, item.description, item]);
     let created = 0;
     let synced = 0;
     let empty = 0;
@@ -3339,8 +3372,8 @@ export function Workspace({
         n.scenes.push({ id: uid(), templateId: t.id, templateCode: t.code, name: label, description: t.description || "", trigger: t.trigger || "手动", mode: t.mode || "standard", automationActions: t.automationActions || [], fade: Number.isFinite(fade) && fade >= 0 ? fade : 1, priority: t.priority, level: t.level, exit: t.exit, exclude: t.exclude, states, standard: true });
         created += 1;
       };
-      for (const t of sceneTemplates as any[])
-        if (t.code === "00.1" || t.code === "00.2") add(t, t.code + " " + t.name);
+      // 基础情景固定写入（不等 /api/scene-templates，那个接口可能没有这两条）
+      for (const t of BASE_SCENE_TEMPLATES) add(t, t.code + " " + t.name);
       for (const t of PACKAGE_TEMPLATES)
         if (codes.has(t.code)) add(t, t.code + " " + t.name);
       if (!noSmart) ensurePanels(n, smart);
@@ -8920,7 +8953,11 @@ export function Workspace({
             编号 = 空间 + 位置 + 职能 + 序号（{ROLE_CODES.map((r) => r.code).join("/")} 为职能位）；
             场景按「空间 × 职能 × 位置」自动推导，不用逐个情景手调。放置后可在画布上拖动定位，
             光束角、安装高度与编号可在「灯具配置」里微调。
-            默认单色 3000K，改双色 / 彩色 / 其他色温需写原因（导出清单「原因」列）；彩色律动只在游戏室（电竞房）情景里生效。
+            默认单色 3000K，手动改成双色 / 彩色 / 其他色温需写原因（导出清单「原因」列）；
+            {lampCatModel
+              ? `已选 ${lampCatModel.brandLabel || lampCatModel.brand} ${lampCatModel.model}：名称、功率、色温、光束角、价格按产品标称写入，不要求偏离原因。`
+              : "未选型号时按上面的默认口径。"}
+            彩色律动只在游戏室（电竞房）情景里生效。
             {lampColorMode === "单色"
               ? `单色光源固定 ${lampSingleCct}K，不参与调色温；`
               : lampColorMode === "双色"
@@ -10121,24 +10158,28 @@ function FixtureFields({
               ))}
             </select>
           </Field>
-          {colorModeOf(f) === "单色" && (
-            <Field label="色温 K（单色固定）">
-              <select
-                value={
-                  SINGLE_CCT_OPTIONS.includes(Number(f.cct))
-                    ? Number(f.cct)
-                    : SINGLE_CCT_DEFAULT
-                }
-                onChange={(e) => patch("cct", +e.target.value)}
-              >
-                {SINGLE_CCT_OPTIONS.map((k) => (
-                  <option key={k} value={k}>
-                    {k} K{k === SINGLE_CCT_DEFAULT ? "（默认）" : ""}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          )}
+          {colorModeOf(f) === "单色" && (() => {
+            // 产品标称可能是四档之外的值（2200K / 5000K）：下拉里必须留得住它，
+            // 否则界面显示 3000K、一改动就把灯具参数改成不属于这个产品的数。
+            const cur = Number(f.cct);
+            const offList = Number.isFinite(cur) && !SINGLE_CCT_OPTIONS.includes(cur) ? [cur] : [];
+            return (
+              <Field label="色温 K（单色固定）">
+                <select value={offList.length ? cur : SINGLE_CCT_DEFAULT} onChange={(e) => patch("cct", +e.target.value)}>
+                  {offList.map((k) => (
+                    <option key={k} value={k}>
+                      {k} K（{isProductSourced(f) ? "产品标称" : "当前值"}）
+                    </option>
+                  ))}
+                  {SINGLE_CCT_OPTIONS.map((k) => (
+                    <option key={k} value={k}>
+                      {k} K{k === SINGLE_CCT_DEFAULT ? "（默认）" : ""}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            );
+          })()}
         </div>
       )}
       {!catParams.cct && colorModeOf(f) === "双色" && (

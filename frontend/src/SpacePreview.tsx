@@ -6,7 +6,7 @@ import { Button } from "./ui";
 import { Plan, type Selection } from "./Plan";
 import { SceneModel3D } from "./SceneModel3D";
 import { wipeNotice, wipeRecognizedRooms } from "./spaceWipe";
-import { boundary, spaceShell, withSpaceShell, snapBoundary } from "./spaceGeometry";
+import { boundary, withSpaceShell, snapBoundary, openingPlacement } from "./spaceGeometry";
 import { withRoomPolygon } from "./roomPolygon";
 import { FurniturePanel, createFurniture, furnitureFromModel, pointInSpace } from "./FurniturePanel";
 import { withFurniturePolygon, deleteFurniturePolygon } from "./furniturePolygon";
@@ -577,7 +577,13 @@ export function SpacePreviewLayer({
               <datalist id="space-preview-names">{roomTypes.map(name => <option key={name} value={name} />)}</datalist>
               </> : <>
               <h4>门窗</h4>
-              {(spaceShell(design, floor).openings).map((o: Obj) => <div className="space-preview-opening" key={o.id}>
+              {/* 清单按本层洞口本身列，识别出来的（source=cad）也要能改高度、能删——认错了就在这里清掉。 */}
+              {!!(design.openings || []).filter((o: Obj) => +(o.floor || 1) === floor).length &&
+                <p className="subtle">画布上同墙并排的门窗会互相压着命中区：先点一下选中，再点住拖动位置。</p>}
+              {(design.openings || []).filter((o: Obj) => +(o.floor || 1) === floor)
+                .map((o: Obj) => ({ ...o, ...openingPlacement(design, o) }))
+                .filter((o: Obj) => o.width != null)
+                .map((o: Obj) => <div className="space-preview-opening" key={o.id}>
                 <b>{rooms.find(r => r.id === o.roomId)?.name} · {o.type}</b>
                 <small>宽 {(o.width / 26).toFixed(2)} m</small>
                 <label>洞口高度 m<input aria-label={`${o.type}洞口高度 m`} type="number" min=".1" step=".1" value={o.heightM}
@@ -586,7 +592,7 @@ export function SpacePreviewLayer({
                   onChange={e => commitDesign({ ...design, openings: design.openings.map((x: Obj) => x.id === o.id ? { ...x, sillHeight: +e.target.value } : x) })} /></label>}
                 <Button onClick={() => commitDesign({ ...design, openings: design.openings.filter((x: Obj) => x.id !== o.id) })}>删除{o.type}</Button>
               </div>)}
-              {!spaceShell(design, floor).openings.length && <p className="subtle">尚无门窗。单击墙边两端绘制；本层无需门窗时也可直接确认。</p>}
+              {!(design.openings || []).filter((o: Obj) => +(o.floor || 1) === floor).length && <p className="subtle">尚无门窗。单击墙边两端绘制；本层无需门窗时也可直接确认。</p>}
               </>}
             </aside>
           </div>

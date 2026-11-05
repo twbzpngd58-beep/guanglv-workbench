@@ -182,7 +182,11 @@ def _ceil_lines(rooms: list[dict]) -> list[list[list[float]]]:
     for r in rooms:
         poly = r.get("poly") or []
         for i in range(len(poly) - 1):
-            out.append([poly[i], poly[i + 1]])
+            # 必须复制点：房间轮廓、地面板、吊顶线共用同一个点列表的话，
+            # _to_kernel_frame 会对同一对坐标取负 2~3 次（偶数抵消、奇数留下），
+            # 于是吊顶线一半翻到空间外面去（2026-11-04 现场：业主页出现横穿户型的长斜线）。
+            out.append([[float(poly[i][0]), float(poly[i][1])],
+                        [float(poly[i + 1][0]), float(poly[i + 1][1])]])
     return out
 
 
@@ -203,6 +207,56 @@ def _compact_info(info: dict) -> dict:
                        for r in rows if str(r.get("value") or "").strip()]
                    for k, rows in (info.get("groups") or {}).items()},
     }
+
+
+def _to_kernel_frame(scene: dict) -> dict:
+    """设计帧 → 内核帧：把每个点对的第二个坐标取负，就地返回同一份 dict。
+
+    内核（`ref/template.html`，未改一行）把每对 `(a, b)` 画成 world `(a, ·, -b)`：
+        position.set(s.x, (Ne-.06)/2+.02, -s.y)      灯体
+        s.push(e[0][0], Ne-.06, -e[0][1], …)         吊顶线 / 灯带
+        new A(s.cx, .05, -s.cy)                      房间标签
+    我们送进来的 `b` 是图纸 y（SVG 向下为正），内核再取一次负 ⇒ world z = −图纸y，
+    相对二维平面图就是**镜像**（户型图上下换边、左右手翻转，2026-11-03 用户报）。
+    这里先把 b 取负，内核取负回到 +图纸y：x 向右、z 顺着图纸向下的方向，两边一致。
+
+    放在最后一步做：落灯在哪个房间、质心、面积这些判断都在设计帧里算完，不受影响。
+    """
+    def neg_pairs(rows):
+        for p in rows or []:
+            if isinstance(p, (list, tuple)) and len(p) >= 2:
+                p[1] = -p[1]
+
+    for w in scene.get("walls") or []:
+        neg_pairs(w.get("outer"))
+        for h in w.get("holes") or []:
+            neg_pairs(h)
+    for s in scene.get("floor") or []:
+        neg_pairs(s.get("outer"))
+        for h in s.get("holes") or []:
+            neg_pairs(h)
+    for r in scene.get("rooms") or []:
+        neg_pairs(r.get("poly"))
+        if isinstance(r.get("cy"), (int, float)):
+            r["cy"] = -r["cy"]
+    for o in (scene.get("doors") or []) + (scene.get("windows") or []):
+        neg_pairs(o.get("p1"))
+        neg_pairs(o.get("p2"))
+    for l in scene.get("lights") or []:
+        if isinstance(l, (list, tuple)) and len(l) >= 2:
+            l[1] = -l[1]
+    for m in scene.get("lights_meta") or []:
+        if isinstance(m.get("y"), (int, float)):
+            m["y"] = -m["y"]
+    for path in scene.get("strips") or []:
+        neg_pairs(path)
+    for f in scene.get("furniture") or []:
+        if isinstance(f.get("z"), (int, float)):
+            f["z"] = -f["z"]
+        neg_pairs(f.get("pts"))
+    for seg in scene.get("ceil_lines") or []:
+        neg_pairs(seg)
+    return scene
 
 
 def build(view: dict, floor: int = 1) -> dict:
@@ -249,8 +303,9 @@ def build(view: dict, floor: int = 1) -> dict:
         area = round(_area(poly), 2)
         cx, cy = _label_anchor(poly)
         total += area
-        floor_slabs.append({"outer": poly, "holes": []})
-        rooms.append({"poly": poly, "area_m2": area, "cx": cx, "cy": cy,
+        # 地面板与房间轮廓各存一份点：共用一个列表会在取负时被翻两次（见 _ceil_lines 注释）。
+        floor_slabs.append({"outer": [list(p) for p in poly], "holes": []})
+        rooms.append({"poly": [list(p) for p in poly], "area_m2": area, "cx": cx, "cy": cy,
                       "name": r.get("name") or "未分区"})
 
     # —— 灯：它的光斑/光锥全部由 lights_meta 里的 kind 决定 ——
@@ -330,7 +385,8 @@ def build(view: dict, floor: int = 1) -> dict:
 
     # 家具：内核（app.js）只画墙/地/灯，不画家具；外壳（shell.html）拿这份清单后用内核
     # 暴露的 three 工厂补一层体块，挂到 viewer.groups.furniture，让「图层 → 家具」开关生效。
-    # 坐标口径与内核一致：x/z 为设计米坐标（= 设计坐标 / 26），外壳里 z 取负。
+    # 坐标口径：这里 x/z 还是设计米坐标（= 设计坐标 / 26，z＝图纸 y），
+    # 送给内核前由 `_to_kernel_frame()` 统一把 z 取负（内核画 (a,b) → world (a,·,−b)）。
     furniture = []
     for f in view.get("furniture") or []:
         if int(f.get("floor") or 1) != floor:
@@ -354,7 +410,7 @@ def build(view: dict, floor: int = 1) -> dict:
         except (KeyError, TypeError, ValueError, IndexError):
             continue
 
-    return {
+    return _to_kernel_frame({
         "height_m": round(ceiling, 3),
         "thickness_m": round(thickness, 3),
         "walls": walls,
@@ -378,4 +434,4 @@ def build(view: dict, floor: int = 1) -> dict:
         "area_total_m2": round(total, 2),
         "source": view.get("name") or "",
         "geometry_source": view.get("geometry_source") or "",
-    }
+    })

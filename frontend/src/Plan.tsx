@@ -10,7 +10,7 @@ import {
 import type { Design, Obj } from "./types";
 import { clone } from "./types";
 import { roomPoints, insertRoomPoint, deleteRoomPoint, withRoomPolygon } from "./roomPolygon";
-import { snapBoundary, remapOpenings, containsPoint, interiorPoint, type SpacePoint } from "./spaceGeometry";
+import { snapBoundary, remapOpenings, containsPoint, interiorPoint, offsetInside, openingPlacement, moveOpening, type SpacePoint } from "./spaceGeometry";
 import { coveragePath, manualCoverage, obstaclesFor, sensorSectorPath } from "./sensors";
 import { lightPoolClipPath } from "./lightOcclusion";
 import { useSceneFade } from "./sceneFade";
@@ -710,6 +710,12 @@ export function Plan({
         ? resizeFurniturePolygon(base, moved.x, moved.y, moved.widthM, moved.depthM)
         : moved);
       obj.roomId = d.rooms.find(r => +(r.floor || 1) === +(obj.floor || 1) && containsPoint(r, obj.x, obj.y))?.id || "";
+    } else if (dr.kind === "openings") {
+      // 门窗：先折算出坐标（识别的洞口库里只有边界区间，直接 obj.x += dx 会写成 NaN），
+      // 再贴回最近的墙边并回写 edgeIndex/start/end——三维与成品图按区间开洞，只挪 x/y 会两层不一致。
+      const g = openingPlacement(d, obj);
+      if (!g) return;
+      Object.assign(obj, moveOpening(d, obj, g.x + dx, g.y + dy, g.rotation));
     } else {
       obj.x += dx;
       obj.y += dy;
@@ -901,6 +907,24 @@ export function Plan({
           // 标签落点用空间内部点：凹形房（如「餐厅、客厅」）的外接框中心会掉进缺角里，
           // 那是隔壁房间的地盘，标签就飘到别人家去了。
           const anchor = interiorPoint(r);
+          // 来源角标贴外接框左上角；凹形房（L/C 形）的左上角可能落在隔壁的缺角里，
+          // 那行「CAD 解析」就写到别人家地上去了（导出图同一个毛病，现场 2026-11-04 实测 6 间）。
+          const corner = { x: r.x + 8, y: r.y + 19 };
+          // 角标和房间名垂直重叠就会压字（现场 2026-11-04 实测 6 间：名字居中在内部点，角标却钉在框顶）。
+          // 名字占 anchor.y±7.5；角标字底再吃 ~2.6、字顶吃 ~9.3：上方要 ≥11、下方要 ≥18，否则让位到内部点的上方/下方。
+          const cornerClear = corner.y <= anchor.y - 11 || corner.y >= anchor.y + 18;
+          const cornerOk = containsPoint(r, corner.x, corner.y) && cornerClear;
+          const cornerTag = cornerOk
+            ? corner
+            : offsetInside(r, anchor.x, anchor.y, mini ? 20 : 22);
+          // 挑空说明排在房间名上方；薄凹形房放不下了再往下错，总之不许出界。
+          const voidUp = { x: anchor.x, y: anchor.y - (mini ? 16 : 20) };
+          const voidTag = containsPoint(r, voidUp.x, voidUp.y)
+            ? voidUp
+            : offsetInside(r, anchor.x, anchor.y, mini ? 16 : 20);
+          // 薄条房（1m 上下的走廊）上下都放不下第二行：宁可不出这行字，也别压在房间名上。
+          const cornerTagFits = cornerTag.x !== anchor.x || cornerTag.y !== anchor.y;
+          const voidTagFits = voidTag.x !== anchor.x || voidTag.y !== anchor.y;
           const color = showSource
             ? r.source === "manual"
               ? "#dedbd4"
@@ -953,8 +977,21 @@ export function Plan({
                   pointerEvents="none"
                 />
               )}
+              {points && (
+                <polygon points={points} fill={`url(#${mini ? "wood-mini" : "wood"})`} pointerEvents="none" />
+              )}
               {isVoidRoom(r) && (
                 <>
+                  {points ? (
+                    <>
+                      <polygon data-void="1" points={points}
+                        fill={`url(#${mini ? "void-mini" : "void"})`} pointerEvents="none" />
+                      <polygon points={points} fill="none"
+                        stroke={night ? "#aea699" : "#8e8270"} strokeDasharray="6 4" strokeWidth="2"
+                        pointerEvents="none" />
+                    </>
+                  ) : (
+                    <>
                   <rect
                     data-void="1"
                     x={r.x + 3}
@@ -975,9 +1012,12 @@ export function Plan({
                     strokeWidth="2"
                     pointerEvents="none"
                   />
+                    </>
+                  )}
+                  {voidTagFits && (
                   <text
-                    x={r.x + r.width / 2}
-                    y={r.y + (mini ? 18 : 22)}
+                    x={voidTag.x}
+                    y={voidTag.y}
                     textAnchor="middle"
                     fontSize={mini ? 10 : 11}
                     fill={night ? "#c6bfb3" : "#665d50"}
@@ -985,6 +1025,7 @@ export function Plan({
                   >
                     {voidLabel(r)}
                   </text>
+                  )}
                 </>
               )}
               {showFurniture && !Array.isArray(design.furniture) && !isRecognitionRoom && r.width > 120 && r.height > 140 && (
@@ -1002,8 +1043,9 @@ export function Plan({
                 {r.name}
                 {!mini && (r.area > 0 ? ` · ${r.area} m²` : " · 面积待校核")}
               </text>
-              {showSource && (
-                <text x={r.x + 8} y={r.y + 19} fontSize="10" fill="#706659">
+              {showSource && cornerTagFits && (
+                <text x={cornerTag.x} y={cornerTag.y} textAnchor={cornerOk ? undefined : "middle"}
+                  fontSize="10" fill="#706659">
                   {r.source === "manual"
                     ? "人工修正"
                     : r.source === "cad"
@@ -1150,14 +1192,34 @@ export function Plan({
             </g>
           ))}
         {(showStructureLayer || showOpeningLayer) && design.openings
-          .filter((o) => o.floor === floor && (showStructureLayer || (o.source === "manual" && o.roomId)))
+          .filter((o) => o.floor === floor && (showStructureLayer ||
+            o.source === "manual" || o.source === "outsourcing-approved" ||
+            // 拖离墙体的洞口（roomId 空）也要留在画布上：一隐藏就点不到、拖不回来，等于把门弄丢。
+            (showOpeningLayer && stage === "openings")))
+          // 识别/手绘的洞口只挂了边界区间，坐标在这里折算；折算不出来的（空间被改过、区间失效）不画，
+          // 直接拿 o.x 渲会写成 translate(undefined) 并在控制台刷一屏 NaN。
+          .map((o) => ({ ...o, ...openingPlacement(design, o) }))
+          .filter((o) => o.x != null && o.width != null)
+          // 选中项挪到最后一个绘制：SVG 后画的压在上面，命中区也随之在最上层。
+          // 配合两段式，被邻门符号压住的那条洞先点（或从清单点）选中，第二下就落在它身上。
+          .sort((a, b) => (a.id === selection?.id ? 1 : 0) - (b.id === selection?.id ? 1 : 0))
           .map((o) => (
             <g
               key={o.id}
               data-object-type="opening"
               data-object-id={o.id}
               transform={`translate(${o.x} ${o.y}) rotate(${o.rotation || 0})`}
-              onPointerDown={(e) => down(e, "openings", o.id)}
+              // 同墙并排的门窗命中区互相压着，宽门起手常被邻门的符号吃掉。2026-11-04 裁定两段式：
+              // 第一段只选中（不产生位移），选中后再按下才真的拖。stopPropagation 不能省——
+              // 冒泡到根节点会被当成点空白，刚选中就清空。
+              onPointerDown={(e) => {
+                if (selection?.id !== o.id) {
+                  e.stopPropagation();
+                  onSelect?.({ kind: "openings", id: o.id });
+                  return;
+                }
+                down(e, "openings", o.id);
+              }}
               pointerEvents={frozen("openings") ? "none" : undefined}
               style={{ cursor: frozen("openings") ? "default" : "move" }}
             >
@@ -1605,8 +1667,10 @@ export function Plan({
             )
             .map((dev: Obj) => {
               const room = design.rooms.find((r: Obj) => r.id === dev.roomId);
-              const dx = dev.x != null ? Number(dev.x) : room ? room.x + room.width / 2 : 0;
-              const dy = dev.y != null ? Number(dev.y) : room ? room.y + room.height / 2 : 0;
+              // 设备没落坐标时圈心取房间内部点：凹形房的外接框中心在隔壁的缺角里，探测圈会画到别人家地上。
+              const roomAnchor = room ? interiorPoint(room) : null;
+              const dx = dev.x != null ? Number(dev.x) : roomAnchor ? roomAnchor.x : 0;
+              const dy = dev.y != null ? Number(dev.y) : roomAnchor ? roomAnchor.y : 0;
               // 有空间边界/墙体时画裁剪后的范围；否则设了视场角画扇形、没设画整圆。
               const clip = coveragePath(dev, obstaclesFor(dev, coverageCtx));
               const ring = clip || sensorSectorPath(dev);
@@ -1670,8 +1734,10 @@ export function Plan({
             )
             .map((dev: Obj) => {
             const room = design.rooms.find((r: Obj) => r.id === dev.roomId);
-            const dx = dev.x != null ? Number(dev.x) : room ? room.x + room.width / 2 : 0;
-            const dy = dev.y != null ? Number(dev.y) : room ? room.y + room.height / 2 : 0;
+            // 同上：没落坐标的设备以房间内部点为圈心，凹形房的框中心会在隔壁缺角里。
+            const roomAnchor = room ? interiorPoint(room) : null;
+            const dx = dev.x != null ? Number(dev.x) : roomAnchor ? roomAnchor.x : 0;
+            const dy = dev.y != null ? Number(dev.y) : roomAnchor ? roomAnchor.y : 0;
             const sel = selection?.id === dev.id;
             const color =
               dev.type === "传感器"

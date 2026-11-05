@@ -199,6 +199,9 @@ export function applyCatalogModel(f: Obj, m: CatalogModel, sel: CatalogSelection
     delete f.catalogPriceCurrency;
   }
   const c = p.cct;
+  /* 目录写了色温就解除「待核」：那个标记是 CAD 导入时打的（图纸没给色温才打），
+   * 不清掉的话，产品明明写着 2700–6000K，界面还在报「色温待核 1 盏」，
+   * 导出清单也跟着标「待核」（2026-11-03 用户口径：产品里有色温就不该提示缺失）。 */
   if (c?.kind === "fixed") {
     f.colorMode = "单色";
     f.cct = c.value;
@@ -206,12 +209,14 @@ export function applyCatalogModel(f: Obj, m: CatalogModel, sel: CatalogSelection
     f.cctMax = c.value;
     f.tunable = false;
     f.colored = !!c.rgb;
+    delete f.cctPending;
   } else if (c?.kind === "range") {
     f.cctMin = c.min;
     f.cctMax = c.max;
     applyColorMode(f, c.rgb ? "彩色" : "双色");
     const want = Number(sel.cct ?? f.cct);
     f.cct = Number.isFinite(want) ? Math.min(c.max, Math.max(c.min, want)) : c.min;
+    delete f.cctPending;
   } else if (c?.kind === "options") {
     const want = Number(sel.cct);
     const pick = c.options.includes(want) ? want : c.default;
@@ -221,6 +226,7 @@ export function applyCatalogModel(f: Obj, m: CatalogModel, sel: CatalogSelection
     f.cctMax = pick;
     f.tunable = false;
     f.colored = !!c.rgb;
+    delete f.cctPending;
   }
   const b = p.beam;
   if (b?.kind === "options") {

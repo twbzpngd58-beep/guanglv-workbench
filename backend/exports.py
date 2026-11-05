@@ -47,6 +47,50 @@ def _verify_3d_source(p):
         raise ValueError("三维图纸已重新解析，请在三维页重新同步灯位再导出")
 
 
+def furn_poly(item):
+    """家具在图纸上的轮廓（设计单位世界坐标）：画过边界就按边界，没画过按宽深＋朝向折成 4 个角。
+
+    与 frontend/src/furniturePolygon.ts 的 furniturePoints 同一口径。导出只认外接框的话，
+    L 形灶台会被铺成 3.86×2.91m 的方块（现场 2026-11-04 coco展厅：「灶台铺满了厨房整个地面」）。
+    """
+    pts = item.get("points") or []
+    if len(pts) >= 3:
+        try:
+            out = [(float(p["x"]), float(p["y"])) for p in pts]
+        except (KeyError, TypeError, ValueError):
+            out = []
+        if len(out) >= 3:
+            if len(out) > 3 and abs(out[0][0] - out[-1][0]) < 1e-6 and abs(out[0][1] - out[-1][1]) < 1e-6:
+                out.pop()
+            return out
+    angle = math.radians(item.get("rotation", 0) or 0)
+    hw, hd = (item.get("widthM") or 0) * 13, (item.get("depthM") or 0) * 13
+    ca, sa = math.cos(angle), math.sin(angle)
+    cx, cy = float(item.get("x") or 0), float(item.get("y") or 0)
+    return [(cx + u * ca - v * sa, cy + u * sa + v * ca)
+            for u, v in ((-hw, -hd), (hw, -hd), (hw, hd), (-hw, hd))]
+
+
+def room_anchor(room, dx=10, dy=10):
+    """房间名/面积在图纸上的锚点：外接框角点还在房间里就用它，否则退回房间内部一点。
+
+    凹形（L/C 形）空间的外接框角点落在缺角里，那里是隔壁的地盘，标签就写到房间外面去了
+    （现场 2026-11-04 实测 5 个项目 37 间有边界空间，6 间的标签出界，含 coco展厅 44 点的演示区）。
+    矩形房不受影响，仍是原来的角点位置。
+    """
+    from .space_geometry import contains_point, interior_point, room_points
+
+    pts = room_points(room)
+    if len(pts) < 3:
+        return (float(room.get("x") or 0) + dx, float(room.get("y") or 0) + dy)
+    bx0 = min(p[0] for p in pts)
+    by0 = min(p[1] for p in pts)
+    ax, ay = bx0 + dx, by0 + dy
+    if contains_point(room, ax, ay):
+        return (ax, ay)
+    return interior_point(room)
+
+
 def finished_dxf(p):
     """Build a design DXF; overlay on the original when traceable CAD is present."""
     from . import dxf_lighting as dl
@@ -110,7 +154,7 @@ def finished_dxf(p):
                 model.add_lwpolyline(coords, close=True, dxfattribs={"layer": "GUANGLV_空间轮廓"})
                 model.add_text(str(r.get("name") or ""), dxfattribs={
                     "layer": "GUANGLV_空间轮廓", "height": 7,
-                    "insert": location(r.get("x", 0), r.get("y", 0))})
+                    "insert": location(*room_anchor(r, 0, 0))})
         for w in design.get("walls", []):
             model.add_line(location(w["x"], w["y"]), location(w["x2"], w["y2"]),
                            dxfattribs={"layer": "GUANGLV_墙体"})
@@ -173,11 +217,7 @@ def finished_dxf(p):
                            location(wall["x1"]*26,wall["z1"]*26),dxfattribs={"layer":"GUANGLV_墙体"})
     ensure_layer("GUANGLV_家具", 8)
     for item in p.get("design", {}).get("furniture", []):
-        angle = math.radians(item.get("rotation", 0))
-        w, depth = item["widthM"]*13, item["depthM"]*13
-        corners = [location(item["x"]+x*math.cos(angle)-y*math.sin(angle),
-                            item["y"]+x*math.sin(angle)+y*math.cos(angle))
-                   for x, y in [(-w,-depth),(w,-depth),(w,depth),(-w,depth)]]
+        corners = [location(x, y) for x, y in furn_poly(item)]
         model.add_lwpolyline(corners, close=True, dxfattribs={"layer": "GUANGLV_家具"})
         model.add_text(item["kind"], dxfattribs={"layer": "GUANGLV_家具",
                                                 "height": (0.12 / scale) if original else 6,
@@ -445,6 +485,8 @@ def _photometry_legend(im, counts, night):
 
 
 def render_plan(p, scene_id=None, floor=None):
+    from .space_geometry import offset_inside, opening_geometry
+
     d = p["design"]
     night = bool(scene_id)
     floor = floor or min((r.get("floor", 1) for r in d["rooms"]), default=1)
@@ -477,18 +519,23 @@ def render_plan(p, scene_id=None, floor=None):
             )
         else:
             draw.rectangle([a, b], fill=fill, outline="#657467", width=5)
+        ax, ay = room_anchor(r)
+        _, by = offset_inside(r, ax, ay, 20)
         draw.text(
-            pt(r["x"] + 10, r["y"] + 10),
+            pt(ax, ay),
             r["name"],
             font=font(22),
             fill="#edf3e9" if night else "#435347",
         )
-        draw.text(
-            pt(r["x"] + 10, r["y"] + 30),
-            f"{r.get('area',0)} m² · {floor_label(r.get('floor', 1), p.get('basements', 0))}",
-            font=font(15),
-            fill="#81917f",
-        )
+        if by != ay:
+            # 上下都放不下第二行的薄条房（现场实测 1 间 1.08m 高的走廊）：宁可少一行面积，
+            # 也不许把「14.59 m²」压到房间名上或写到隔壁地上——面积在清单里跑不掉。
+            draw.text(
+                pt(ax, by),
+                f"{r.get('area',0)} m² · {floor_label(r.get('floor', 1), p.get('basements', 0))}",
+                font=font(15),
+                fill="#81917f",
+            )
     for w in d.get("walls", []):
         if floor is None or w.get("floor", 1) == floor:
             draw.line(
@@ -497,23 +544,24 @@ def render_plan(p, scene_id=None, floor=None):
     for o in d.get("openings", []):
         if floor is not None and o.get("floor", 1) != floor:
             continue
-        a = pt(o["x"], o["y"])
-        length = o.get("width", 50)
-        ang = math.radians(o.get("rotation", 0))
-        b = pt(o["x"] + length * math.cos(ang), o["y"] + length * math.sin(ang))
-        draw.line([a, b], fill="#b98447" if o["type"] == "门" else "#6aabb7", width=6)
+        # 只挂了边界的洞口（图纸识别、以及没被边界编辑折算过的老数据）在这里现推坐标；
+        # 直接读 o["x"] 会让整张示意图 KeyError 出不来。
+        geo = opening_geometry(d, o)
+        if not geo:
+            continue
+        a = pt(geo["x"], geo["y"])
+        ang = math.radians(geo["rotation"])
+        b = pt(geo["x"] + geo["width"] * math.cos(ang), geo["y"] + geo["width"] * math.sin(ang))
+        draw.line([a, b], fill="#b98447" if geo["type"] == "门" else "#6aabb7", width=6)
     for t in d.get("texts", []):
         draw.text(pt(t["x"], t["y"]), t["text"], font=font(14), fill="#81917f")
     for item in d.get("furniture", []):
         if item.get("floor", 1) != floor:
             continue
-        angle = math.radians(item.get("rotation", 0))
-        w, depth = item["widthM"]*13, item["depthM"]*13
-        corners = [pt(item["x"]+x*math.cos(angle)-y*math.sin(angle),
-                      item["y"]+x*math.sin(angle)+y*math.cos(angle))
-                   for x, y in [(-w,-depth),(w,-depth),(w,depth),(-w,depth)]]
+        corners = [pt(x, y) for x, y in furn_poly(item)]
         draw.polygon(corners, fill="#b99c78" if night else "#d9c9af", outline="#896d4c", width=2)
-        draw.text(pt(item["x"]-w/2, item["y"]), item["kind"], font=font(12), fill="#594f43")
+        xs = [c[0] for c in corners]
+        draw.text((min(xs), pt(item["x"], item["y"])[1]), item["kind"], font=font(12), fill="#594f43")
     px_per_m = 26 * (sx + sy) / 2.0      # 画布单位＝米×26，两轴像素比例取均值
     photo_counts = {"measured": 0, "theoretical": 0, "unverified": 0}
     unverified = []
@@ -622,16 +670,24 @@ def fixture_watts(f):
 
 
 def cct_reason(f):
-    """「原因」列：待核灯标「色温待核」；偏离单色 3000K 的写设计师原因（未填标出）。"""
+    """「原因」列：待核灯标「色温待核」；偏离单色 3000K 的写设计师原因（未填标出）。
+
+    选了目录型号 / 关联了产品的灯不算偏离：那个色温是产品标称，写「原因未填」会让人
+    以为要改成 3000K，一改就和下单的型号对不上（2026-11-03 用户口径）。
+    """
     if not is_light(f):
         return ""
     if f.get("cctPending"):
         return "色温待核"
+    reason = (f.get("cctReason") or "").strip()
+    if f.get("catalogId") or f.get("productId"):
+        model = (f.get("model") or "").strip()
+        return reason or ("产品标称" + ("（%s）" % model if model else ""))
     mode = f.get("colorMode") or ("单色" if f.get("tunable") is False else "双色")
     cct = f.get("cct", f.get("cctMin"))
     if mode == "单色" and cct == 3000:
         return ""
-    return (f.get("cctReason") or "").strip() or "偏离 3000K 单色·原因未填"
+    return reason or "偏离 3000K 单色·原因未填"
 
 
 def photometry_label(f, p=None):
@@ -1331,8 +1387,7 @@ def plain_plan(p, floor=None):
             if item.get("floor",1) != floor: continue
             points.append((float(item.get("x") or 0),float(item.get("y") or 0)))
             if key == "furniture":
-                radius=math.hypot(item["widthM"],item["depthM"])*13
-                points.extend([(item["x"]-radius,item["y"]-radius),(item["x"]+radius,item["y"]+radius)])
+                points.extend(furn_poly(item))
     if points and any(x<0 or y<0 or x>820 or y>690 for x,y in points):
         x0,y0 = min(x for x,y in points)-20,min(y for x,y in points)-20
         x1,y1 = max(x for x,y in points)+20,max(y for x,y in points)+20
@@ -1401,7 +1456,7 @@ def plain_plan(p, floor=None):
             x, y, w, h = (float(r.get(k) or 0) for k in ("x", "y", "width", "height"))
             coords = [pt(x, y), pt(x+w, y), pt(x+w, y+h), pt(x, y+h)]
         draw.line(coords + [coords[0]], fill="#242424", width=3)
-        draw.text(pt(r.get("x", 0), r.get("y", 0)), str(r.get("name") or "空间"),
+        draw.text(pt(*room_anchor(r, 0, 0)), str(r.get("name") or "空间"),
                   fill="#191919", font=font(18))
     for w in d.get("walls", []):
         if int(w.get("floor") or 1) == floor and w.get("source") != "space-boundary":
@@ -1416,12 +1471,9 @@ def plain_plan(p, floor=None):
             draw.line([a,(a[0]-dy*.7,a[1]+dx*.7)],fill="#967443",width=2)
     for item in d.get("furniture", []):
         if item.get("floor",1) != floor: continue
-        angle=math.radians(item.get("rotation",0));w,depth=item["widthM"]*13,item["depthM"]*13
-        corners=[pt(item["x"]+x*math.cos(angle)-y*math.sin(angle),
-                    item["y"]+x*math.sin(angle)+y*math.cos(angle))
-                 for x,y in [(-w,-depth),(w,-depth),(w,depth),(-w,depth)]]
+        corners=[pt(x,y) for x,y in furn_poly(item)]
         draw.polygon(corners,fill="#e7e1d6",outline="#806e54",width=2)
-        draw.text(pt(item["x"]-w*.5,item["y"]),item["kind"],fill="#5c513f",font=font(12))
+        draw.text((min(c[0] for c in corners),pt(item["x"],item["y"])[1]),item["kind"],fill="#5c513f",font=font(12))
     for f in d.get("fixtures", []):
         if int(f.get("floor") or 1) != floor: continue
         x, y = pt(f.get("x", 0), f.get("y", 0))

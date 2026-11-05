@@ -642,7 +642,10 @@ export function isTunable(f: Obj): boolean {
 export function applyColorMode(f: Obj, mode: ColorMode): void {
   f.colorMode = mode;
   if (mode === "单色") {
-    const cct = SINGLE_CCT_OPTIONS.indexOf(Number(f.cct)) >= 0 ? Number(f.cct) : SINGLE_CCT_DEFAULT;
+    /* 单色色温只认「像色温的数」，不锁四档：产品标称常有 2200K / 5000K，
+     * 夹回 3000K 会让灯具不再对应下单的那个型号。 */
+    const raw = Number(f.cct);
+    const cct = cctValue(raw) ? Math.round(raw) : SINGLE_CCT_DEFAULT;
     f.cct = cct;
     f.cctMin = cct;
     f.cctMax = cct;
@@ -673,7 +676,9 @@ export function applyColorMode(f: Obj, mode: ColorMode): void {
   f.colored = true;
 }
 
-/* 色温口径：手动布灯默认单色 3000K；偏离（双色 / 彩色 / 非 3000K）必须写原因。
+/* 色温口径：手动布灯默认单色 3000K；手动偏离（双色 / 彩色 / 非 3000K）必须写原因。
+ * 选了目录型号 / 产品库产品的灯不套这个默认——产品标称什么样就是什么样，改了灯具参数
+ * 就和下单的型号参数对不上（2026-11-03 用户口径）。
  * 导入或产品资料没给色温的灯 = 「待核」：内部先用 3000K 占位（后端要求上下限是数字），
  * 界面与导出一律显示「待核」，不再猜 2700/6500；人工改过光源类型或色温即解除待核。 */
 export const CCT_PENDING_LABEL = "待核";
@@ -682,9 +687,13 @@ export const CCT_PLACEHOLDER = 3000;
 /** 色温是否待核（导入 / 产品资料缺色温）。 */
 export const isCctPending = (f: Obj): boolean => !!(f && f.cctPending);
 
-/** 偏离默认（单色 3000K）需要写原因；待核灯另走待核清单，不算偏离。 */
+/** 该灯具的色温口径来自选型目录 / 产品库的标称值（布灯或灯具配置里选了型号）。 */
+export const isProductSourced = (f: Obj): boolean => !!(f && (f.catalogId || f.productId));
+
+/** 偏离默认（单色 3000K）需要写原因；待核灯另走待核清单，不算偏离。
+ *  选了产品的灯也不算偏离：产品标称什么样就是什么样，写了原因反而让下单参数和灯具对不上。 */
 export function cctNeedsReason(f: Obj): boolean {
-  if (!f || isCctPending(f)) return false;
+  if (!f || isCctPending(f) || isProductSourced(f)) return false;
   if (colorModeOf(f) !== "单色") return true;
   return Number(f.cct ?? f.cctMin) !== SINGLE_CCT_DEFAULT;
 }

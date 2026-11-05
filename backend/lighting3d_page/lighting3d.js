@@ -413,11 +413,12 @@
     "通用": (g, w, d, h) => fbox(g, w, h, d, 0, h / 2, 0, MAT.furn)
   };
 
-  /* 「轮廓本身就是它的形状」的大类（柜/沙发/岛台/地毯……）：只有这些、
+  /* 「轮廓本身就是它的形状」的大类（柜/沙发/岛台/灶台/地毯……）：只有这些、
    *  且轮廓明显不是矩形时，才按轮廓挤出。马桶/浴缸/床这类器物是「设计过的器物」，
    *  图纸里那圈轮廓只是识别出来的占地，照它挤出就是一块怪疙瘩（现场 2026-10-16 报的马桶）。
-   *  与 frontend/src/furniturePolygon.ts 的 outlineDrivesShape 同一口径。 */
-  const FOOTPRINT_KIND = /柜|沙发|岛台|吧台|地毯|案台|工作台|岛柜/;
+   *  与 frontend/src/furniturePolygon.ts 的 outlineDrivesShape 同一口径（改动要一起改）。
+   *  「灶」＝2026-11-04 coco展厅：L 形灶台（轮廓 3.5㎡）不在名单里，三维只挤出一个 11.2㎡ 的方块。 */
+  const FOOTPRINT_KIND = /柜|沙发|岛台|吧台|地毯|案台|工作台|岛柜|灶/;
   function outlineNearBox(pts) {
     if (!pts || pts.length < 3) return true;
     let area2 = 0, sign = 0, convex = true;

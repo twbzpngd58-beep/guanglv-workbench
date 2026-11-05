@@ -41,7 +41,7 @@ from starlette.concurrency import run_in_threadpool
 
 from . import dxf_lighting as DL
 from . import products as PR
-from .space_geometry import design_geometry, room_points
+from .space_geometry import contains_point, design_geometry, interior_point, polygon_area, room_points
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = Path(os.getenv("DATA_DIR", str(ROOT / "data"))).resolve()
@@ -54,6 +54,21 @@ UPLOADS = DATA / "uploads" / "projects"
 SCHEMES = ["缓亮缓灭", "开闭", "无线", "总线"]
 
 router = APIRouter(prefix="/api/lighting3d", tags=["lighting3d"])
+
+
+def pick_room(pool, x, y):
+    """灯位落在哪间房：按空间的真实边界判，不按外接框。
+
+    L 形/C 形空间的外接框把缺角也圈了进来，缺角是隔壁的地盘——按框判就会挂错房间：图上看着没错，
+    但清单与功率算进了另一间（现场 2026-11-04 实测 GL-2026-F1FECD 的 xqM003，两间同名「开放区」，
+    外接框判定与真实边界判定给出的房间不一样）。
+    多重包含时取边界面积最小的那间；一个都不包时取房间内部点离得最近的那间——都不再用框中心。
+    """
+    inside = [r for r in pool if contains_point(r, x, y)]
+    if inside:
+        return min(inside, key=lambda r: polygon_area(room_points(r)))
+    return min(pool, key=lambda r: math.hypot(interior_point(r)[0] - x, interior_point(r)[1] - y))
+
 
 @router.get("/refnight")
 def refnight(project: str, floor: int = 1):
@@ -82,6 +97,10 @@ def refnight(project: str, floor: int = 1):
             "d": round(float(f.get("d") or 0.6), 3),
             "h": round(float(f.get("h") or 0.75), 3),
             "rot": round(float(f.get("rot") or 0), 2),
+            # 画过轮廓的家具要把轮廓一起送进三维：只给外接框的话，L 形到顶柜会变成一堵墙
+            "pts": [[round(float(q[0]), 4), round(float(q[1]), 4)]
+                    for q in (f.get("pts") or []) if isinstance(q, (list, tuple)) and len(q) >= 2]
+                   if isinstance(f.get("pts"), list) and len(f.get("pts") or []) >= 3 else None,
         }
         for f in scene.get("furniture", [])
         if isinstance(f, dict) and isinstance(f.get("x"), (int, float)) and isinstance(f.get("z"), (int, float))
@@ -1233,10 +1252,7 @@ def sync_design(pid: str) -> dict:
                 if named:
                     return named
             pool = d["rooms"] if confirmed else (cad_rooms or d["rooms"])
-            inside = [r for r in pool if r["x"] <= x <= r["x"] + r["width"] and r["y"] <= y <= r["y"] + r["height"]]
-            if inside:
-                return min(inside, key=lambda r: r["width"] * r["height"])
-            return min(pool, key=lambda r: math.hypot(r["x"] + r["width"] / 2 - x, r["y"] + r["height"] / 2 - y))
+            return pick_room(pool, x, y)
 
         def next_code(space: str) -> str:
             n = 1

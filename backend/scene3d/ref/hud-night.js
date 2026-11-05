@@ -18,7 +18,8 @@
  *   光锥 / 光斑 / 灯带（Zt.cone / pool / strip / beams / lum 材质）完全不碰，
  *   所以 IES 模块重算的锥体、缩放、材质不会被覆盖。
  *
- * 家具：__SCENE__.furniture 是整条家具行（kind/x/z/w/d/h/rot），坐标系与图纸一致、z 在本内核取负。
+ * 家具：__SCENE__.furniture 是整条家具行（kind/x/z/w/d/h/rot），已是内核帧（图纸 y 取负，
+ *   内核再取负后落在 world +图纸 y —— 与二维平面图同向，2026-11-03 修镜像时的口径）。
  *   · blocks（零渲染）：按真实占地画一只简实体块，只当空间占位（1.10.0 口径「夜景＝家具体块」）。
  *   · solid（带渲染）：用 React 侧挂在 window.GUANGLV_FURN 的构件表出实体家具（沙发有靠背扶手、
  *     床有床头枕头、桌有腿），与主画布「3D 模型」、三维页引擎同一张表。拿不到表时退回体块并提示。
@@ -255,6 +256,18 @@
       var d = Math.max(0.2, Number(row.d) || 0.6);
       var h = Math.max(0.05, Number(row.h) || 0.75);
       var rot = Number(row.rot) || 0;
+      var polySolid = furnPoly(row);
+      if (polySolid) {
+        var pmat2 = furnMat(T, 3);
+        var pmesh2 = new T.Mesh(extrudePoly(T, polySolid, h), pmat2);
+        pmesh2.position.set(0, 0.008, 0);
+        pmesh2.castShadow = true;
+        pmesh2.receiveShadow = true;
+        pmesh2.userData = { kind: 'furniture', furn: String(row.kind || '') };
+        group.add(pmesh2);
+        count++;
+        continue;
+      }
       var fit = { yaw: 0, w: w, d: d };
       if (!rot && typeof api.yaw === 'function' && segs.length) {
         fit = api.yaw(x, z, w, d, segs, row.kind) || fit;
@@ -263,11 +276,14 @@
       if (!parts.length) continue;
 
       var item = new T.Group();
-      /* 本内核 z 与图纸相反（z 取负），整个平面布置是镜像的：镜像帧里纯换角换不回「背面贴墙」，
-       * 必须补 π（θ＝图纸转角／自动转正角 → 这里用 π − θ），否则沙发正面撞墙、床尾朝床头那侧。 */
-      var theta = rot ? rot * Math.PI / 180 : fit.yaw;
+      /* 两种角的「帧」不同，换算也不同（2026-11-03 修「三维与平面图镜像」时与主画布/三维页对齐）：
+       *  · row.rot 来自工作台，送进来前已经是「图纸转角取负」，而内核帧现在是图纸 y 取负、
+       *    内核再取负回到 +图纸 y ⇒ 这个负号正好就是 world 转角本身，直接用；
+       *  · fit.yaw 是 furnitureYaw 在**内核帧**里算的，内核把点对画成 world (a,·,−b)，
+       *    相对内核帧是一次镜像，镜像帧的转角要 π − θ 才回得到 world，否则沙发正面撞墙。 */
+      var theta = rot ? rot * Math.PI / 180 : Math.PI - fit.yaw;
       item.position.set(x, 0.012, -z);
-      item.rotation.y = Math.PI - theta;
+      item.rotation.y = theta;
 
       for (var j = 0; j < parts.length; j++) {
         var p = parts[j];
@@ -285,6 +301,32 @@
       count++;
     }
     return count ? group : null;
+  }
+
+  /** 画过轮廓的家具（到顶柜/书架/异形台面）：按 pts 挤出，不能退成外接框大块。
+   *  pts 与 row.x/row.z 同一帧（内核帧），内核把 (x, y) 画成 world (x, ·, −y)。 */
+  function furnPoly(row) {
+    var pts = row && row.pts;
+    if (!Array.isArray(pts) || pts.length < 3) return null;
+    var out = [];
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i];
+      if (!Array.isArray(p) || p.length < 2) return null;
+      var px = Number(p[0]), py = Number(p[1]);
+      if (!isFinite(px) || !isFinite(py)) return null;
+      out.push([px, py]);
+    }
+    return out;
+  }
+
+  function extrudePoly(T, pts, h) {
+    var shape = new T.Shape();
+    shape.moveTo(pts[0][0], pts[0][1]);
+    for (var i = 1; i < pts.length; i++) shape.lineTo(pts[i][0], pts[i][1]);
+    shape.closePath();
+    var geo = new T.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+    geo.rotateX(-Math.PI / 2);
+    return geo;
   }
 
   /** 零渲染：真实占地的简实体块，只当空间占位。 */
@@ -324,13 +366,32 @@
       }
       /* 偶数位置走木色系（0/2），奇数位置走布色系（1/3），保证木/布两种材质都出现 */
       var pal = FURN.palette[(count % 2) + ((hashStr(key) >>> 9) % 2) * 2];
+      if (!Array.isArray(row)) {
+        var poly = furnPoly(row);
+        if (poly) {
+          // 画过轮廓的家具（到顶柜/书架/异形台面）：按轮廓挤出，按外接框会变成一堵墙
+          var pmat = new T.MeshStandardMaterial({
+            color: pal.color, roughness: pal.roughness, metalness: pal.metalness,
+            clippingPlanes: v.clipPlane ? [v.clipPlane] : null,
+            clipShadows: true
+          });
+          var pmesh = new T.Mesh(extrudePoly(T, poly, hgt), pmat);
+          pmesh.position.set(0, 0.004, 0);
+          pmesh.castShadow = true;
+          pmesh.receiveShadow = true;
+          pmesh.userData = { kind: 'furniture', palette: pal.name };
+          group.add(pmesh);
+          count++;
+          continue;
+        }
+      }
       var mesh = new T.Mesh(new T.BoxGeometry(w, hgt, d), new T.MeshStandardMaterial({
         color: pal.color, roughness: pal.roughness, metalness: pal.metalness,
         clippingPlanes: v.clipPlane ? [v.clipPlane] : null,
         clipShadows: true
       }));
       mesh.position.set(x, hgt / 2 + 0.004, -z);
-      if (!Array.isArray(row) && Number(row.rot)) mesh.rotation.y = -Number(row.rot) * Math.PI / 180;
+      if (!Array.isArray(row) && Number(row.rot)) mesh.rotation.y = Number(row.rot) * Math.PI / 180;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.userData = { kind: 'furniture', palette: pal.name };

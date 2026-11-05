@@ -338,6 +338,10 @@ class DxfRecognitionProvider:
         # 混成一个数会在界面上谎报「N 个用了图内文字命名」，人工就没法判断还要核几个。
         labeled = sum(1 for r in rooms_raw if r.get("nameFromText"))
         guessed = len(rooms) - labeled
+        # 洞口只挂了边界与区间，坐标要在这里折算出来：画布、导出、三维都按 x/y/width 读，
+        # 缺了它们画布会渲成 NaN、灯光分布示意图直接 KeyError。
+        from .space_geometry import materialize_openings
+        materialize_openings({"rooms": rooms, "openings": openings})
         return dict(
             provider="ezdxf-layer0-geometry",
             simulated=False,

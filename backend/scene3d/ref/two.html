@@ -120,17 +120,26 @@
 
   // 内核 setCircuit / ns() 把任何非零回路都当 100% 点亮，情景里的 42% / 80% 会失真。
   // 这里先让回路状态进内核，再按情景真实百分比回填每盏灯与回路读数。
-  function applySceneLevels(levels) {
+  function applySceneLevels(levels, lampLevels) {
     var v = viewer(); if (!v || !v.setCircuit) return;
     var lum = levels || {};
+    var per = lampLevels || null;
     Object.keys(lum).forEach(function (name) {
       try { v.setCircuit(name, lum[name]); } catch (err) {}
     });
     try {
       (v.lumList || []).forEach(function (t) {
         var name = t.meta.circuit || '未分区';
-        if (lum[name] === undefined) return;
-        var n = Math.max(0, Math.min(1, Number(lum[name]) || 0));
+        // 逐灯值优先：内核的回路是「房间·灯型」分组，单灯单控（网桥）或逐灯调过亮度的灯
+        // 若按回路平均值套回去，调一盏就会把同回路的一整片灯一起改（现场 2026-11-04）。
+        var n;
+        if (per && t.meta.id && per[t.meta.id] !== undefined) {
+          n = Math.max(0, Math.min(1, Number(per[t.meta.id]) || 0));
+        } else if (lum[name] !== undefined) {
+          n = Math.max(0, Math.min(1, Number(lum[name]) || 0));
+        } else {
+          return;
+        }
         t.level = n;
         t.body.material.emissiveIntensity = n * 1.4;
         t.pool.material.opacity = Math.min(1, n * 1.05);
@@ -418,7 +427,7 @@
       if (lastLevelsScene && d.sceneId !== lastLevelsScene) clearFocus();
       lastLevelsScene = d.sceneId;
     }
-    applySceneLevels(d.levels || {});
+    applySceneLevels(d.levels || {}, d.lampLevels || null);
   });
 })();
 </script>

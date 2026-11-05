@@ -130,6 +130,21 @@ export function Ueyi3D({
     return out;
   };
   const levels = useMemo(() => levelsFor(states), [circuitOf, states]);
+  // 逐个灯一条 0..1：三维内核按回路分组，只发回路平均值会让「调一盏灯」点亮整条回路
+  // （现场 2026-11-04：CoCo 的 C01 只有 1 盏，一开关整层都跟着变）。有逐灯值就按逐灯上。
+  const lampLevelsFor = (src?: States) => {
+    if (!circuitOf || !src) return null;
+    const out: Record<string, number> = {};
+    Object.entries(src).forEach(([fid, st]) => {
+      if (!circuitOf[fid]) return;
+      out[fid] = st?.on ? Math.max(0, Math.min(100, Number(st?.brightness) || 0)) / 100 : 0;
+    });
+    Object.keys(circuitOf).forEach((fid) => {
+      if (out[fid] === undefined) out[fid] = 0;
+    });
+    return out;
+  };
+  const lampLevels = useMemo(() => lampLevelsFor(states), [circuitOf, states]);
   // 三维「完整」模式的面板要用项目自己的情景，不能用内核写死的全开/会客/观影…
   // 当前情景如果正在草稿里改过，用草稿状态覆盖，保证三维与右栏看到的是同一份。
   const scenePayload = useMemo(() => {
@@ -144,14 +159,17 @@ export function Ueyi3D({
 
   // iframe onLoad 的重试计时器可能在切情景之后才落地。闭包里抓的会是挂载时那份状态，
   // 晚到一次就把三维刷回旧情景；所以推送一律读 ref 里的最新值。
-  const latest = useRef({ levels, sceneId: "", scenePayload, focusFixture });
-  latest.current = { levels, sceneId: sceneId || "", scenePayload, focusFixture };
+  const latest = useRef({ levels, lampLevels, sceneId: "", scenePayload, focusFixture });
+  latest.current = { levels, lampLevels, sceneId: sceneId || "", scenePayload, focusFixture };
 
   const push = useCallback(() => {
     const w = frame.current?.contentWindow;
     const d = latest.current;
     if (!w || !d.levels) return;
-    w.postMessage({ type: "guanglv:levels", levels: d.levels, sceneId: d.sceneId }, location.origin);
+    w.postMessage(
+      { type: "guanglv:levels", levels: d.levels, lampLevels: d.lampLevels || {}, sceneId: d.sceneId },
+      location.origin,
+    );
   }, []);
 
   const pushScenes = useCallback(() => {
@@ -184,7 +202,7 @@ export function Ueyi3D({
     if (!levels) return;
     const t = window.setTimeout(push, 60);
     return () => window.clearTimeout(t);
-  }, [levels, sceneId]);
+  }, [levels, lampLevels, sceneId]);
 
   useEffect(() => {
     if (!scenePayload.length) return;

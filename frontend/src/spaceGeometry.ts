@@ -46,6 +46,77 @@ export function interiorPoint(room: Item): SpacePoint {
   return best;
 }
 
+/** 第二行标注要往下错开，但薄凹形房把「内部点 +20」错到隔壁地上去了（现场 2026-11-04 实测 5 间）。
+ *  往下放不下就往上，上下都放不下就留在内部点。与 backend/space_geometry.py 的 offset_inside 同一口径，改动要一起改。 */
+export function offsetInside(room: Item, x: number, y: number, dy: number): SpacePoint {
+  if (containsPoint(room, x, y + dy)) return { x, y: y + dy };
+  if (containsPoint(room, x, y - dy)) return { x, y: y - dy };
+  return { x, y };
+}
+
+/** 洞口 → 画布几何。识别与手绘的门窗都只存「挂在哪条边界、占哪一段」，坐标由所属空间边界现推。 */
+export function openingPlacement(design: Item, o: Item): Item | null {
+  const type = o.type || o.kind || "门";
+  if (o.x != null && o.y != null && o.width != null)
+    return { x: +o.x, y: +o.y, width: +o.width, rotation: +o.rotation || 0, type };
+  const room = (design.rooms || []).find((r: Item) => r.id === o.roomId);
+  const pts = room ? boundary(room) : [];
+  const a = pts[o.edgeIndex], b = pts[(o.edgeIndex + 1) % pts.length];
+  if (!room || !a || !b) return null;
+  const start = +o.start || 0, end = +o.end || 0, len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (!(end > start) || len <= 1e-6) return null;
+  return { x: a.x + (b.x - a.x) * start, y: a.y + (b.y - a.y) * start,
+    width: len * (end - start),
+    rotation: Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI, type };
+}
+
+/** 洞口沿自己那条边滑到端点外：按「到这条边所在直线的垂距」判定它还在墙上，把 t 夹进 [0,1]。 */
+function slideOnOwnEdge(room: Item, o: Item, mid: SpacePoint, width: number, tolerance: number): BoundarySnap | null {
+  const pts = boundary(room);
+  const a = pts[o.edgeIndex], b = pts[(o.edgeIndex + 1) % pts.length];
+  if (!a || !b) return null;
+  const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+  if (len < width || len <= 1e-6) return null;
+  const perp = Math.abs((mid.x - a.x) * dy - (mid.y - a.y) * dx) / len;
+  if (perp > tolerance) return null;
+  const t = Math.max(0, Math.min(1, ((mid.x - a.x) * dx + (mid.y - a.y) * dy) / (len * len)));
+  return { roomId: room.id, edgeIndex: o.edgeIndex, t, x: a.x + t * dx, y: a.y + t * dy, distance: perp };
+}
+
+/** 拖洞口：贴到最近的墙边并回写 edgeIndex/start/end——三维与成品图按区间开洞，只改 x/y 会两层不一致。
+ *  1 米内没有放得下它的墙边就当脱离墙体：留下坐标、去掉挂接，这样它不再在墙上开洞。 */
+export function moveOpening(design: Item, o: Item, x: number, y: number, rotation: number): Item {
+  // 图纸判读的洞口只挂了边界区间、没有存 width：以前这里 Math.max(1, +o.width||0) 会凭空当成 1 单位，
+  // 一拖就把 1 m 的门缩成 38 mm。米数先从区间折算，折不出来再用存量，都不成立就不动它。
+  const width = +openingPlacement(design, o)?.width || +o.width || 0;
+  if (!(width > 0)) return { ...o, x, y };
+  const rad = (Number(rotation) || 0) * Math.PI / 180;
+  const mid = { x: x + (width / 2) * Math.cos(rad), y: y + (width / 2) * Math.sin(rad) };
+  // 先只在它原来那间房的边界上找：隔壁房共用这条墙，直接全图找最近会把门「跳」到隔壁的边上，
+  // 位移比手拖的还大，看着像拖飞了。原房 1 米内没有边才换房。
+  const owner = (design.rooms || []).find((r: Item) => r.id === o.roomId);
+  // 沿墙滑过墙角：手拖到端点外，但还在墙的延长线上。这时夹在端点继续挂着，别抹掉挂接——
+  // 抹掉之后它不再在墙上开洞，用户看见的只是「门拖一下就没了」。
+  // 这条判定要放在吸附之前：拖过墙角 1 m 以上时，自己这条边的垂距仍是 0，而隔壁那条垂直边
+  // 到落点的距离更小，先吸附就会把门窗「拐」到侧墙上（门跟着拐了弯，米数却没变，看着像拖飞）。
+  let hit = (owner && slideOnOwnEdge(owner, o, mid, width, 26)) || null;
+  // minEdgeLength=width：只挂到放得下这条洞口的边上。吸到比它短的边会把洞口缩成整条边
+  // （4.33 m 的门被拖成 2.05 m），门窗的米数是产品口径，不能被一次拖动静默改掉。
+  if (!hit) hit = (owner && snapBoundary([owner], mid, +(o.floor || 1), 26, width))
+    || snapBoundary(design.rooms || [], mid, +(o.floor || 1), 26, width);
+  if (!hit) return { ...o, x, y, edgeIndex: undefined, start: undefined, end: undefined, roomId: "" };
+  const room = (design.rooms || []).find((r: Item) => r.id === hit.roomId);
+  const pts = room ? boundary(room) : [];
+  const a = pts[hit.edgeIndex], b = pts[(hit.edgeIndex + 1) % pts.length];
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (!a || !b || len <= 1e-6) return { ...o, x, y };
+  const frac = width / len;
+  const start = Math.max(0, Math.min(1 - frac, hit.t - frac / 2));
+  return { ...o, roomId: hit.roomId, edgeIndex: hit.edgeIndex, start, end: start + frac,
+    x: a.x + (b.x - a.x) * start, y: a.y + (b.y - a.y) * start, width: len * frac,
+    rotation: Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI };
+}
+
 export function remapOpenings(design: Item, oldRoom: Item, nextRoom: Item): Item[] {
   const old = boundary(oldRoom), next = boundary(nextRoom);
   return (design.openings || []).flatMap((o: Item) => {
@@ -66,12 +137,13 @@ export function remapOpenings(design: Item, oldRoom: Item, nextRoom: Item): Item
     return matches;
   });
 }
-export function snapBoundary(rooms: Item[], p: SpacePoint, floor: number, tolerance: number): BoundarySnap | null {
+export function snapBoundary(rooms: Item[], p: SpacePoint, floor: number, tolerance: number, minEdgeLength = 0): BoundarySnap | null {
   let best: BoundarySnap | null = null;
   for (const room of rooms.filter(r => +(r.floor || 1) === floor)) {
     const pts = boundary(room);
     pts.forEach((a, edgeIndex) => {
       const b = pts[(edgeIndex + 1) % pts.length], dx = b.x - a.x, dy = b.y - a.y;
+      if (Math.hypot(dx, dy) < minEdgeLength) return;
       const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
       const x = a.x + t * dx, y = a.y + t * dy, distance = Math.hypot(x - p.x, y - p.y);
       if (distance <= tolerance && (!best || distance < best.distance)) best = { roomId: room.id, edgeIndex, t, x, y, distance };
@@ -87,7 +159,8 @@ export function spaceShell(design: Item, floor?: number): { walls: Item[]; openi
     pts.forEach((a, edgeIndex) => {
       const b = pts[(edgeIndex + 1) % pts.length], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
       if (len < 1e-6) return;
-      const cuts = (design.openings || []).filter((o: Item) => ["manual", "outsourcing-approved"].includes(o.source))
+      // 挂在边界上的洞口一律开洞（含图纸判读的 source=cad，2026-11-04 裁定），与后端 design_geometry 同口径。
+      const cuts = (design.openings || []).filter((o: Item) => Number.isInteger(o.edgeIndex))
         .flatMap((o: Item) => {
           const owner = (design.rooms || []).find((r: Item) => r.id === o.roomId);
           if (!owner || +(owner.floor || 1) !== +(room.floor || 1)) return [];
