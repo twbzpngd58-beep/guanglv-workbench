@@ -525,10 +525,20 @@ def _obj_id(table: str, obj: dict) -> str:
                or obj.get("circuit_no") or "")
 
 
+def _is_bridge_lamp(f: dict) -> bool:
+    """网桥单灯单控（飞利浦 WiZ/Hue）本来就不分回路（2026-11-04 口径）。
+    判据在 circuit_rules，延迟导入避开 circuit_rules → quality 的反向依赖。"""
+    from . import circuit_rules as CR
+    return CR.is_bridge_lamp(f)
+
+
 def _applies(table: str, spec: dict, obj: dict, ctx: dict) -> bool:
     """格子的适用范围：不适用不是缺件（D04 口径），但不适用要能说清为什么。"""
     key = spec["key"]
     if table == "fixture" and key.startswith("d4"):
+        # D4-3 要求写「对应回路号」：网桥灯没有回路可写，这一格对它不适用（D4-1/2 仍要填）。
+        if key == "d4_3" and _is_bridge_lamp(obj):
+            return False
         # D4 是驱动三格：只有带外接驱动的灯才要求（灯带按电源、调光按控制方式）。
         return _needs_driver(obj) or obj.get("type") == "灯带" or bool(obj.get("powerSupply"))
     if table == "power_entry" and key in ("d8_4", "d8_5"):
@@ -536,7 +546,7 @@ def _applies(table: str, spec: dict, obj: dict, ctx: dict) -> bool:
     if table == "mount" and key == "circuit_id":
         return str(obj.get("kind") or "") in ("灯具", "取电")
     if table == "fixture" and key == "circuitId":
-        return ctx["has_circuit"]
+        return ctx["has_circuit"] and not _is_bridge_lamp(obj)
     return True
 
 

@@ -1,7 +1,10 @@
 import type { Design, Obj } from "./types";
 import { useSceneFade } from "./sceneFade";
 
-type Selection = { kind: "rooms" | "fixtures" | "devices" | "walls" | "openings"; id: string } | null;
+// "cabinet" 是二维画布上的强电箱/弱电箱/箱外符号；三维只用 selection.id，收到它也不高亮任何单体。
+type Selection =
+  | { kind: "rooms" | "fixtures" | "devices" | "walls" | "openings" | "cabinet"; id: string }
+  | null;
 
 /** Projected design preview: actual room boundaries only, never infer walls from a raster. */
 export function Spatial3D({

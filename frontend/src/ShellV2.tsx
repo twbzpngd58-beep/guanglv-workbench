@@ -19,6 +19,10 @@ type Props = {
   onNavigate: (page: string) => void;
   onOld: () => void;
   notify: (s: string) => void;
+  /** 外壳里的子页：灯具库 / 场景库就地打开，不退出 v2、不改地址栏。 */
+  view?: "home" | "products" | "templates" | "projects";
+  onHome?: () => void;
+  children?: React.ReactNode;
 };
 
 type Edition = "personal" | "knx" | "enterprise";
@@ -158,17 +162,41 @@ export function ShellV2(p: Props) {
       p.notify(e.message);
     }
   }
+  const view = p.view || "home";
+  // 项目表只写一份：仪表盘（最近 6 个）与「全部项目」子页共用，DOM 标注也只有一处。
+  const projectList = (title: string, rows: Project[], extra?: React.ReactNode) => (
+    <>
+      <div className="sv2-listhead">
+        <h2>{title}</h2><span>按最近编辑</span><span className="sv2-sp" />{extra}
+      </div>
+      <div className="sv2-table">
+        <div className="sv2-tr head"><span>项目</span><span>状态</span><span>版本</span><span>面积</span><span>方案</span><span>更新</span></div>
+        {rows.map((x) => (
+          <button className="sv2-tr" key={x.id} onClick={() => p.onOpen(x.id)}>
+            <span className="sv2-proj"><i /><span><b>{x.name}</b><small>{x.code} · {x.client || "未填客户"} · {x.city || "城市未填"}</small></span></span>
+            <span>{statusTag(x.status)}</span>
+            <span className="sv2-mono">V{String(x.version).padStart(2, "0")}</span>
+            <span className="sv2-mono">{x.area} ㎡</span>
+            <span className="sv2-mono">{x.smart || "无"}</span>
+            <span className="sv2-mono">{fmt(x.updatedAt)}</span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
   const rail = [
-    { icon: LayoutDashboard, label: "工作台", short: "工作台", active: true, act: () => {} },
-    { icon: FolderOpen, label: "全部项目", short: "全部项目", act: () => p.onNavigate("projects") },
-    { icon: Lightbulb, label: "灯具与设备库", short: "灯具库", act: () => p.onNavigate("products") },
-    { icon: Layers3, label: "场景灵感库", short: "场景库", act: () => p.onNavigate("templates") },
+    { icon: LayoutDashboard, label: "工作台", short: "工作台", active: view === "home", act: () => {} },
+    { icon: FolderOpen, label: "全部项目", short: "全部项目", active: view === "projects", act: () => p.onNavigate("projects") },
+    { icon: Lightbulb, label: "灯具与设备库", short: "灯具库", active: view === "products", act: () => p.onNavigate("products") },
+    { icon: Layers3, label: "场景灵感库", short: "场景库", active: view === "templates", act: () => p.onNavigate("templates") },
     ...(isKnx ? [{ icon: Boxes, label: "KNX 工程", short: "KNX", act: () => p.notify("KNX 工程：下一批接入项目壳") }] : []),
     ...(isEnt ? [
       { icon: Grid2X2, label: "品牌与报价", short: "品牌报价", act: () => p.notify("品牌与报价：企业包 UI 下一批接入") },
       { icon: ShieldCheck, label: "团队与权限", short: "团队", act: () => p.notify("团队与权限：企业包 UI 下一批接入") },
     ] : []),
   ];
+  // 「工作台」在子页里点一下要回首页；源码里的 act 留空是为了本机 DOM 标注补丁能对上。
+  rail[0].act = () => (p.onHome ? p.onHome() : undefined);
 
   return (
     <div className="sv2">
@@ -213,6 +241,20 @@ export function ShellV2(p: Props) {
         </nav>
 
         <main className="sv2-main">
+          {view !== "home" ? (
+            <div className="sv2-sub">
+              <div className="sv2-subhead">
+                <button className="sv2-btn ghost" onClick={p.onHome}>← 返回工作台</button>
+                <span className="sv2-subtitle">
+                  {view === "products" ? "灯具与设备库" : view === "templates" ? "场景灵感库" : "全部项目"}
+                </span>
+              </div>
+              {view === "projects" ? projectList("全部项目", sorted, (
+                <button className="sv2-btn gold sv2-subnew" onClick={p.onCreate}><Plus size={14} /> 新建项目</button>
+              )) : p.children}
+            </div>
+          ) : (
+          <>
           <div className="sv2-hero">
             <div>
               <div className="sv2-eyebrow">YOUR NEXT BRIGHT IDEA · {ED[edition].label}</div>
@@ -268,23 +310,9 @@ export function ShellV2(p: Props) {
             <div className="sv2-stat"><span>全部项目</span><b>{pad2(p.projects.length)}</b><small>本地 SQLite</small></div>
           </div>
 
-          <div className="sv2-listhead">
-            <h2>最近项目</h2><span>按最近编辑</span><span className="sv2-sp" />
+          {projectList("最近项目", sorted.slice(0, 6), (
             <button className="sv2-link" onClick={() => p.onNavigate("projects")}>查看全部 <ArrowRight size={12} /></button>
-          </div>
-          <div className="sv2-table">
-            <div className="sv2-tr head"><span>项目</span><span>状态</span><span>版本</span><span>面积</span><span>方案</span><span>更新</span></div>
-            {sorted.slice(0, 6).map((x) => (
-              <button className="sv2-tr" key={x.id} onClick={() => p.onOpen(x.id)}>
-                <span className="sv2-proj"><i /><span><b>{x.name}</b><small>{x.code} · {x.client || "未填客户"} · {x.city || "城市未填"}</small></span></span>
-                <span>{statusTag(x.status)}</span>
-                <span className="sv2-mono">V{String(x.version).padStart(2, "0")}</span>
-                <span className="sv2-mono">{x.area} ㎡</span>
-                <span className="sv2-mono">{x.smart || "无"}</span>
-                <span className="sv2-mono">{fmt(x.updatedAt)}</span>
-              </button>
-            ))}
-          </div>
+          ))}
           </>
           )}
 
@@ -303,6 +331,8 @@ export function ShellV2(p: Props) {
             <span><Wifi size={11} /> 本机 · SQLite</span>
             <span>合作品牌产品与零售价三版全有</span>
           </div>
+          </>
+          )}
         </main>
       </div>
 

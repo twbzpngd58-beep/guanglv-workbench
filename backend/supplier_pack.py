@@ -900,7 +900,8 @@ def run_checks(p: dict, pack: dict, by_slot: dict) -> tuple[dict, list[dict]]:
             design = p.get("design") or {}
             circuit = next((x for x in design.get("circuits") or [] if x.get("id") == c["slot_id"]), {}) or {}
             members = [f for f in design.get("fixtures") or []
-                       if f.get("circuitId") == c["slot_id"] or f.get("circuit") == circuit.get("circuit_no")]
+                       if not CR.is_bridge_lamp(f)
+                       and (f.get("circuitId") == c["slot_id"] or f.get("circuit") == circuit.get("circuit_no"))]
             load_w = CR.watts(members) if members else 0.0
             if str(c["rated"]).strip().upper().endswith("A"):
                 c4_unknown.append(f"{c['slot_id']}：额定给的是电流 {c['rated']}，换算系数【需核验】，"
@@ -1111,7 +1112,8 @@ def merge_pack(p: dict, pack: dict) -> dict:
         if not isinstance(c, dict):
             continue
         members = [f for f in design.get("fixtures") or []
-                   if f.get("circuitId") == c.get("id") or f.get("circuit") == c.get("circuit_no")]
+                   if not CR.is_bridge_lamp(f)
+                   and (f.get("circuitId") == c.get("id") or f.get("circuit") == c.get("circuit_no"))]
         derived.append({"circuit_id": c.get("id"), "circuit_no": c.get("circuit_no") or "",
                         "watts": CR.watts(members), "drivers": CR.drivers(members),
                         "basis": "circuit_rules（回路功率/驱动数按灯位重算）"})

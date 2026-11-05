@@ -23,7 +23,8 @@ from . import auth
 from PIL import Image, ImageOps
 from .providers import recognition_provider, image_provider, DxfRecognitionProvider
 from .seed import empty_design, sample_design
-from .recognition import raster_image, semantic_plan_configured, semantic_plan_from_external, semantic_labels_from_external, should_use_semantic_vision, polygon_overlap_violations, _resolve_overlapping_rooms
+from .recognition import raster_image, semantic_plan_configured, semantic_plan_from_external, semantic_labels_from_external, should_use_semantic_vision, polygon_overlap_violations, _resolve_overlapping_rooms, wall_guide, underlay_box
+from . import scale_apply as SC
 from .exports import EXPORT_AUDIENCES, export_bytes, scene_html
 from .floors import (
     above_floors,
@@ -1625,6 +1626,9 @@ def save_design(request: Request, pid: str, payload: DesignInput):
             # The HTTPException handler records this 409 once, without changing its response.
             raise HTTPException(409, "项目已在其他窗口更新，请重新打开，避免覆盖修改")
         coop.assert_design_edit(p)
+        # 存量归位：总线智能项目里型号是飞利浦 WiZ/Hue 的灯落网桥单灯单控、摘掉回路（2026-11-04 口径）。
+        # 前端打开项目时同样会归位并出可见提示；这里兜住不走界面的保存（导入、协同、脚本）。
+        circuit_rules.converge_bus_carriers(payload.design, p.get("smart"))
         validate_design(payload.design, p)
         # 面板键位随项目落库即对齐（每键短按/长按两条刻字，4 键＝4键8功能）。
         panels.normalize_panels(payload.design)
@@ -1924,7 +1928,8 @@ def review(request: Request, pid: str, payload: dict = Body(...)):
                 raise HTTPException(422, "存在示例或模拟空间，不能作为正式布置复核")
         if key == "lighting" and (
             not p["design"]["fixtures"]
-            or any(not f.get("circuit") for f in p["design"]["fixtures"])
+            or any(not f.get("circuit") and not circuit_rules.is_bridge_lamp(f)
+                   for f in p["design"]["fixtures"])
         ):
             raise HTTPException(422, "请先配置灯具及所属回路")
         if key == "scenes" and not p["design"]["scenes"]:
@@ -3465,6 +3470,114 @@ def scale_calibration(pid: str, payload: dict = Body(...)):
         commit(c, p, "尺度校准", f"{st['label']}：{st['basis']}",
                {"layout": ["尺度校准变更"], "delivery": ["尺度校准变更"]})
     return {"scale": st, "project": p}
+
+
+# 描图引导层：同一张图的墙带只算一次（cv2 每次百毫秒级），按文件指纹＋标定系数失效。
+_WALL_GUIDE_CACHE: dict[tuple, dict] = {}
+
+
+@app.get("/api/projects/{pid}/files/{fid}/wall-guide")
+def file_wall_guide(request: Request, pid: str, fid: str):
+    """底图上的墙带参考线（画布单位折线，只读不落库）：描空间边界、画门窗时吸附用。
+
+    DXF 走图纸自带的矢量墙线，图片走墙带反推——两条路都给前端同一个 contours 形状。
+    """
+    user = request.state.user
+    with connect() as c:
+        # L2: 底图几何也是项目数据，协作账号只能看被分配到的项目。
+        if not _check_project_assignment(user, pid, c):
+            raise HTTPException(status_code=404, detail="项目不存在")
+        p = get(c, pid)
+    f = next((x for x in p["files"] if x["id"] == fid), None)
+    if not f:
+        raise HTTPException(404, "文件不存在")
+    if str(f.get("type", "")).upper() == "DXF" or str(f.get("name", "")).lower().endswith(".dxf"):
+        from .lighting3d import vector_wall_guide
+        return dict(vector_wall_guide(pid), cached=False)
+    path = UPLOADS / pid / str(f.get("path") or "")
+    if not path.is_file():
+        raise HTTPException(404, "磁盘文件不存在")
+    key = (pid, fid, int(f.get("size") or 0), str(f.get("uploadedAt") or ""),
+           SC.as_num((f.get("underlayMap") or {}).get("factor"), 1.0))
+    hit = _WALL_GUIDE_CACHE.get(key)
+    if hit:
+        return dict(hit, cached=True)
+    guide = wall_guide(path, f)
+    if len(_WALL_GUIDE_CACHE) > 24:
+        _WALL_GUIDE_CACHE.clear()
+    _WALL_GUIDE_CACHE[key] = guide
+    return dict(guide, cached=False)
+
+
+@app.post("/api/projects/{pid}/scale-apply")
+def scale_apply(request: Request, pid: str, payload: dict = Body(...)):
+    """D02 的落地口：把「画布上量到的长度＝真实长度」变成一次整体缩放。
+
+    系数由服务端从已知尺寸算出来（不信前端传的 factor）：
+    factor = 26 单位/米 × 已知米数 ÷ 画布上量到的单位数。缩放后画布继续用同一个
+    「26 单位＝1 米」口径，三维、导出、光斑全部跟着对，不留第二套比例。
+    apply 缺省 false：只回预览（每空间面积前后对照），一个字节都不写。
+    """
+    known, units = SC.as_num(payload.get("knownM")), SC.as_num(payload.get("canvasUnits"))
+    if known <= 0 or units <= 0:
+        raise HTTPException(422, "已知实长与画布读数都要大于 0")
+    factor = SC.UNITS_PER_METRE * known / units
+    preview = {"factor": round(factor, 6), "knownM": known, "canvasUnits": units,
+               "unitsPerMetreMeasured": round(units / known, 4),
+               "unitsPerMetreTarget": SC.UNITS_PER_METRE}
+    if not 0.2 <= factor <= 5.0:
+        preview["error"] = f"标定结果 {factor:.3f} 超出可用范围 0.2–5：请复核已知实长与量到的长度"
+        raise HTTPException(422, preview["error"])
+    user = request.state.user
+    with connect() as c:
+        # L2: 预览也会读出每个空间的面积，协作账号同样要先过项目分配。
+        if not _check_project_assignment(user, pid, c):
+            raise HTTPException(status_code=404, detail="项目不存在")
+        p = get(c, pid)          # 预览不取写锁：标定对话框每次输入都要问一次
+        preview["areasBefore"] = SC.rooms_area_before_after(p.get("design") or {})
+        if not payload.get("apply"):
+            return dict(preview, applied=False)
+    with connect() as c:
+        c.execute("BEGIN IMMEDIATE")
+        if not _check_project_assignment(user, pid, c):
+            raise HTTPException(status_code=404, detail="项目不存在")
+        p = get(c, pid)
+        editable(p)
+        coop.assert_design_edit(p)
+        f = next((x for x in p["files"] if x["id"] == str(payload.get("fileId") or "")), None)
+        if abs(factor - 1.0) < 1e-4:
+            raise HTTPException(422, "这张图本来就是 26 单位＝1 米，不需要缩放")
+        design, report = SC.scale_design(p.get("design") or {}, factor)
+        validate_design(design, p)
+        panels.normalize_panels(design)
+        p["design"] = design
+        # 未确认的识别草稿也在老比例上：一起换算，别让「标定后确认草稿」把尺度错误重新引回来。
+        drafts = 0
+        if p.get("recognition") and SC.scale_recognition_draft(p["recognition"], factor):
+            drafts += 1
+        for item in p["files"]:
+            if SC.scale_recognition_draft(item.get("recognition"), factor):
+                drafts += 1
+        st = Q.add_calibration(
+            p, str((f or {}).get("id") or ""), known, units,
+            str(payload.get("note") or "画布两点标定"), str(payload.get("by") or ""),
+        )
+        if f is not None:
+            f["underlayMap"] = {"factor": round(factor, 6), "knownM": known,
+                                "canvasUnits": units, "at": now(),
+                                "by": str(payload.get("by") or "")[:100]}
+            try:
+                f["underlayBox"] = underlay_box(UPLOADS / pid / str(f["path"]), f)
+            except (KeyError, OSError, ValueError):
+                f.pop("underlayBox", None)   # 底图框算不出来就按老规矩铺，不写半个进去
+        commit(c, p, "按标定缩放全图",
+               f"画布 {units:g} 单位＝{known:g} 米 → 整体 ×{factor:.4f}；"
+               f"移动 {report['scalar']} 个坐标、{report['points'] // 2} 个边界点、"
+               f"{drafts} 份识别草稿跟着换算",
+               True)
+    return dict(preview, applied=True, design=p["design"], project=p,
+                report=report, draftsRescaled=drafts, scale=st,
+                areasAfter=SC.rooms_area_before_after(p["design"]))
 
 
 @app.get("/api/projects/{pid}/missing-items")

@@ -49,6 +49,10 @@
 .sv2-item.on{background:var(--panel3);color:var(--gold2)}
 .sv2-item.on:before{content:"";position:absolute;left:-6px;top:8px;bottom:8px;width:2px;border-radius:2px;background:var(--gold)}
 .sv2-main{min-width:0;padding:22px 28px 26px;max-width:1320px;margin:0 auto;width:100%}
+/* v2 里的子页（灯具库 / 场景库）：沿用旧页的 .page-heading，只补一条返回条 */
+.sv2-sub{min-width:0}
+.sv2-subhead{display:flex;align-items:center;gap:12px;margin:0 0 14px}
+.sv2-subtitle{font-size:13px;font-weight:600;color:#6b6b70;letter-spacing:.3px}
 .sv2-hero{display:flex;align-items:flex-end;gap:16px;margin-bottom:16px}
 .sv2-eyebrow{font-size:9px;letter-spacing:.2em;color:var(--gold);font-family:var(--mono);margin-bottom:4px}
 .sv2-hero h1{font-size:29px;line-height:1.2;margin:0;font-weight:600;letter-spacing:.01em;color:#f2e9d8}

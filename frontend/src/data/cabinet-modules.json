@@ -1,0 +1,839 @@
+{
+ "_note": "电箱导轨占位表。1P＝18mm（1 个标准模数极），依据：知识库世聪产品库逐台「规格尺寸」与安装方式标注的 4P（72mm）/8P（144mm）完全吻合。p 为导轨位数（mount=rail 才计数，取标注与宽度反推的较大值）；null 表示位数待填，界面标黄且不计入占位。mount：rail＝强电箱导轨 / weak＝弱电箱（网桥、云主机等网络侧） / out＝不在箱内（吊顶·嵌入式·吸顶） / wall＝86 底盒面板；mountInferred=true 表示知识库没记安装方式、按品类判的，界面会标「判」。img 是 data/cabinet-img/ 里的外观图文件名（知识库配图索引来的，≤320px），电箱面板按实拍把设备画进导轨时用它。",
+ "_source": {
+  "file": "/tmp/nas/知识库/15-产品库/CITRON世聪智能/世聪智能产品库_官网全量.md",
+  "sha256": "8674055cbe15",
+  "models": 75,
+  "generatedAt": "2026-11-05T02:46:31.779Z"
+ },
+ "mmPerP": 18,
+ "railP": 22.5,
+ "models": {
+  "SC-PK1-640": {
+   "name": "KNX电源模块",
+   "p": 4,
+   "mm": 72,
+   "mount": "rail",
+   "mountInferred": false,
+   "basis": "安装方式「标准35mm导轨安装DIN导轨模块组件 4P 35mm导轨式，模块化安装」 · 规格尺寸 72*106*74（mm）（宽度取首维）",
+   "size": "72*106*74（mm）",
+   "mountRaw": "标准35mm导轨安装DIN导轨模块组件 4P 35mm导轨式，模块化安装",
+   "img": "sc-pk1-640.png",
+   "imgSrc": "CITRON-KNX电源模块.png"
+  },
+  "SC-DK1-06": {
+   "name": "导轨式6路调光执行器",
+   "p": 8,
+   "mm": 144,
+   "mount": "rail",
+   "mountInferred": false,
+   "basis": "安装方式「8P 35mm标准DIN导轨式」 · 规格尺寸 144*106*74（mm）（宽度取首维）",
+   "size": "144*106*74（mm）",
+   "mountRaw": "8P 35mm标准DIN导轨式",
+   "img": "sc-dk1-06.png",
+   "imgSrc": "CITRON-导轨式6路调光执行器.png"
+  },
+  "SC-CD1-01": {
+   "name": "导轨式4路恒压调光驱动执行器",
+   "p": 5,
+   "mm": 90.1,
+   "mount": "rail",
+   "mountInferred": false,
+   "basis": "安装方式「4P 35mm标准DIN导轨式」 · 规格尺寸 90.1X72X66.4（宽度取首维） · 标注 4P 与宽度反推 5P 不符，按较大值",
+   "size": "90.1X72X66.4",
+   "mountRaw": "4P 35mm标准DIN导轨式",
+   "img": "sc-cd1-01.png",
+   "imgSrc": "CITRON-导轨式4路恒压调光驱动执行器.png"
+  },
+  "SC-SW1-01": {
+   "name": "五孔插座",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「86/80底盒安装」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "86/80底盒安装"
+  },
+  "SC-FK1-01": {
+   "name": "智能地脚灯",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「86/80底盒安装」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "86/80底盒安装"
+  },
+  "SC-SW1-02": {
+   "name": "三孔+USB插座",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「86/80底盒安装」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "86/80底盒安装"
+  },
+  "SC-SW2-01": {
+   "name": "单键复位开关",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「86/80底盒安装」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "86/80底盒安装"
+  },
+  "SC-SW2-02": {
+   "name": "双键复位开关",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-SW1-05": {
+   "name": "五孔＋一开关",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-SW1-04": {
+   "name": "三孔插座",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-SW2-03": {
+   "name": "一位单控开关",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-SW2-04": {
+   "name": "二位单控开关",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-SW2-05": {
+   "name": "三位单控开关",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-SW1-08": {
+   "name": "电视插座",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-SW1-09": {
+   "name": "电话插座",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-SW1-06": {
+   "name": "电脑插座",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-SW1-07": {
+   "name": "电话＋电脑插座",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-SW1-10": {
+   "name": "电视＋电脑插座",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-SW2-10": {
+   "name": "欧标插座",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-IK1-01": {
+   "name": "KNX人体感应器（明装式）",
+   "p": null,
+   "mm": 78,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吸顶装」 · 规格尺寸 78*42*18（mm）（宽度取首维）",
+   "size": "78*42*18（mm）",
+   "mountRaw": "吸顶装"
+  },
+  "SC-CK2-01": {
+   "name": "KNX人体感应器（嵌入式）",
+   "p": null,
+   "mm": 52,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「嵌入式暗装」 · 规格尺寸 52*48（mm）（宽度取首维）",
+   "size": "52*48（mm）",
+   "mountRaw": "嵌入式暗装"
+  },
+  "SC-SW1-03": {
+   "name": "紧急按钮",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「86/80底盒安装」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "86/80底盒安装"
+  },
+  "SC-SK1-12": {
+   "name": "导轨式12路开关执行器",
+   "p": 8,
+   "mm": 144,
+   "mount": "rail",
+   "mountInferred": false,
+   "basis": "安装方式「8P 35mm标准DIN导轨式」 · 规格尺寸 144*106*74（mm）（宽度取首维）",
+   "size": "144*106*74（mm）",
+   "mountRaw": "8P 35mm标准DIN导轨式",
+   "img": "sc-sk1-12.png",
+   "imgSrc": "CITRON-导轨式12路开关执行器.png"
+  },
+  "SC-SK2-20R16A": {
+   "name": "KNX导轨式20路开关执行器",
+   "p": 12,
+   "mm": 216,
+   "mount": "rail",
+   "mountInferred": false,
+   "basis": "安装方式「标准35mm DIN导轨安装」 · 规格尺寸 216 x 90 x 64mm（宽度取首维）",
+   "size": "216 x 90 x 64mm",
+   "mountRaw": "标准35mm DIN导轨安装",
+   "img": "sc-sk2-20r16a.png",
+   "imgSrc": "CITRON-KNX导轨式20路开关执行器.png"
+  },
+  "SC-SK2-28R10A": {
+   "name": "KNX导轨式28路开关执行器10A",
+   "p": 12,
+   "mm": 216,
+   "mount": "rail",
+   "mountInferred": false,
+   "basis": "安装方式「标准35mm DIN导轨安装」 · 规格尺寸 216 x 90 x 64mm（宽度取首维）",
+   "size": "216 x 90 x 64mm",
+   "mountRaw": "标准35mm DIN导轨安装",
+   "img": "sc-sk2-28r10a.png",
+   "imgSrc": "CITRON-KNX导轨式28路开关执行器10A.png"
+  },
+  "TK2-BK-CNC/02": {
+   "name": "二连框智能面板",
+   "p": null,
+   "mm": 172,
+   "mount": "wall",
+   "mountInferred": true,
+   "basis": "安装方式「暗盒安装」 · 规格尺寸 172*86（mm）（宽度取首维）",
+   "size": "172*86（mm）",
+   "mountRaw": "暗盒安装"
+  },
+  "TK2-BK-CNC/03": {
+   "name": "三连框智能面板",
+   "p": null,
+   "mm": 258,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「底盒安装」 · 规格尺寸 258*86（mm）（宽度取首维）",
+   "size": "258*86（mm）",
+   "mountRaw": "底盒安装"
+  },
+  "SC-KS4-2.8": {
+   "name": "重构·多联带温控智能面板(KNX)",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「86/80底盒安装」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "86/80底盒安装"
+  },
+  "SC-TK3-2.8/4.8": {
+   "name": "重溯·轻奢智能面板(KNX)",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「86/80底盒安装」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "86/80底盒安装"
+  },
+  "SC-TR2-4.8": {
+   "name": "重现·智能场景面板（485）",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": true,
+   "basis": "安装方式未记录，按品类「重现·智能场景面板（485）」判为底盒 · 规格尺寸 86x86x9mm L*W*T（宽度取首维）",
+   "size": "86x86x9mm L*W*T",
+   "mountRaw": ""
+  },
+  "SC-AS1-4": {
+   "name": "重现·智能温控器（RS-485）",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-TR3-2.4": {
+   "name": "超感色系·智能滑动调光场景面板(485)",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86mm（宽度取首维）",
+   "size": "86*86mm",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-MR1-3": {
+   "name": "重映·两键多功能触控屏（485）",
+   "p": null,
+   "mm": 86,
+   "mount": "unknown",
+   "mountInferred": true,
+   "basis": "安装方式未记录，按品类「重映·两键多功能触控屏（485）」判为未知 · 规格尺寸 86x86x9mm L*W*T（宽度取首维）",
+   "size": "86x86x9mm L*W*T",
+   "mountRaw": ""
+  },
+  "SC-TK2-4.8": {
+   "name": "雅奢色系·智能场景面板（KNX）",
+   "p": null,
+   "mm": 85.5,
+   "mount": "wall",
+   "mountInferred": true,
+   "basis": "安装方式未记录，按品类「雅奢色系·智能场景面板（KNX）」判为底盒 · 规格尺寸 85.5x85.5x9mm L*W*T（宽度取首维）",
+   "size": "85.5x85.5x9mm L*W*T",
+   "mountRaw": ""
+  },
+  "SC-MR1-1.9": {
+   "name": "重映·智能交互控制器(485)",
+   "p": null,
+   "mm": 86,
+   "mount": "unknown",
+   "mountInferred": true,
+   "basis": "安装方式「壁挂安装」 · 规格尺寸 86x86x9mm L*W*T（宽度取首维）",
+   "size": "86x86x9mm L*W*T",
+   "mountRaw": "壁挂安装"
+  },
+  "SC-SK1-2.4": {
+   "name": "KNX-超感滑动调光面板",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「墙面安装」 · 规格尺寸 86x86x9.5（宽度取首维）",
+   "size": "86x86x9.5",
+   "mountRaw": "墙面安装"
+  },
+  "SC-MK1-1.9": {
+   "name": "1.9寸多功能智能交互场景控制器",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「墙面安装」 · 规格尺寸 86x86x9.5（宽度取首维）",
+   "size": "86x86x9.5",
+   "mountRaw": "墙面安装"
+  },
+  "SC-KS1-1.9": {
+   "name": "1.9 寸多功能智能交互温控器",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「墙面安装」 · 规格尺寸 86x86x9.5（宽度取首维）",
+   "size": "86x86x9.5",
+   "mountRaw": "墙面安装"
+  },
+  "SC-IP1-01": {
+   "name": "IP接口",
+   "p": 5,
+   "mm": 89.5,
+   "mount": "rail",
+   "mountInferred": true,
+   "basis": "安装方式未记录，按品类「IP接口」判为导轨 · 规格尺寸 89.5*62*18（mm）（宽度取首维）",
+   "size": "89.5*62*18（mm）",
+   "mountRaw": "",
+   "img": "sc-ip1-01.png",
+   "imgSrc": "CITRON-IP接口.png"
+  },
+  "SC-DS-64": {
+   "name": "DALI云主机",
+   "p": null,
+   "mm": 134,
+   "mount": "weak",
+   "mountInferred": false,
+   "basis": "安装方式「电视柜、影院机柜」 · 规格尺寸 134（长）*85（宽）*28（高）mm（宽度取首维）",
+   "size": "134（长）*85（宽）*28（高）mm",
+   "mountRaw": "电视柜、影院机柜",
+   "img": "sc-ds-64.png",
+   "imgSrc": "CITRON-DALI云主机.png"
+  },
+  "SC-DK2-2C": {
+   "name": "KNX-DALI 网关",
+   "p": 4,
+   "mm": 72,
+   "mount": "rail",
+   "mountInferred": true,
+   "basis": "安装方式未记录，按品类「KNX-DALI 网关」判为导轨 · 规格尺寸 72x106x74（mm）（宽度取首维）",
+   "size": "72x106x74（mm）",
+   "mountRaw": "",
+   "img": "sc-dk2-2c.jpg",
+   "imgSrc": "CITRON-KNX-DALI网关.jpg"
+  },
+  "SC-MC-150": {
+   "name": "智能云主机",
+   "p": null,
+   "mm": 134,
+   "mount": "weak",
+   "mountInferred": false,
+   "basis": "安装方式「机柜」 · 规格尺寸 134x132x28mm（宽度取首维）",
+   "size": "134x132x28mm",
+   "mountRaw": "机柜",
+   "img": "sc-mc-150.png",
+   "imgSrc": "CITRON-智能云主机.png"
+  },
+  "SC-2CH-485GW": {
+   "name": "KNX-485网关",
+   "p": 2.5,
+   "mm": 45,
+   "mount": "rail",
+   "mountInferred": true,
+   "basis": "安装方式「自定义安装」 · 规格尺寸 45*45*22.1mm（宽度取首维）",
+   "size": "45*45*22.1mm",
+   "mountRaw": "自定义安装",
+   "img": "sc-2ch-485gw.png",
+   "imgSrc": "CITRON-KNX-485网关.png"
+  },
+  "SC-2CH-232GW": {
+   "name": "KNX-232网关",
+   "p": 2.5,
+   "mm": 45,
+   "mount": "rail",
+   "mountInferred": true,
+   "basis": "安装方式「自定义安装」 · 规格尺寸 45*45*22.1mm（宽度取首维）",
+   "size": "45*45*22.1mm",
+   "mountRaw": "自定义安装",
+   "img": "sc-2ch-232gw.png",
+   "imgSrc": "CITRON-KNX-232网关.png"
+  },
+  "SC-DALI-4C5A/RGBW": {
+   "name": "DALI解码器 1路RGBW",
+   "p": null,
+   "mm": 150,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶安装」 · 规格尺寸 L150*W42*H28mm（宽度取首维）",
+   "size": "L150*W42*H28mm",
+   "mountRaw": "吊顶安装"
+  },
+  "SC-DALI-4C5A/D": {
+   "name": "DALI解码器 4路20A单色温",
+   "p": null,
+   "mm": 150,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶暗装」 · 规格尺寸 L150*W42*H28mm（宽度取首维）",
+   "size": "L150*W42*H28mm",
+   "mountRaw": "吊顶暗装"
+  },
+  "SC-DALI-4C5A/CW": {
+   "name": "DALI解码器 2路20A双色温",
+   "p": null,
+   "mm": 150,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶暗转」 · 规格尺寸 L150*W42*H28mm（宽度取首维）",
+   "size": "L150*W42*H28mm",
+   "mountRaw": "吊顶暗转"
+  },
+  "SC-DALI-C15WW/100-450": {
+   "name": "DALI单色温驱动器（15W）",
+   "p": null,
+   "mm": 160,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶暗装」 · 规格尺寸 L160*W43*H21（宽度取首维）",
+   "size": "L160*W43*H21",
+   "mountRaw": "吊顶暗装"
+  },
+  "SC-DALI-C30WW/400-750": {
+   "name": "DALI单色温驱动器（30W）",
+   "p": null,
+   "mm": 160,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶暗装」 · 规格尺寸 L160*W43*H21（宽度取首维）",
+   "size": "L160*W43*H21",
+   "mountRaw": "吊顶暗装"
+  },
+  "SC-DALI-C12WCW/100-450": {
+   "name": "DALI双色温驱动器(12W)",
+   "p": null,
+   "mm": 150,
+   "mount": "unknown",
+   "mountInferred": true,
+   "basis": "安装方式未记录，按品类「DALI双色温驱动器(12W)」判为未知 · 规格尺寸 150x42x28mm（宽度取首维）",
+   "size": "150x42x28mm",
+   "mountRaw": ""
+  },
+  "SC-DALI-C20WCW/350-700": {
+   "name": "DALI双色温驱动器（20W）",
+   "p": null,
+   "mm": 150,
+   "mount": "unknown",
+   "mountInferred": true,
+   "basis": "安装方式未记录，按品类「DALI双色温驱动器（20W）」判为未知 · 规格尺寸 150x42x28mm（宽度取首维）",
+   "size": "150x42x28mm",
+   "mountRaw": ""
+  },
+  "SC-DALI-16A/7": {
+   "name": "DALI继电器模块",
+   "p": null,
+   "mm": 119,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶暗装」 · 规格尺寸 L119*W29*H22mm（宽度取首维）",
+   "size": "L119*W29*H22mm",
+   "mountRaw": "吊顶暗装"
+  },
+  "SC-ST3-4.8R": {
+   "name": "智能场景面板（继电器）",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「墙面安装」 · 规格尺寸 86/80底盒安装（建议底盒深度选择70mm）（宽度取首维）",
+   "size": "86/80底盒安装（建议底盒深度选择70mm）",
+   "mountRaw": "墙面安装"
+  },
+  "SC-DZ1-10V": {
+   "name": "ZG无线0-10V调光驱动器",
+   "p": 7.7,
+   "mm": 138,
+   "mount": "rail",
+   "mountInferred": true,
+   "basis": "安装方式「螺丝固定」 · 规格尺寸 138*40*32（mm）（宽度取首维）",
+   "size": "138*40*32（mm）",
+   "mountRaw": "螺丝固定",
+   "img": "sc-dz1-10v.png",
+   "imgSrc": "CITRON-ZG无线0-10V调光驱动器.png"
+  },
+  "SC-CZ1-IO": {
+   "name": "ZG IO输入模块",
+   "p": null,
+   "mm": 72,
+   "mount": "unknown",
+   "mountInferred": true,
+   "basis": "安装方式「螺丝固定」 · 规格尺寸 72*53*32（mm）（宽度取首维）",
+   "size": "72*53*32（mm）",
+   "mountRaw": "螺丝固定"
+  },
+  "SC-GZ1-485": {
+   "name": "ZG-485网关",
+   "p": 4,
+   "mm": 72,
+   "mount": "rail",
+   "mountInferred": true,
+   "basis": "安装方式「螺丝固定」 · 规格尺寸 72*53*32（mm）（宽度取首维）",
+   "size": "72*53*32（mm）",
+   "mountRaw": "螺丝固定",
+   "img": "sc-gz1-485.png",
+   "imgSrc": "CITRON-ZG-485网关.png"
+  },
+  "SC-TZ1-01": {
+   "name": "ZG无线开关--一开",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-TZ1-02": {
+   "name": "ZG无线开关--二开",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-TZ1-03": {
+   "name": "ZG无线开关--三开",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 ：86*86（mm）（宽度取首维）",
+   "size": "：86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-TZ1-04": {
+   "name": "ZG无线开关--四开",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SC-SZ1-04": {
+   "name": "ZG无线开关--四场景",
+   "p": null,
+   "mm": 86,
+   "mount": "wall",
+   "mountInferred": false,
+   "basis": "安装方式「暗盒安装（86、80底盒）」 · 规格尺寸 86*86（mm）（宽度取首维）",
+   "size": "86*86（mm）",
+   "mountRaw": "暗盒安装（86、80底盒）"
+  },
+  "SR-SB1029-5C": {
+   "name": "蓝牙—RGBW+CCT恒压驱动（96W)",
+   "p": null,
+   "mm": 145,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶暗装」 · 规格尺寸 145* 46.5* 16（mm）（宽度取首维）",
+   "size": "145* 46.5* 16（mm）",
+   "mountRaw": "吊顶暗装"
+  },
+  "SR-SB9101EA-5C": {
+   "name": "蓝牙—RGBW+CCT恒压驱动 (192W)",
+   "p": null,
+   "mm": 145,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶暗装」 · 规格尺寸 145* 46.5* 16（mm）（宽度取首维）",
+   "size": "145* 46.5* 16（mm）",
+   "mountRaw": "吊顶暗装"
+  },
+  "SRP-SB9105-15WWCW": {
+   "name": "蓝牙双色温恒流调光驱动器",
+   "p": null,
+   "mm": 178,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶暗装」 · 规格尺寸 178* 46* 22（mm）（宽度取首维）",
+   "size": "178* 46* 22（mm）",
+   "mountRaw": "吊顶暗装"
+  },
+  "SRP-SB9105-15WW": {
+   "name": "蓝牙恒流调光驱动器",
+   "p": null,
+   "mm": 178,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶暗装」 · 规格尺寸 178* 46* 22（mm）（宽度取首维）",
+   "size": "178* 46* 22（mm）",
+   "mountRaw": "吊顶暗装"
+  },
+  "SR-SB9101SAC-HP": {
+   "name": "蓝牙切向调光模块",
+   "p": null,
+   "mm": 45.5,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶暗装」 · 规格尺寸 45.5* 45* 20.3（mm）（宽度取首维）",
+   "size": "45.5* 45* 20.3（mm）",
+   "mountRaw": "吊顶暗装"
+  },
+  "SR-2421-SB": {
+   "name": "蓝牙0-10V调光驱动器",
+   "p": null,
+   "mm": 80,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶暗装」 · 规格尺寸 80* 36* 20.5（mm）（宽度取首维）",
+   "size": "80* 36* 20.5（mm）",
+   "mountRaw": "吊顶暗装"
+  },
+  "SR-SB2833PAC-FOS": {
+   "name": "蓝牙耦合器(蓝牙IO模块)",
+   "p": null,
+   "mm": 49.81,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶暗装」 · 规格尺寸 49.81* * 15.15（mm）（宽度取首维）",
+   "size": "49.81* * 15.15（mm）",
+   "mountRaw": "吊顶暗装"
+  },
+  "SR-SB9100A-S": {
+   "name": "蓝牙继电器开关模块",
+   "p": null,
+   "mm": 45.5,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶暗装」 · 规格尺寸 45.5* 45* 20.3（mm）（宽度取首维）",
+   "size": "45.5* 45* 20.3（mm）",
+   "mountRaw": "吊顶暗装"
+  },
+  "SC-BLE-BG/485": {
+   "name": "蓝牙网桥",
+   "p": null,
+   "mm": 120,
+   "mount": "out",
+   "mountInferred": false,
+   "basis": "安装方式「吊顶暗装」 · 规格尺寸 120*28.7*21mm（宽度取首维）",
+   "size": "120*28.7*21mm",
+   "mountRaw": "吊顶暗装"
+  },
+  "SC-BLE-SK": {
+   "name": "多功能遥控器",
+   "p": null,
+   "mm": null,
+   "mount": "unknown",
+   "mountInferred": true,
+   "basis": "安装方式未记录，按品类「多功能遥控器」判为未知 · 尺寸未记录",
+   "size": "",
+   "mountRaw": ""
+  },
+  "DT300E-K": {
+   "name": "Dooya杜亚KNX开合帘电机",
+   "p": null,
+   "mm": null,
+   "mount": "unknown",
+   "mountInferred": true,
+   "basis": "安装方式未记录，按品类「Dooya杜亚KNX开合帘电机」判为未知 · 尺寸未记录",
+   "size": "",
+   "mountRaw": ""
+  },
+  "FTN-ST": {
+   "name": "单向探测器",
+   "p": null,
+   "mm": null,
+   "mount": "unknown",
+   "mountInferred": true,
+   "basis": "安装方式「墙装螺丝规格3x20mm,安装高度：0.8-1.2m」 · 尺寸未记录",
+   "size": "",
+   "mountRaw": "墙装螺丝规格3x20mm,安装高度：0.8-1.2m"
+  },
+  "SC-HomeKit-S1": {
+   "name": "世聪-苹果智能中枢",
+   "p": 4,
+   "mm": 72,
+   "mount": "rail",
+   "mountInferred": false,
+   "basis": "安装方式「标准35mm导轨安装」 · 规格尺寸 72×106mm（宽度取首维）",
+   "size": "72×106mm",
+   "mountRaw": "标准35mm导轨安装",
+   "img": "sc-homekit-s1.png",
+   "imgSrc": "CITRON-世聪-苹果智能中枢.png"
+  },
+  "SC-CB-01/CN": {
+   "name": "世聪智能产品色卡",
+   "p": null,
+   "mm": 216,
+   "mount": "unknown",
+   "mountInferred": true,
+   "basis": "安装方式未记录，按品类「世聪智能产品色卡」判为未知 · 规格尺寸 色卡参考册-216x347mm-书脊10mm（宽度取首维）",
+   "size": "色卡参考册-216x347mm-书脊10mm",
+   "mountRaw": ""
+  }
+ },
+ "manual": {
+  "Hue Bridge": {
+   "name": "飞利浦 Hue 网桥",
+   "p": null,
+   "mm": null,
+   "mount": "weak",
+   "mountInferred": false,
+   "basis": "桌面式网络设备，放弱电箱，不占导轨",
+   "size": "",
+   "mountRaw": ""
+  },
+  "DG-16": {
+   "name": "DALI 智能网关（老生成器占位）",
+   "p": null,
+   "mm": null,
+   "mount": "weak",
+   "mountInferred": true,
+   "basis": "知识库世聪产品库无此型号：位数待填，按网络侧设备归弱电箱",
+   "size": "",
+   "mountRaw": ""
+  },
+  "SC-DK2-1C": {
+   "name": "KNX-DALI 网关（单通道）",
+   "p": 4,
+   "mm": 72,
+   "mount": "rail",
+   "mountInferred": true,
+   "basis": "知识库只有同系列 SC-DK2-2C 外壳 72×106×74（＝4P），1 路/2 路同外壳推定，待核",
+   "size": "72x106x74（mm）",
+   "mountRaw": "",
+   "img": "sc-dk2-1c.jpg",
+   "imgSrc": "CITRON-KNX-DALI网关.jpg"
+  },
+  "LC00B01KNX": {
+   "name": "线路耦合器",
+   "p": null,
+   "mm": null,
+   "mount": "rail",
+   "mountInferred": true,
+   "basis": "知识库仅有价格行，尺寸未记录：位数待填",
+   "size": "",
+   "mountRaw": "",
+   "img": "lc00b01knx.png",
+   "imgSrc": "CITRON-线路耦合器.png"
+  }
+ }
+}

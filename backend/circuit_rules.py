@@ -27,6 +27,61 @@ def t(key, **kw):
 
 
 WIRELESS = ("Zigbee", "Wi-Fi", "蓝牙 Mesh")
+# 总线方案里的第三种灯具载体（2026-11-04 用户口径）：飞利浦 WiZ/Hue 灯本身 Wi-Fi 控制，
+# 加一台飞利浦 Hue 网桥就并进 KNX，和 DALI 一样单灯单控——所以它没有「回路」这一层：
+# 既不进回路表，也不能被「有灯没分回路」拦下。前端 frontend/src/busBridge.ts 同口径。
+BRIDGE_CONTROL = "WiZ/Hue"
+BRIDGE_CAP = 40            # 每台 Hue 网桥最多 40 个设备（每层至少 1 台）
+BRIDGE_MODEL = "Hue Bridge"
+
+
+def is_bridge_lamp(f) -> bool:
+    return str((f or {}).get("control") or "").strip() == BRIDGE_CONTROL
+
+
+def is_philips_wireless(v) -> bool:
+    """是否飞利浦 WiZ/Hue 的产品：选型目录按 catalogId/catalogBrand 认，产品库按品牌＋型号认。
+    与 frontend/src/busBridge.ts isPhilipsWireless 同口径。"""
+    v = v if isinstance(v, dict) else {}
+    s = lambda x: str(x or "").strip()  # noqa: E731
+    i = s(v.get("catalogId")) or s(v.get("id"))
+    if i.lower().startswith(("philips-", "philips_")) or s(v.get("catalogBrand")).lower() == "philips":
+        return True
+    text = " ".join(s(v.get(k)) for k in ("brand", "model", "series", "name"))
+    return ("飞利浦" in text or "philips" in text.lower()) and any(
+        k in (s(v.get("series")) + s(v.get("model")) + i).lower() for k in ("wiz", "hue"))
+
+
+# 人明确写了开关控制的灯不跟着归位：现场可能就是要单独一路开关它（与前端 applyBusDefaults 同口径）。
+BRIDGE_KEEP_CONTROL = "开关控制"
+
+
+def converge_bus_carriers(design, smart) -> int:
+    """存量归位：总线智能（KNX）项目里，型号是飞利浦 WiZ/Hue 的灯落网桥单灯单控、摘掉回路。
+
+    为什么要有这一步：这类灯的载体在 2026-11-04 才进工作台，存量设计里它们的 control 还写着
+    DALI 或空、回路挂在 C01 上。按已拍板口径（总线智能下飞利浦 WiZ/Hue 没有「回路」这一层），
+    这些值是错的；不归位就永远报「有灯没分回路」，交付物里也凭空多一条不含飞利浦灯的回路。
+    开闭灯（开关控制）不动。返回改写的盏数，调用方用它出可见提示（H6 不静默修）。
+    """
+    if str(smart or "").strip() != "KNX":
+        return 0
+    n = 0
+    for f in design.get("fixtures") or []:
+        if not isinstance(f, dict) or f.get("type") == "窗帘":
+            continue
+        ctrl = str(f.get("control") or "").strip()
+        if ctrl in (BRIDGE_CONTROL, BRIDGE_KEEP_CONTROL) or not is_philips_wireless(f):
+            continue
+        f["control"] = BRIDGE_CONTROL
+        f["dimmable"] = True
+        if str(f.get("colorMode") or "").strip() not in ("", "单色"):
+            f["tunable"] = True
+        f.pop("circuit", None)
+        f.pop("circuitId", None)
+        n += 1
+    return n
+
 # 未附型号手册时的参考值，唯一来源是 quality.REFERENCE_LIMITS（D03/D05：参考值不是已验证上限）。
 RELAY_MAX_DRIVERS = Q.REFERENCE_LIMITS["relay"]["maxDrivers"]
 RELAY_MAX_WATTS = Q.REFERENCE_LIMITS["relay"]["maxWatts"]
@@ -55,10 +110,16 @@ def _room(f, rooms):
 
 
 def groups(design):
-    """按回路编号分组（只算灯，窗帘不算），保留出现顺序。"""
+    """按回路编号分组（只算灯，窗帘不算），保留出现顺序。
+
+    WiZ/Hue 网桥灯不参与：单灯单控没有回路，它们不进分组、不进「未分配」桶，
+    也不会因为没填回路而被拦下。
+    """
     out = {}
     for f in design.get("fixtures") or []:
         if f.get("type") == "窗帘":
+            continue
+        if is_bridge_lamp(f):
             continue
         out.setdefault(circuit_key(f), []).append(f)
     return out

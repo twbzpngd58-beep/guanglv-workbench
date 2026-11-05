@@ -92,6 +92,8 @@ function App() {
     [busy, setBusy] = useState(false),
     // 外壳 v2：根入口默认就是 v2；?shell=old 回到旧壳（旧壳里可再切回新版）。
     [shellV2, setShellV2] = useState(() => new URLSearchParams(location.search).get("shell") !== "old"),
+    // v2 外壳里的子页（灯具库 / 场景库）：就地打开，不退出外壳、不改地址栏。
+    [v2View, setV2View] = useState<"home" | "products" | "templates" | "projects">("home"),
     // 有新版可用时记下新的包名：只提示，不自动刷新页面。
     [updateAsset, setUpdateAsset] = useState("");
   const toastTimer = useRef<any>(null);
@@ -260,6 +262,47 @@ function App() {
       color: "purple",
     },
   ];
+  // 场景灵感库：旧壳与 v2 外壳共用同一份（v2 的灯具库/场景库就地打开，不再甩到 ?shell=old）。
+  const useScenePresets = () => {
+    if (shellV2) {
+      setV2View("projects");
+    } else {
+      setPage("projects");
+    }
+    notify("打开项目 → 智能情景 → 应用四组预设");
+  };
+  const sceneInspirationPage = (
+    <>
+      <div className="page-heading">
+        <div>
+          <div className="eyebrow">SCENE INSPIRATION</div>
+          <h1>光随生活，情景自如。</h1>
+          <p>四种起点，无限种生活方式。在项目的「智能情景」中应用这些预设。</p>
+        </div>
+      </div>
+      <div className="scene-inspiration">
+        {[
+          { n: "日常照明", en: "EVERYDAY LIVING", b: 85, t: 4000, c: "#dfdbd5", desc: "明亮而不打扰，让日常舒展。" },
+          { n: "温馨会客", en: "WARM WELCOME", b: 65, t: 3000, c: "#e5d5b8", desc: "柔和暖光，留给相聚的时刻。" },
+          { n: "观影时光", en: "CINEMA MOMENT", b: 20, t: 2700, c: "#564e44", desc: "调暗空间，让故事成为主角。" },
+          { n: "晚安模式", en: "GOOD NIGHT", b: 8, t: 2700, c: "#3f3628", desc: "一盏低光，陪伴入眠前的安静。" },
+        ].map((sc) => (
+          <article key={sc.n} style={{ background: sc.c }}>
+            <span>{sc.en}</span>
+            <Sun size={48} strokeWidth={0.8} />
+            <h2>{sc.n}</h2>
+            <p>{sc.desc}</p>
+            <div>
+              {sc.b}% 亮度 <i /> {sc.t}K 色温
+            </div>
+            <Button onClick={useScenePresets}>
+              在项目中使用 <ArrowUpRight size={14} />
+            </Button>
+          </article>
+        ))}
+      </div>
+    </>
+  );
   if (shellV2 && !active) {
     return (
       <>
@@ -271,18 +314,32 @@ function App() {
           onOpen={open}
           onCreate={() => setModal("create")}
           onNavigate={(p) => {
+            // 灯具库 / 场景库 / 全部项目在 v2 里就地打开（现场 2026-11-04：点了灯具库被甩到 ?shell=old）。
+            if (p === "products" || p === "templates" || p === "projects") {
+              setV2View(p);
+              return;
+            }
             setShellV2(false);
+            setV2View("home");
             setPage(p);
             // 从 v2 进设置/项目库等旧页时明确进入旧壳，刷新后不会莫名跳回 v2
             history.replaceState(null, "", `${location.pathname}?shell=old`);
           }}
           onOld={() => {
             setShellV2(false);
+            setV2View("home");
             setPage("dashboard");
             history.replaceState(null, "", `${location.pathname}?shell=old`);
           }}
+          view={v2View}
+          onHome={() => setV2View("home")}
           notify={notify}
-        />
+        >
+          {v2View === "products" && (
+            <ProductLibrary notify={notify} goProjects={() => setV2View("projects")} />
+          )}
+          {v2View === "templates" && sceneInspirationPage}
+        </ShellV2>
         {modal === "create" && (
           <CreateProject
             onClose={() => setModal("")}
@@ -801,73 +858,7 @@ function App() {
           {page === "products" && (
             <ProductLibrary notify={notify} goProjects={() => setPage("projects")} />
           )}
-          {page === "templates" && (
-            <>
-              <div className="page-heading">
-                <div>
-                  <div className="eyebrow">SCENE INSPIRATION</div>
-                  <h1>光随生活，情景自如。</h1>
-                  <p>
-                    四种起点，无限种生活方式。在项目的「智能情景」中应用这些预设。
-                  </p>
-                </div>
-              </div>
-              <div className="scene-inspiration">
-                {[
-                  {
-                    n: "日常照明",
-                    en: "EVERYDAY LIVING",
-                    b: 85,
-                    t: 4000,
-                    c: "#dfdbd5",
-                    desc: "明亮而不打扰，让日常舒展。",
-                  },
-                  {
-                    n: "温馨会客",
-                    en: "WARM WELCOME",
-                    b: 65,
-                    t: 3000,
-                    c: "#e5d5b8",
-                    desc: "柔和暖光，留给相聚的时刻。",
-                  },
-                  {
-                    n: "观影时光",
-                    en: "CINEMA MOMENT",
-                    b: 20,
-                    t: 2700,
-                    c: "#564e44",
-                    desc: "调暗空间，让故事成为主角。",
-                  },
-                  {
-                    n: "晚安模式",
-                    en: "GOOD NIGHT",
-                    b: 8,
-                    t: 2700,
-                    c: "#3f3628",
-                    desc: "一盏低光，陪伴入眠前的安静。",
-                  },
-                ].map((s) => (
-                  <article key={s.n} style={{ background: s.c }}>
-                    <span>{s.en}</span>
-                    <Sun size={48} strokeWidth={0.8} />
-                    <h2>{s.n}</h2>
-                    <p>{s.desc}</p>
-                    <div>
-                      {s.b}% 亮度 <i /> {s.t}K 色温
-                    </div>
-                    <Button
-                      onClick={() => {
-                        setPage("projects");
-                        notify("打开项目 → 智能情景 → 应用四组预设");
-                      }}
-                    >
-                      在项目中使用 <ArrowUpRight size={14} />
-                    </Button>
-                  </article>
-                ))}
-              </div>
-            </>
-          )}
+          {page === "templates" && sceneInspirationPage}
           {page === "settings" && (
             <>
               <div className="page-heading">

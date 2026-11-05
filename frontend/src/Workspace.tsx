@@ -12,6 +12,14 @@ import { mountHeight } from "./wallMount";
 import { isTabletopDevice } from "./deviceMount";
 import { Spatial3D } from "./Spatial3D";
 import { planArchitecture, isLegacyAuto } from "./systemArchitecture";
+import {
+  BRIDGE_CONTROL,
+  BRIDGE_CONTROL_LABEL,
+  isBridgeControl,
+  isBridgeLamp,
+  isPhilipsWireless,
+  convergeBusCarriers,
+} from "./busBridge";
 import { Ueyi3D } from "./Ueyi3D";
 import CollabPanel from "./CollabPanel";
 import GatePanel from "./GatePanel";
@@ -122,6 +130,8 @@ import {
   safeBasements,
 } from "./floors";
 import { Plan, stripPoints, type Selection } from "./Plan";
+import { CabinetInspector } from "./CabinetInspector";
+import { cabinetRoom } from "./cabinetRules";
 import { GROUPED_SPACES, spaceMapByAlias, spaceMapByCode, spaceCodesOfRoomName, type HouseType } from "./spaces";
 import {
   DEFAULT_ROLE_BY_POSITION,
@@ -150,6 +160,8 @@ import {
   applyColorMode,
   clampCctForFixture,
   clampSceneStates,
+  pruneSceneTuned,
+  lampTunedBase,
   cctIssuesOf,
   cctNeedsReason,
   isProductSourced,
@@ -256,6 +268,9 @@ const BASE_SCENE_TEMPLATES = [
 /** 回路编号：空＝未分配回路。 */
 const circuitOf = (f: Obj) =>
   (f && f.circuit ? String(f.circuit).trim() : "") || "未分配回路";
+/** 界面上这盏灯的控制归属：网桥灯是单灯单控，压根没有回路这一层。 */
+const circuitLabelOf = (f: Obj) =>
+  isBridgeLamp(f) ? "单灯单控（网桥）" : circuitOf(f);
 /** 智能方案取值：无线（飞利浦，2026-10-11 起；原 JOCO 方案停用）/ KNX 总线 / 无（不做智能 · 按回路开闭）。
  *  2026-10-23 老板拍板方案 C：数据不动（smart="无" 保留），界面统一称「不做智能（按回路开闭）」。 */
 const SMART_OPTIONS: { value: string; label: string }[] = [
@@ -270,11 +285,17 @@ const smartLabelOf = (v?: string) =>
 const smartLabelOrNone = (v?: string) => smartLabelOf(v) || "不做智能（按回路开闭）";
 /**
  * 灯具控制方式：按项目智能方案收敛（实测 2026-10-11 口径）。
- * 总线（KNX/DALI）只给「开闭 / DALI」——JOCO 与 mesh 类无线协议在总线方案里没有意义；
+ * 总线（KNX）给「开闭 / DALI / WiZ·Hue 网桥」——JOCO 与 mesh 类无线协议在总线方案里没有意义；
  * 无线只给「开闭 / 蓝牙 Mesh」；不做智能只给「开闭」。
+ * WiZ/Hue 是 2026-11-04 加的第三种总线载体：飞利浦 WiZ/Hue 灯本身 Wi-Fi 控制，
+ * 加一台 Hue 网桥就并进 KNX，和 DALI 一样单灯单控，只是协议不同（所以它不带回路）。
  */
 const FIXTURE_CONTROLS: Record<string, { value: string; label: string }[]> = {
-  KNX: [{ value: "开关控制", label: "开闭" }, { value: "DALI", label: "DALI" }],
+  KNX: [
+    { value: "开关控制", label: "开闭" },
+    { value: "DALI", label: "DALI" },
+    { value: BRIDGE_CONTROL, label: BRIDGE_CONTROL_LABEL },
+  ],
   无线: [{ value: "开关控制", label: "开闭" }, { value: "蓝牙 Mesh", label: "蓝牙 Mesh" }],
   无: [{ value: "开关控制", label: "开闭" }],
 };
@@ -283,7 +304,7 @@ const fixtureControlOptions = (smart?: string) =>
 const fixtureControlAllowed = (smart: string | undefined, v?: string) =>
   fixtureControlOptions(smart).some((o) => o.value === String(v || "").trim());
 /** 曾经的调光/无线协议写法：切方案时按方向归到本方案的调光方式。 */
-const DIMMING_CONTROLS = ["DALI", "蓝牙 Mesh", "Zigbee", "Wi-Fi", "PWM", "0–10V", "KNX"];
+const DIMMING_CONTROLS = ["DALI", "蓝牙 Mesh", "Zigbee", "Wi-Fi", "PWM", "0–10V", "KNX", BRIDGE_CONTROL];
 /** 归一：不属于本方案的控制方式 → 本方案的调光方式（原是调光类）或「开闭」。 */
 function normalizeFixtureControl(f: Obj, smart?: string) {
   if (!f) return;
@@ -308,14 +329,30 @@ function applyWirelessDefaults(f: Obj) {
   if (colorModeOf(f) !== "单色") f.tunable = true;
 }
 /**
- * 总线智能（KNX/DALI）：无线协议与旧的「KNX 控制」换成 DALI；
+ * 总线智能（KNX）：无线协议与旧的「KNX 控制」换成 DALI；
  * **开闭的灯保持开闭**（不强行升级成调光——会在 DALI 地址与造价上凭空多算）。
  * 双色（调色温）与彩色（RGB/RGBW）灯具在总线方案里走 DALI 载体，
  * 不许被压成「开闭」——开源产品不能规定只能用单一光源标准（2026-10-27 用户口径）。
+ * 飞利浦 WiZ/Hue 例外（2026-11-04 用户口径）：不升 DALI，走网桥单灯单控、不带回路。
  */
 function applyBusDefaults(f: Obj) {
   if (!f) return;
   const cur = String(f.control || "").trim();
+  // 已经选了网桥载体的灯保持网桥（回路也跟着摘掉）。
+  if (isBridgeControl(cur)) {
+    setBridgeCarrier(f);
+    return;
+  }
+  // 飞利浦 WiZ/Hue 灯没有 DALI 版本：切到总线方案时它落网桥，不能被写成 DALI。
+  // 存量里那些 control=DALI／空 的飞利浦灯也走这一支归位（2026-11-04 口径：这类灯不分回路）。
+  // 开闭灯不动——人可能就是要单独开关控制它。
+  if (
+    isPhilipsWireless(f) &&
+    (!cur || ["DALI", "蓝牙 Mesh", "Zigbee", "Wi-Fi", "KNX"].includes(cur))
+  ) {
+    setBridgeCarrier(f);
+    return;
+  }
   if (!cur || ["蓝牙 Mesh", "Zigbee", "Wi-Fi", "KNX"].includes(cur)) f.control = "DALI";
   else normalizeFixtureControl(f, "KNX");
   if (colorModeOf(f) !== "单色" && f.control === "开关控制") f.control = "DALI";
@@ -325,6 +362,29 @@ function applyBusDefaults(f: Obj) {
   } else {
     f.dimmable = false;
   }
+}
+/**
+ * 把这盏灯落成网桥单灯单控：控制方式 WiZ/Hue、可调光，并清掉回路。
+ * 回路＝一组灯共用一路开关，单灯单控没有这一层；留着它会和 DALI 灯同回路时
+ * 触发「混用调光方式」拦截，也让交付物里凭空多一条不存在的回路。
+ */
+function setBridgeCarrier(f: Obj) {
+  if (!f) return;
+  f.control = BRIDGE_CONTROL;
+  f.dimmable = true;
+  if (colorModeOf(f) !== "单色") f.tunable = true;
+  clearBridgeCircuit(f);
+}
+/** 网桥灯的两个回路字段都要清：只清 circuit 的话 circuitId 还挂在旧回路上，交付物里就阴魂不散。 */
+function clearBridgeCircuit(f: Obj) {
+  if (String(f.circuit || "").trim()) delete f.circuit;
+  if (String(f.circuitId || "").trim()) delete f.circuitId;
+}
+/** 非总线方案 / 手动改回 DALI·开闭时，网桥灯的载体与回路一起归位。 */
+function normalizeBridgeLamps(design: Obj) {
+  (design.fixtures || []).forEach((f: Obj) => {
+    if (isBridgeLamp(f)) clearBridgeCircuit(f);
+  });
 }
 /** 无线生态的产品（飞利浦 / 各类无线协议）：它在总线方案里没有对应的执行器。 */
 function isWirelessProduct(prod?: Obj | null): boolean {
@@ -342,13 +402,25 @@ function isWirelessProduct(prod?: Obj | null): boolean {
  */
 function applySelectedProduct(f: Obj, prod: Obj, smart?: string) {
   applyProductToFixture(f, prod);
-  const carrier = smart === "KNX" ? "DALI" : smart === "无线" ? "蓝牙 Mesh" : "";
+  const carrier =
+    smart === "KNX" ? (isPhilipsWireless(f) ? BRIDGE_CONTROL : "DALI")
+    : smart === "无线" ? "蓝牙 Mesh" : "";
   const cur = String(f.control || "").trim();
   if (carrier && productDimmable(prod) === true && (!cur || cur === "开关控制")) {
     f.control = carrier;
   }
-  if (smart === "KNX") applyBusDefaults(f);
-  else if (smart === "无线") applyWirelessDefaults(f);
+  convergeSchemeCarrier(f, smart);
+}
+/**
+ * 选型（目录型号或产品库行）落定后，按项目智能方案把控制载体归位。
+ * 换型号＝换载体：原来挂在网桥上的灯换成非飞利浦型号，不能继续算 Hue 网桥的设备
+ * （否则架构按网桥出数、报价里却没有对应的飞利浦产品）。
+ */
+function convergeSchemeCarrier(f: Obj, smart?: string) {
+  if (smart === "KNX") {
+    if (isBridgeLamp(f) && !isPhilipsWireless(f)) f.control = "DALI";
+    applyBusDefaults(f);
+  } else if (smart === "无线") applyWirelessDefaults(f);
   else normalizeFixtureControl(f, "无");
 }
 /** 不做智能：按空间给每盏灯分配回路（每个空间一条回路 C01/C02…）。 */
@@ -770,6 +842,10 @@ function useProject(id: string, notify: (s: string, kind?: "ok" | "error") => vo
     stripCurtainStates(design);
     pruneDeviceRefs(design);
     alignFixtureNames(design);
+    // 存量归位：总线智能项目里型号是飞利浦 WiZ/Hue 的灯，control 还写着 DALI／空、回路挂在 C01 上。
+    // 按 2026-11-04 口径那些值是错的——打开即落网桥单灯单控并摘掉回路，条数报给人看（不静默改）。
+    const carried = convergeBusCarriers(design, v.smart);
+    normalizeBridgeLamps(design);
     dRef.current = design;
     dirtyRef.current = false;
     setP(v);
@@ -779,6 +855,18 @@ function useProject(id: string, notify: (s: string, kind?: "ok" | "error") => vo
     history.current = [];
     future.current = [];
     setTick((t) => t + 1);
+    if (carried) {
+      notify(
+        `本项目 ${carried} 盏飞利浦 WiZ/Hue 灯按总线口径归位为「网桥单灯单控」，已去掉它们的回路（回路表与按回路检查不再含它们）。` +
+          `要改回 DALI 或开闭，在灯位属性里直接改控制方式即可。`,
+        "ok",
+      );
+      // 归位要落库才生效（导出、缺件单、三维都读库），所以按平时的自动保存节奏排一次写回。
+      dirtyRef.current = true;
+      setDirty(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => flush().catch(() => {}), 800);
+    }
   }, []);
   useEffect(() => {
     api<Project>("/projects/" + id)
@@ -831,6 +919,8 @@ function useProject(id: string, notify: (s: string, kind?: "ok" | "error") => vo
       alignFixtureNames(v);
       // 情景状态夹回每盏灯自己的色温 / 亮度范围：全关写死 3000K 撞上 4000K 单色灯会被后端 422 整单拦下。
       clampSceneStates(v);
+      // 已删灯具不留悬空的「已调」基准。
+      pruneSceneTuned(v);
       if (record && dRef.current) {
         history.current.push(clone(dRef.current));
         if (history.current.length > 70) history.current.shift();
@@ -1143,6 +1233,9 @@ export function Workspace({
     [v2Preview, setV2Preview] = useState(""),
     [v2SecOpen, setV2SecOpen] = useState<Obj>(() => { try { return JSON.parse(localStorage.getItem("gv.tree.sections") || "{}") || {}; } catch { return {}; } }),
     [selection, setSelection] = useState<Selection>(null),
+    // 从电箱面板跳进设备属性时记下落点（哪只箱 + 哪台设备）：属性页据此给「返回电箱」，
+    // 不然回一次箱要回画布上找箱体符号点一下。
+    [cabReturn, setCabReturn] = useState<{ box: string; dev: string } | null>(null),
     [modal, setModal] = useState(""),
     [lampClipboard, setLampClipboard] = useState<Obj | null>(null),
     // 剪贴板里放的是哪一类对象（fixtures / devices / …）：粘贴时按类型还原，设备不会被粘成灯具。
@@ -1168,6 +1261,8 @@ export function Workspace({
     // 智能情景页改版（2026-10-19）：左栏搜索、右栏检查器页签、面板页当前选中的那块面板。
     [sceneQuery, setSceneQuery] = useState(""),
     [sceneInsp, setSceneInsp] = useState<"scene" | "circuit" | "lamp" | "panel">("scene"),
+    // 灯具页签：就地展开的那盏灯（点击行展开，保存/收起后回到列表原位）。
+    [openLampId, setOpenLampId] = useState(""),
     [inspPanelId, setInspPanelId] = useState(""),
     [setupSel, setSetupSel] = useState<string[]>([]),
     // 一键设置只清标准情景；默认保留现有内容，避免把「新增情景」建的自定义情景删掉。
@@ -1383,7 +1478,11 @@ export function Workspace({
     }[] = [];
     if (!d) return out;
     const map = new Map<string, (typeof out)[number]>();
-    d.fixtures.filter(isSceneLight).forEach((f) => {
+    d.fixtures
+      .filter(isSceneLight)
+      // 网桥单灯单控的灯不进回路分组：它们在情景页里逐灯出现在「灯具」页签。
+      .filter((f) => !isBridgeLamp(f))
+      .forEach((f) => {
       const name = circuitOf(f);
       const fl = Number.isFinite(f.floor) ? Number(f.floor) : 1;
       const key = fl + "::" + name;
@@ -1454,10 +1553,17 @@ export function Workspace({
       </div>
     );
   const issuesOf = (fid: string): string[] => cctIssueMap.get(fid) || [];
+  // 箱体（强电箱/弱电箱/箱外）不对应单台设备：它没有 id 可查，走自己的面板，
+  // 所以这里必须挡掉，否则 d["cabinet"] 取不到数组会直接炸。
   const selected =
-    d && selection
+    d && selection && selection.kind !== "cabinet"
       ? d[selection.kind].find((x) => x.id === selection.id)
       : null;
+  // v2 壳里切到「组地址 / IES / 现场核对」时检视栏整块被隐藏；点箱体要看的正是检视栏，所以切回属性。
+  // 依赖只跟 selection：把 v2Insp 也放进去会在箱体选中期间把页钉死在属性，别的页再也点不动（实测）。
+  useEffect(() => {
+    if (selection?.kind === "cabinet") setV2Insp("属性");
+  }, [selection]);
   const liveScene = d?.scenes.find((s) => s.id === activeScene) || d?.scenes[0];
   // 智能情景编辑先落在草稿：未点「保存场景」/「保存」前，设计里的场景不做任何改变。
   const scene: Obj | undefined =
@@ -1499,6 +1605,18 @@ export function Workspace({
   };
   const sceneChangedLampCount = savedScene
     ? (d?.fixtures || []).filter(isSceneLight).filter((f) => !!lampDeltaOf(f)).length
+    : 0;
+  // 「已调」＝这盏灯在本情景里被单灯手动调过（基准存在 scene.tuned，跟着情景一起保存）。
+  // 和「已改」（相对已保存版本的未保存改动）是两件事：保存之后「已改」消失，「已调」留着。
+  const lampTunedText = (f: Obj): string => {
+    const base = lampTunedBase(scene, f.id);
+    if (!base) return "";
+    const st = { on: false, brightness: 0, cct: Number(f.cctMin) || 3000, ...(scene?.states?.[f.id] || {}) };
+    const shot = (x: Obj) => (x.on ? `${x.brightness}% · ${x.cct}K` : "关");
+    return `调过：${shot({ ...st, ...base })} → 现在 ${shot(st)}`;
+  };
+  const sceneTunedLampCount = scene?.tuned
+    ? (d?.fixtures || []).filter(isSceneLight).filter((f) => !!lampTunedBase(scene, f.id)).length
     : 0;
   // 画布固定读数：单击灯具时显示 编号 / 灯具类型 / 功率（HTML 层，缩放/平移都不影响）；
   // 定向照射的灯具再补一段 光束角 + 地面光斑直径，装饰型灯具（吊灯/壁灯/台灯…）只显示前三个。
@@ -2009,7 +2127,10 @@ export function Workspace({
   })).filter((g) => g.spaces.length > 0);
   const addSpaceActive = addSpaceGroups.find((g) => g.group === addSpaceGroup);
   // 批 3（E3/E4）：「这个项目还差什么」只认两项——无回路、未绑定面板。数字只用来决定显隐，不上界面。
-  const gapNoCircuit = lightFixtures.filter((f) => !String(f.circuit || "").trim());
+  // 网桥单灯单控的灯不在回路这一层（2026-11-04 口径），不能算「缺回路」。
+  const gapNoCircuit = lightFixtures.filter(
+    (f) => !isBridgeLamp(f) && !String(f.circuit || "").trim(),
+  );
   const gapUnboundPanels = (d?.devices || []).filter((v) => {
     if (v.type !== "面板") return false;
     const short = (Array.isArray(v.keyScenes) ? v.keyScenes : []).filter(Boolean);
@@ -2052,6 +2173,13 @@ export function Workspace({
     setSetupClear(false);
     setModal("scene-setup");
   };
+  // 灯具页签的就地编辑：保存成功（草稿由脏变干净）就收起，接着在原位置选下一盏。
+  // 保存失败时草稿仍是脏的，不收——改动和展开的卡片都还在。
+  const lampDirtyBefore = useRef(false);
+  useEffect(() => {
+    if (lampDirtyBefore.current && !sceneDirty) setOpenLampId("");
+    lampDirtyBefore.current = sceneDirty;
+  }, [sceneDirty]);
   const run = async (fn: () => Promise<any>, message = "已保存") => {
     if (busy) return;
     setBusy(true);
@@ -2093,8 +2221,11 @@ export function Workspace({
   };
   const patch = (key: string, value: any) => {
     if (!selection || !selected) return;
+    // 选中的是电箱符号（强电箱/弱电箱/箱外）时没有单台对象可改，检视栏走 CabinetInspector。
+    if (selection.kind === "cabinet") return;
+    const sel = selection;
     update((n) => {
-      const o = n[selection.kind].find((v) => v.id === selection.id);
+      const o = (n[sel.kind] as Obj[]).find((v) => v.id === sel.id);
       if (!o) return;
       const prev = clone(o);
       o[key] = value;
@@ -2138,6 +2269,9 @@ export function Workspace({
       if (selection.kind === "fixtures") {
         if (["price", "brand", "model", "type", "length"].includes(key))
           o.priceVerified = false;
+        // 手动把控制方式改成 WiZ/Hue 网桥：这盏灯变成单灯单控，回路跟着摘掉
+        // （回路＝一路开关共用，2026-11-04 口径：网桥灯不出现在回路与回路表里）。
+        if (key === "control" && isBridgeControl(value)) setBridgeCarrier(o);
         // 换类型时名称 / 型号跟着走，避免「类型=吊灯、名称=防眩射灯」；
         // 只改本工具生成的默认名与默认型号，自己改过的不动。
         if (key === "type") {
@@ -2155,14 +2289,18 @@ export function Workspace({
         // 光源类型：单色 / 双色 / 彩色，切换时自动补全色温字段。
         if (key === "colorMode") {
           applyColorMode(o, value as ColorMode);
-          // 总线方案里把灯改成双色/彩色：开闭载体留不住调色功能，自动升到 DALI（无线同理升蓝牙 Mesh）。
+          // 总线方案里把灯改成双色/彩色：开闭载体留不住调色功能，自动升到本方案调光载体
+          // （DALI；飞利浦 WiZ/Hue 升网桥单灯单控，无线方案升蓝牙 Mesh）。
           if (
             value !== "单色" &&
             o.control === "开关控制" &&
             (smart === "KNX" || smart === "无线")
           ) {
-            o.control = smart === "KNX" ? "DALI" : "蓝牙 Mesh";
+            o.control = smart === "KNX"
+              ? (isPhilipsWireless(o) ? BRIDGE_CONTROL : "DALI")
+              : "蓝牙 Mesh";
             o.dimmable = true;
+            if (isBridgeControl(o.control)) setBridgeCarrier(o);
           }
         }
         // 单色灯具只有唯一色温，写入后同步上下限。
@@ -2345,8 +2483,16 @@ export function Workspace({
     if (v === smart) return;
     await run(async () => {
       update((n) => {
-        if (v === "无线")
+        if (v === "无线") {
           n.fixtures.filter(isSceneLight).forEach((f) => applyWirelessDefaults(f));
+          // 从总线方案切过来：走网桥的灯回路是空的（单灯单控不分回路），
+          // 而无线方案照旧按回路算数——空着会把它们一直卡在「未分配回路」，导出永远拦。
+          n.fixtures.filter(isSceneLight).forEach((f: Obj) => {
+            if (String(f.circuit || "").trim()) return;
+            const r = n.rooms.find((x: Obj) => x.id === f.roomId);
+            if (r) f.circuit = circuitForRoom(n, r);
+          });
+        }
         if (v === "KNX")
           n.fixtures.filter(isSceneLight).forEach((f) => applyBusDefaults(f));
         if (v === "无") {
@@ -2798,7 +2944,9 @@ export function Workspace({
     if (lampCatModel) {
       // 型号把名称 / 型号 / 品牌 / 功率 / 色温 / 光束角 / 价格一并落灯；
       // 控制方式仍归方案（makeFixture 上面已按智能方案写好），这里不覆盖。
+      // 唯一例外：总线方案选了飞利浦 WiZ/Hue → 走网桥单灯单控、这盏灯不分回路。
       applyCatalogModel(fx, lampCatModel, lampCatalogSel);
+      convergeSchemeCarrier(fx, smart);
     } else {
       applyColorMode(fx, lampColorMode);
       if (lampColorMode === "单色") {
@@ -2978,6 +3126,7 @@ export function Workspace({
   }
   function removeSelected() {
     if (!selection || !selected) return;
+    if (selection.kind === "cabinet") return;
     const sel = selection;
     askDanger(`删除 ${selected.name || selected.code || "此对象"}？`, () => {
       update((n) => {
@@ -3472,11 +3621,24 @@ export function Workspace({
       s[k] = v;
     });
   }
+  /**
+   * 单灯手动调整：第一次动这盏灯时，把当时的状态存进 `scene.tuned` 作为基准。
+   * 基准随情景一起保存，所以「已调」标记在点「保存修改」之后还在 —— 一个情景几十盏灯，
+   * 没这个标记就分不清哪盏已经调过，只能反复回头重调（2026-11-03 用户口径）。
+   * 调回基准值自动消掉标记；「一键设置场景 / 回路整组」这类批量写入不打这个标记。
+   */
   function lampState(fid: string, k: string, v: any) {
     if (!scene) return;
     editSceneDraft((s) => {
       const f = (d?.fixtures || []).find((x) => x.id === fid);
       if (!f) return;
+      const norm = (st: Obj) => ({
+        on: !!st.on,
+        brightness: Number(st.brightness) || 0,
+        cct: Number(st.cct) || 0,
+      });
+      const before = norm({ on: false, brightness: 0, cct: f.cctMin, ...(s.states[fid] || {}) });
+      s.tuned = s.tuned || {};
       s.states[fid] = {
         on: false,
         brightness: Math.min(80, f.brightnessMax),
@@ -3484,6 +3646,12 @@ export function Workspace({
         ...s.states[fid],
         [k]: v,
       };
+      const now = norm(s.states[fid]);
+      if (!s.tuned[fid]) s.tuned[fid] = before;
+      const base = s.tuned[fid];
+      if (now.on === !!base.on && now.brightness === Number(base.brightness) && now.cct === Number(base.cct)) {
+        delete s.tuned[fid];
+      }
       s.customized = true;
     });
   }
@@ -3497,11 +3665,15 @@ export function Workspace({
       if (!o) return;
       if (want === "tunable") applyColorMode(o, "双色");
       else o.dimmable = true;
-      const carrier = smart === "KNX" ? "DALI" : smart === "无线" ? "蓝牙 Mesh" : "";
+      const carrier =
+        smart === "KNX"
+          ? isPhilipsWireless(o) ? BRIDGE_CONTROL : "DALI"
+          : smart === "无线" ? "蓝牙 Mesh" : "";
       if (carrier) {
         // 旧数据里的「KNX / 无线协议」先归到本方案的合法值，再统一升到调光载体。
         normalizeFixtureControl(o, String(smart));
         if (o.control === "开关控制") o.control = carrier;
+        if (isBridgeControl(o.control)) setBridgeCarrier(o);
         o.dimmable = true;
       }
       delete o.cctPending;
@@ -3649,11 +3821,21 @@ export function Workspace({
       dead = true;
     };
   }, [id, p?.id, dxfPreviewUrl, spacePreview?.state]);
-  /** 只有「当前铺的这张底图就是那张 DXF 预览」时才给矩形，别把别的底图也拉变形。 */
+  /** 这张底图在设计坐标里占的矩形：DXF 用解析算出的框，标定过的图片用存下来的 underlayBox。 */
   const bgRectFor = (url: string) => {
-    if (!planBg || !url || String(planBg.url) !== url) return null;
-    const v = [planBg.x, planBg.y, planBg.w, planBg.h].map(Number);
-    // 底图字段坏一个就会让 viewBox 变成 NaN，整张画布不渲染 —— 宁可不铺底图矩形
+    if (!url) return null;
+    if (planBg && String(planBg.url) === url) {
+      const v = [planBg.x, planBg.y, planBg.w, planBg.h].map(Number);
+      // 底图字段坏一个就会让 viewBox 变成 NaN，整张画布不渲染 —— 宁可不铺底图矩形
+      if (!v.every(Number.isFinite) || v[2] <= 0 || v[3] <= 0) return null;
+      return { x: v[0], y: v[1], w: v[2], h: v[3] };
+    }
+    // 图片底图标定过就按存下来的框摆：整张画布坐标已经乘过系数，图不跟着摆就会和边界错开。
+    // 没标定过没有这个字段，仍按老规矩铺在左上角那块（行为与改动前一致）。
+    const fid = /\/api\/projects\/[^/]+\/files\/([^/?#]+)/.exec(String(url))?.[1];
+    const box = ((p?.files || []).find((f) => String(f.id) === fid) as Obj)?.underlayBox;
+    if (!box) return null;
+    const v = [box.x, box.y, box.w, box.h].map(Number);
     if (!v.every(Number.isFinite) || v[2] <= 0 || v[3] <= 0) return null;
     return { x: v[0], y: v[1], w: v[2], h: v[3] };
   };
@@ -4448,6 +4630,8 @@ export function Workspace({
           // 服务端还停在上一步（2026-10-16 反馈「进度条与所在环节不匹配」的另一半原因）。
           onClose={async () => { await flush().catch(() => {}); setSpacePreview(null); }}
           reparse={reparse3d}
+          // 标定是服务端整张重写：拉回服务端那一份为准，本地旧坐标不能再留着（也不给撤销）。
+          onCalibrated={async () => { w.accept(await api<Project>(`/projects/${id}`)); }}
           job={spacePreview}
         />
       )}
@@ -5085,7 +5269,7 @@ export function Workspace({
                     v2SelFix ? <>
                       <div className="wsv2-ih">KNX 映射<span>本机 · local-only</span></div>
                       <div className="wsv2-ikv"><span>灯具</span><b>{v2SelFix.code} · {v2SelFix.name}</b></div>
-                      <div className="wsv2-ikv"><span>回路</span><b>{v2SelFix.circuit || "未分回路"}</b></div>
+                      <div className="wsv2-ikv"><span>回路</span><b>{isBridgeLamp(v2SelFix) ? "单灯单控（网桥）" : v2SelFix.circuit || "未分回路"}</b></div>
                       <div className="wsv2-ikv"><span>模块/网关</span><input className="wsv2-iinput" value={v2SelFix.controller || ""} onChange={(e) => patch("controller", e.target.value)} placeholder="KNX 网关 / 模块" /></div>
                       <div className="wsv2-ikv"><span>通道</span><input className="wsv2-iinput" value={v2SelFix.channel || ""} onChange={(e) => patch("channel", e.target.value)} placeholder="通道号" /></div>
                       <div className="wsv2-ikv"><span>地址</span><input className="wsv2-iinput" value={v2SelFix.address || ""} onChange={(e) => patch("address", e.target.value)} placeholder="GA / 物理地址" /></div>
@@ -5184,7 +5368,13 @@ export function Workspace({
               )}
               <div className="panel-title">
                 <h3>
-                  {furnitureEditing ? "画布家具调整" : selected
+                  {furnitureEditing ? "画布家具调整" : selection?.kind === "cabinet"
+                    ? selection.id === "weak"
+                      ? "弱电箱 · 网络侧设备"
+                      : selection.id === "outside"
+                        ? "箱外设备 · 吊顶 / 嵌入式 / 底盒"
+                        : "强电箱 · 导轨占位与接线"
+                    : selected
                     ? selection?.kind === "rooms"
                       ? "空间属性"
                       : selection?.kind === "fixtures"
@@ -5203,9 +5393,21 @@ export function Workspace({
                   selected={selectedFurnitureId} onSelect={selectCanvasFurniture} readonly={locked}
                   onChange={v => change(v as Design)} placing={placingFurniture} moving={movingFurniture}
                   onMove={() => { setMovingFurniture(v => !v); setPlacingFurniture(""); setTool(movingFurniture ? "select" : "place-furniture"); }}
-                  onPlace={kind => { setPlacingFurniture(kind); setMovingFurniture(false); setTool(kind ? "place-furniture" : "select"); }} /> : selected ? (
+                  onPlace={kind => { setPlacingFurniture(kind); setMovingFurniture(false); setTool(kind ? "place-furniture" : "select"); }} /> : selection?.kind === "cabinet" ? (
+                  <CabinetInspector design={d} project={p} floor={floor} focus={selection.id}
+                    anchorRoom={cabinetRoom(d, floor)?.name} focusDevice={cabReturn?.dev}
+                    onSelectDevice={(id, box) => { setCabReturn({ box, dev: id }); setSelection({ kind: "devices", id }); setV2Insp("属性"); }} />
+                ) : selected ? (
                   <>
                     <div className="object-source">
+                      {cabReturn && selection?.kind === "devices" && cabReturn.dev === selection.id && (
+                        <button
+                          className="gv-cab-back"
+                          onClick={() => setSelection({ kind: "cabinet", id: cabReturn.box })}
+                        >
+                          返回电箱
+                        </button>
+                      )}
                       <span
                         className={
                           "badge " +
@@ -6049,6 +6251,7 @@ export function Workspace({
                               }
                               f.productId = "";
                               applyCatalogModel(f, m, sel);
+                              convergeSchemeCarrier(f, String(smart || ""));
                               n.scenes.forEach((s) => {
                                 if (s.states[f.id])
                                   s.states[f.id].cct = Math.min(
@@ -6264,10 +6467,18 @@ export function Workspace({
                 <p>
                   {lightFixtures.length} 盏灯具 ·{" "}
                   {
-                    new Set(lightFixtures.map((f) => f.circuit).filter(Boolean))
-                      .size
+                    new Set(
+                      lightFixtures
+                        .filter((f) => !isBridgeLamp(f))
+                        .map((f) => f.circuit)
+                        .filter(Boolean),
+                    ).size
                   }{" "}
-                  个回路 · 总功率 {Math.round(lightFixtures.reduce((a, f) => a + fixtureWatts(f), 0) * 10) / 10}{" "}
+                  个回路
+                  {lightFixtures.some(isBridgeLamp)
+                    ? ` · ${lightFixtures.filter(isBridgeLamp).length} 盏网桥单灯单控（没有回路）`
+                    : ""}
+                  {" "}· 总功率 {Math.round(lightFixtures.reduce((a, f) => a + fixtureWatts(f), 0) * 10) / 10}{" "}
                   W
                 </p>
               </div>
@@ -6543,7 +6754,7 @@ export function Workspace({
                     </td>
                     <td>{f.type === "灯带" ? `${f.power} W/m × ${Math.round(stripLengthMetres(f) * 100) / 100} m = ${Math.round(fixtureWatts(f) * 10) / 10} W` : `${f.power} W`}</td>
                     <td>
-                      {f.circuit || "未分配"}
+                      {isBridgeLamp(f) ? "—" : f.circuit || "未分配"}
                       <small>{f.control}</small>
                     </td>
                     <td className="amount">
@@ -7512,22 +7723,33 @@ export function Workspace({
                         {!circuitGroups.length && (
                           <p className="scene-insp-empty">还没有灯具：先在「底图与空间」布灯。</p>
                         )}
+                        {(() => {
+                          const bridged = (d?.fixtures || []).filter(isSceneLight).filter(isBridgeLamp);
+                          if (!bridged.length) return null;
+                          return (
+                            <p className="scene-insp-note">
+                              另有 {bridged.length} 盏 WiZ/Hue 单灯单控没有回路（总线口径下不分组），
+                              在「灯具」页签里逐盏调；布灯页同口径。
+                            </p>
+                          );
+                        })()}
                       </div>
                     )}
 
                     {sceneInsp === "lamp" && (() => {
                       const lamps = d.fixtures.filter(isSceneLight);
-                      const focus = selection?.kind === "fixtures"
-                        ? lamps.find((f) => f.id === selection.id)
-                        : null;
                       const changed = lamps.filter((f) => !!lampDeltaOf(f)).length;
+                      const tuned = lamps.filter((f) => !!lampTunedBase(scene, f.id)).length;
                       const card = (f: Obj) => {
                         const st = { on: false, brightness: 0, cct: f.cctMin, ...(scene.states[f.id] || {}) };
                         const dt = lampDeltaOf(f);
+                        const tunedText = lampTunedText(f);
                         const dimOff = !locked && !f.dimmable;
                         const cctOff = !locked && !isTunable(f);
                         const carrier =
-                          smart === "KNX" ? "DALI" : smart === "无线" ? "蓝牙 Mesh" : "";
+                          smart === "KNX"
+                            ? isPhilipsWireless(f) ? BRIDGE_CONTROL : "DALI"
+                            : smart === "无线" ? "蓝牙 Mesh" : "";
                         return (
                           <div className="lamp-card" key={f.id}>
                             <div className="lamp-card-top">
@@ -7543,7 +7765,7 @@ export function Workspace({
                                   {f.code} · {f.name}
                                   <small>
                                     {d.rooms.find((r) => r.id === f.roomId)?.name || "未分配空间"}
-                                    {" · "}{circuitOf(f)}
+                                    {" · "}{circuitLabelOf(f)}
                                     {" · "}
                                     {fixtureControlOptions(String(smart)).find(
                                       (o) => o.value === String(f.control || "").trim(),
@@ -7569,6 +7791,12 @@ export function Workspace({
                               <p className="lamp-changed">
                                 <span className="tag">已改</span>
                                 <span>{lampDeltaText(dt)}</span>
+                              </p>
+                            )}
+                            {tunedText && (
+                              <p className="lamp-changed is-tuned">
+                                <span className="tag">已调</span>
+                                <span>{tunedText}</span>
                               </p>
                             )}
                             <label className="lamp-line">
@@ -7609,7 +7837,11 @@ export function Workspace({
                                     <span>
                                       {smart === "无"
                                         ? "亮度灰着：项目不做智能，灯具按回路开闭。要逐灯调光，先到项目设置里选智能方案。"
-                                        : `亮度灰着：这盏灯是开闭灯（不支持调光）。${carrier ? `标为可调光后控制方式升到 ${carrier}，` : ""}回路与报价口径同步变化。`}
+                                        : `亮度灰着：这盏灯是开闭灯（不支持调光）。${carrier ? `标为可调光后控制方式升到 ${carrier}，` : ""}${
+                                            carrier === BRIDGE_CONTROL
+                                              ? "这盏灯改走网桥单灯单控、回路摘掉。"
+                                              : "回路与报价口径同步变化。"
+                                          }`}
                                     </span>
                                     {smart !== "无" && (
                                       <button
@@ -7649,31 +7881,72 @@ export function Workspace({
                               带「已改」的是相对已保存情景的改动，还没写回；点右下角「保存修改」写回。
                             </p>
                           )}
-                          {focus ? card(focus) : (
+                          {tuned > 0 && (
+                            <p className="scene-insp-note">
+                              带「已调」的是本情景里单灯手动调过的 {tuned} 盏（跟着情景一起保存）；调回原值自动取消标记。
+                            </p>
+                          )}
+                          {!lamps.length && (
                             <p className="scene-insp-empty">
-                              点画布上的一盏灯，这里显示它的亮度与色温；下面也能直接调每一盏。
+                              本层还没有灯具：先在「底图与空间」布灯，再回来调亮度与色温。
                             </p>
                           )}
                           <div className="scene-insp-head">
-                            <span>{focus ? "其他灯具" : "全部灯具"}</span>
-                            <span>{lamps.length} 盏{changed > 0 ? ` · 已改 ${changed}` : ""}</span>
+                            <span>全部灯具</span>
+                            <span>
+                              {lamps.length} 盏
+                              {changed > 0 ? ` · 已改 ${changed}` : ""}
+                              {tuned > 0 ? ` · 已调 ${tuned}` : ""}
+                            </span>
                           </div>
-                          {lamps.filter((f) => !focus || f.id !== focus.id).map((f) => {
+                          {lamps.map((f) => {
+                            if (f.id === openLampId) {
+                              return (
+                                <div key={f.id} className="lamp-slot is-open" data-lamp-open={f.id}>
+                                  {card(f)}
+                                  <div className="lamp-slot-foot">
+                                    <button
+                                      type="button"
+                                      className="mini-btn"
+                                      onClick={() => setOpenLampId("")}
+                                    >
+                                      收起
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            }
                             const st = { on: false, brightness: 0, cct: f.cctMin, ...(scene.states[f.id] || {}) };
                             const dt = lampDeltaOf(f);
+                            const tunedText = lampTunedText(f);
+                            const tips = [
+                              dt ? `${lampDeltaText(dt)}（未保存）` : "",
+                              tunedText || "",
+                              "点击就地展开亮度与色温",
+                            ].filter(Boolean).join(" · ");
                             return (
                               <button
                                 key={f.id}
                                 type="button"
-                                className={"lamp-row" + (st.on ? " is-on" : "") + (dt ? " is-changed" : "")}
-                                onClick={() => locateLamp(f)}
-                                title={dt ? `${f.code}：${lampDeltaText(dt)}（未保存）· 点击在图上定位` : `在图上定位 ${f.code}`}
+                                aria-expanded={false}
+                                className={
+                                  "lamp-row" + (st.on ? " is-on" : "") + (dt ? " is-changed" : "") +
+                                  (tunedText ? " is-tuned" : "")
+                                }
+                                onClick={() => {
+                                  setOpenLampId(f.id);
+                                  // 画布上要看得见点的是哪盏（光晕＋十字＋编号标签）；这里只选不滚，
+                                  // 面板保持原位，展开的卡片就在点的那一行。
+                                  locateLamp(f);
+                                }}
+                                title={`${f.code}：${tips}`}
                               >
                                 <span className="nm">{f.code}</span>
                                 <span className="sub">
                                   {d.rooms.find((r) => r.id === f.roomId)?.name || "未分配"} · {f.name}
                                 </span>
                                 {dt && <span className="chg">已改</span>}
+                                {tunedText && <span className="chg tun">已调</span>}
                                 <span className={"dot" + (st.on ? " on" : "")} />
                                 <span className="pct">{st.on ? `${st.brightness}% · ${st.cct}K` : "关"}</span>
                               </button>
@@ -8660,6 +8933,7 @@ export function Workspace({
                   }
                   f.productId = "";
                   applyCatalogModel(f, m, sel);
+                  convergeSchemeCarrier(f, String(smart || ""));
                   n.scenes.forEach((s) => {
                     if (s.states[f.id])
                       s.states[f.id].cct = Math.min(
@@ -9274,7 +9548,7 @@ export function Workspace({
                     {f.name || f.model || "灯具"}
                     <small>
                       {(d.rooms || []).find((r: Obj) => r.id === f.roomId)?.name || "未分配空间"} ·{" "}
-                      {f.circuit || "未分配回路"}
+                      {isBridgeLamp(f) ? "单灯单控（网桥）" : f.circuit || "未分配回路"}
                     </small>
                   </span>
                   <span className="price-batch-price">
@@ -10016,7 +10290,7 @@ function FixtureFields({
   products: Obj[];
   multiFloor?: boolean;
   basements?: number;
-  /** 项目智能方案：决定「控制方式」一栏允许的选项（总线只给开闭 / DALI）。 */
+  /** 项目智能方案：决定「控制方式」一栏允许的选项（总线＝开闭 / DALI / WiZ·Hue 网桥）。 */
   smart?: string;
   catalog: Catalog | null;
   patch: (k: string, v: any) => void;
@@ -10414,12 +10688,20 @@ function FixtureFields({
           onChange={(v) => patch("brightnessMax", v)}
         />
         )}
-        <Field label="回路编号">
-          <input
-            value={f.circuit}
-            onChange={(e) => patch("circuit", e.target.value)}
-          />
-        </Field>
+        {/* 回路只对「一路开关带一组灯」的灯有意义；WiZ/Hue 经网桥单灯单控，
+            2026-11-04 口径：这类灯不出回路、不进回路表、不按回路算。 */}
+        {isBridgeLamp(f) ? (
+          <p className="field-hint">
+            单灯单控（飞利浦 Hue 网桥）：这盏灯不分回路，回路表与按回路检查都不含它。
+          </p>
+        ) : (
+          <Field label="回路编号">
+            <input
+              value={f.circuit}
+              onChange={(e) => patch("circuit", e.target.value)}
+            />
+          </Field>
+        )}
       </div>
       <Field label="控制方式">
         {/* 只列本方案允许的控制方式：总线＝开闭 / DALI；无线＝开闭 / 蓝牙 Mesh；不做智能＝开闭。
@@ -10439,11 +10721,19 @@ function FixtureFields({
         </select>
         <p className="field-hint">
           {String(smart || "") === "KNX"
-            ? "KNX 总线方案：接线只有「开闭」（开关执行器）与「DALI」（经 DALI 网关）两种。双色温与彩色灯具照常可布——把光源类型选成「双色 / 彩色」，控制方式用「DALI」即可（工作台开源，不限定单一光源标准）。"
+            ? "KNX 总线方案有三种载体：「开闭」（开关执行器，按回路）、「DALI」（经 DALI 网关，单灯单控）、「WiZ/Hue」（飞利浦 Wi-Fi 灯经 Hue 网桥，单灯单控）。双色温与彩色灯具照常可布——把光源类型选成「双色 / 彩色」，控制方式用「DALI」或「WiZ/Hue」即可（工作台开源，不限定单一光源标准）。"
             : String(smart || "") === "无线"
               ? "无线方案（飞利浦）：只有「开闭」与无线调光两种（协议随飞利浦清单确认）。"
               : "不做智能（按回路开闭）：不生成智能设备与情景，灯具按回路开闭。"}
-          {String(smart || "") === "KNX" && isWirelessProduct(selProd) && (
+          {String(smart || "") === "KNX" && isBridgeLamp(f) && (
+            <>
+              <br />
+              WiZ/Hue 并入 KNX 只加一台飞利浦 Hue 网桥：灯按 Wi-Fi 单灯单控，
+              <b>不占 DALI 地址、不占执行器通道、不分回路</b>；网桥按每层 1 台、每台最多 40 个设备出数（见「系统架构」）。
+              这一档只有飞利浦 WiZ/Hue 有对应产品{isPhilipsWireless(f) ? "" : "；当前型号不是飞利浦 WiZ/Hue，请核实是否真的走网桥"}。
+            </>
+          )}
+          {String(smart || "") === "KNX" && !isBridgeLamp(f) && isWirelessProduct(selProd) && (
             <>
               <br />
               该型号为无线产品，总线方案经 DALI / 开关执行器承载：控制方式已按本方案收敛为
@@ -10452,7 +10742,7 @@ function FixtureFields({
                   ?.label || String(f.control || "").trim() ||
                   "未选") +
                 '」'}
-              ，灯具参数（色温 / 调光 / 功率）仍按该型号走。
+              ，灯具参数（色温 / 调光 / 功率）仍按该型号走。若是飞利浦 WiZ/Hue，控制方式选「WiZ/Hue」改走网桥单灯单控。
             </>
           )}
         </p>
@@ -10475,7 +10765,7 @@ function FixtureFields({
         <Field label="地址">
           <input
             value={f.address || ""}
-            placeholder={f.control === "DALI" ? "DALI 0–63" : ["蓝牙 Mesh", "Zigbee", "Wi-Fi"].includes(String(f.control || "")) ? "调试时分配" : "—（开闭靠执行器＋通道）"}
+            placeholder={f.control === "DALI" ? "DALI 0–63" : [BRIDGE_CONTROL, "蓝牙 Mesh", "Zigbee", "Wi-Fi"].includes(String(f.control || "")) ? "调试时分配" : "—（开闭靠执行器＋通道）"}
             onChange={(e) => patch("address", e.target.value)}
           />
         </Field>

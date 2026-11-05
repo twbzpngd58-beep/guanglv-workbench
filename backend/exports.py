@@ -713,7 +713,7 @@ def rows(p, include_price=True):
                 room_names.get(f.get("roomId"), "未分配"),
                 f.get("position", ""),
                 floor_label(f.get("floor", 1), p.get("basements", 0)),
-                f.get("circuit", ""),
+                circuit_cell(f),
                 fixture_watts(f),
                 f.get("price", 0) if include_price else 0,
                 (
@@ -736,7 +736,15 @@ def rows(p, include_price=True):
 # 无线协议地址在配网时由网关分配，设计阶段不编数。DALI/KNX 及其它一律要填地址。
 WIRED_CONTROLS = ("开关控制", "0–10V", "0-10V", "PWM")
 WIRELESS_CONTROLS = ("Zigbee", "Wi-Fi", "蓝牙 Mesh")
-KNOWN_CONTROLS = ("DALI", "KNX") + WIRED_CONTROLS + WIRELESS_CONTROLS
+# 飞利浦 WiZ/Hue 灯经 Hue 网桥单灯单控并入 KNX（2026-11-04 口径）：不属于任何回路，
+# 地址在配网时由网桥分配。判据与 frontend/src/busBridge.ts 同一套。
+BRIDGE_CONTROLS = (circuit_rules.BRIDGE_CONTROL,)
+KNOWN_CONTROLS = ("DALI", "KNX") + WIRED_CONTROLS + WIRELESS_CONTROLS + BRIDGE_CONTROLS
+
+
+def circuit_cell(f):
+    """灯具清单／交付清单里的「回路」列：网桥单灯单控的灯没有回路，出「—」而不是空白。"""
+    return "—" if circuit_rules.is_bridge_lamp(f) else (f.get("circuit") or "")
 
 
 def _join(values):
@@ -776,7 +784,7 @@ def circuit_row(p, key, members):
         missing.append("通道")
     if len(ctrls) == 1 and ctrls[0] in WIRED_CONTROLS:
         address = "—"
-    elif len(ctrls) == 1 and ctrls[0] in WIRELESS_CONTROLS:
+    elif len(ctrls) == 1 and ctrls[0] in WIRELESS_CONTROLS + BRIDGE_CONTROLS:
         address = "调试时分配"
     else:
         address = _join((f.get("address") or "").strip() for f in members)
@@ -992,7 +1000,7 @@ def spreadsheet(p, include_price=True):
             ws_p.append([
                 f.get("code", ""), f.get("name", ""), f.get("model", ""),
                 room_names.get(f.get("roomId"), "未分配"),
-                floor_label(f.get("floor", 1), p.get("basements", 0)), f.get("circuit", ""),
+                floor_label(f.get("floor", 1), p.get("basements", 0)), circuit_cell(f),
             ])
     missing_sheet(p, wb)
     handover_sheet(p, wb)
@@ -1002,7 +1010,12 @@ def spreadsheet(p, include_price=True):
          "注意：需电气设计人员校核线径及负载"]
     )
     circuits = {}
+    bridge_only = 0
     for f in lights(p):
+        # WiZ/Hue 走网桥单灯单控，不进回路表（2026-11-04 口径：这类灯没有回路）。
+        if circuit_rules.is_bridge_lamp(f):
+            bridge_only += 1
+            continue
         circuits.setdefault(f.get("circuit") or "未分配", []).append(f)
     red = PatternFill("solid", fgColor="FFC7CE")
     for key, members in circuits.items():
@@ -1011,6 +1024,11 @@ def spreadsheet(p, include_price=True):
         if row[8]:
             for cell in circuit[circuit.max_row]:
                 cell.fill = red
+    if not circuits and bridge_only:
+        circuit.append(["—", bridge_only, 0, "", circuit_rules.BRIDGE_CONTROL,
+                        "", "", "配网时分配", "",
+                        f"这 {bridge_only} 盏灯经飞利浦 Hue 网桥单灯单控并入 KNX，不分回路，"
+                        f"每台网桥最多 {circuit_rules.BRIDGE_CAP} 个设备"])
     overview = wb.create_sheet("场景清单")
     overview.append(["场景", "编号", "空间", "自动化层级", "优先级", "触发方式", "渐变秒", "退出机制"])
     for s_ in p["design"].get("scenes") or []:
@@ -1684,6 +1702,319 @@ def scene_floor_plans(p, fixtures):
     return {"plans": plans, "images": images}
 
 
+OWNER_3D_SCRIPT = r"""
+<style>
+  /* 业主版：三维铺满屏，控件收成底部一条——文字不许压在户型上（2026-11-04 手机实测：
+     原来的右侧面板在手机上占了 60% 屏，户型几乎看不见）。 */
+  #panel { display: none !important; }
+  #hint, .hint { display: none !important; }
+  #fixtures, #legend { display: none !important; }
+  #gvbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, rgba(10,11,14,.94), rgba(10,11,14,.55));
+  }
+  #gvchips { flex: 1; min-width: 0; display: flex; gap: 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  #gvchips::-webkit-scrollbar { display: none; }
+  #gvchips button {
+    flex: 0 0 auto; padding: 9px 14px; border-radius: 999px; font-size: 13px; line-height: 1;
+    border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.07); color: #e9e4da;
+    white-space: nowrap; cursor: pointer;
+  }
+  #gvchips button.on { background: #c9a96e; border-color: #c9a96e; color: #1d1a14; font-weight: 600; }
+  #gvmore {
+    flex: 0 0 auto; width: 40px; height: 40px; border-radius: 999px; font-size: 16px;
+    border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.07); color: #e9e4da; cursor: pointer;
+  }
+  #gvsheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    transform: translateY(105%); transition: transform .22s ease;
+    background: #15161a; color: #e9e4da; border-radius: 16px 16px 0 0;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+    box-shadow: 0 -12px 40px rgba(0,0,0,.45); max-height: 72vh; overflow: auto;
+  }
+  #gvsheet.on { transform: none; }
+  #gvsheet .gvrow { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 12px; }
+  #gvsheet .gvrow b { flex: 0 0 44px; font-size: 12px; font-weight: 600; color: #a9a49a; padding-top: 9px; }
+  #gvsheet .gvbtns { display: flex; flex-wrap: wrap; gap: 8px; }
+  #gvsheet .gvbtns button {
+    padding: 9px 14px; border-radius: 999px; font-size: 13px; border: 1px solid rgba(255,255,255,.16);
+    background: rgba(255,255,255,.06); color: #e9e4da; cursor: pointer;
+  }
+  #gvsheet .gvbtns button.on { background: #c9a96e; border-color: #c9a96e; color: #1d1a14; font-weight: 600; }
+  #gvsheet .gvnote { font-size: 12px; line-height: 1.7; color: #9a958c; margin: 4px 0 14px; }
+  #gvsheet .gvclose { width: 100%; padding: 11px; border-radius: 12px; border: 0; background: rgba(255,255,255,.1); color: #e9e4da; font-size: 13px; cursor: pointer; }
+  #gvmask { position: fixed; inset: 0; z-index: 35; background: rgba(0,0,0,.35); display: none; }
+  #gvmask.on { display: block; }
+  @media (max-width: 760px) { #hud { font-size: 11px; } }
+</style>
+<script>
+(function () {
+  var E = window.__GV_EXPORT__;
+  if (!E) return;
+  var hashFloor = (function () {
+    var m = /floor=(\d+)/.exec(location.hash || "");
+    return m ? m[1] : String(E.startFloor);
+  })();
+  function ready(cb, tries) {
+    if (window.__viewer && window.__viewer.lumList) return cb();
+    if ((tries || 0) > 200) return;
+    setTimeout(function () { ready(cb, (tries || 0) + 1); }, 100);
+  }
+  // 逐灯上亮度：模板内核的回路是「房间·灯型」分组，按回路平均值会一带一整片
+  // （与工作台三维同一口径；现场 2026-11-04 实测 CoCo 调 C01 整片跟着变）。
+  function applyScene(id) {
+    var v = window.__viewer;
+    if (!v || !v.lumList) return;
+    var scene = null;
+    for (var i = 0; i < E.scenes.length; i++) if (E.scenes[i].id === id) scene = E.scenes[i];
+    var states = (scene && scene.states) || {};
+    v.lumList.forEach(function (t) {
+      var st = states[t.meta && t.meta.id];
+      var n = st ? (st.on ? Math.max(0, Math.min(100, Number(st.brightness) || 0)) / 100 : 0) : 0;
+      t.level = n;
+      if (t.body && t.body.material) t.body.material.emissiveIntensity = n * 1.4;
+      if (t.pool && t.pool.material) { t.pool.material.opacity = Math.min(1, n * 1.05); t.pool.visible = n > 0.02; }
+      if (t.cone) { t.cone.material.opacity = n * 0.5; t.cone.visible = n > 0.02; }
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("#gvchips button"), function (b) {
+      b.classList.toggle("on", b.getAttribute("data-gv-scene") === id);
+    });
+    var note = document.getElementById("gvnote");
+    if (note) note.textContent = (scene && scene.note) || "";
+    try { v.renderer.render(v.scene, v.camera); } catch (e) {}
+  }
+  // 渲染档：零渲染＝空间暗轮廓（默认）；带渲染＝亮墙 + 木地。
+  function setSpace(zero) {
+    var v = window.__viewer;
+    if (!v || !v.groups) return;
+    var cl = v.groups.ceilLine;
+    if (cl) cl.visible = false;
+    ["wall", "floor", "open"].forEach(function (k) {
+      var g = v.groups[k];
+      if (!g) return;
+      g.traverse(function (o) {
+        if (!o.isMesh || !o.material || !o.material.color) return;
+        if (!o.__gvSpaceCloned) { o.material = o.material.clone(); o.__gvSpaceCloned = 1; }
+        if (zero) o.material.color.set(0x23262b);
+        else o.material.color.set(k === "floor" ? 0xcbb08c : 0xf0e8da);
+      });
+    });
+    try { v.renderer.render(v.scene, v.camera); } catch (e) {}
+  }
+  function renderRow(mode) {
+    Array.prototype.forEach.call(document.querySelectorAll("#gvsheet [data-render3d]"), function (b) {
+      b.classList.toggle("on", b.getAttribute("data-render3d") === mode);
+    });
+    setSpace(mode === "zero");
+  }
+  // 左上角项目卡：业主只看项目名 + 净面积，工程统计不展示
+  function trimHud() {
+    var hud = document.getElementById("hud");
+    var sc = window.__SCENE__;
+    if (!hud || !sc) return;
+    var area = (sc.rooms || []).reduce(function (a, r) { return a + (Number(r.area_m2) || 0); }, 0);
+    var esc = function (t) {
+      return String(t == null ? "" : t).replace(/[&<>"]/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+      });
+    };
+    hud.innerHTML = "<b>" + esc(E.project) + (E.code ? " · " + esc(E.code) : "") + "</b><br>净面积合计 " +
+      (Math.round(area * 100) / 100) + " ㎡";
+  }
+  // 家具：模板本身不画 furniture；有轮廓的按轮廓挤出（到顶柜不能画成一堵墙）
+  function buildFurniture() {
+    var v = window.__viewer, T = v && v.THREE;
+    var rows = (window.__SCENE__ && window.__SCENE__.furniture) || [];
+    if (!v || !T || !rows.length) return;
+    var group = new T.Group();
+    group.name = "furniture";
+    var wood = new T.MeshStandardMaterial({ color: 0x9c7a4f, roughness: 0.72, metalness: 0.06 });
+    var cloth = new T.MeshStandardMaterial({ color: 0xb9a78d, roughness: 0.9, metalness: 0.02 });
+    rows.forEach(function (row, i) {
+      if (!row || typeof row !== "object") return;
+      var x = Number(row.x), z = Number(row.z);
+      if (!isFinite(x) || !isFinite(z)) return;
+      var w = Math.max(0.2, Number(row.w) || 0.6);
+      var d = Math.max(0.2, Number(row.d) || 0.6);
+      var h = Math.max(0.05, Number(row.h) || 0.75);
+      var mat = (i % 2) ? cloth : wood;
+      var pts = row.pts;
+      var mesh;
+      if (Array.isArray(pts) && pts.length >= 3) {
+        var shape = new T.Shape();
+        shape.moveTo(Number(pts[0][0]), Number(pts[0][1]));
+        for (var k = 1; k < pts.length; k++) shape.lineTo(Number(pts[k][0]), Number(pts[k][1]));
+        shape.closePath();
+        var geo = new T.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
+        geo.rotateX(-Math.PI / 2);
+        mesh = new T.Mesh(geo, mat);
+        mesh.position.set(0, 0.006, 0);
+      } else {
+        mesh = new T.Mesh(new T.BoxGeometry(w, h, d), mat);
+        mesh.position.set(x, h / 2 + 0.006, -z);
+        if (Number(row.rot)) mesh.rotation.y = Number(row.rot) * Math.PI / 180;
+      }
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.userData = { kind: "furniture" };
+      group.add(mesh);
+    });
+    if (!group.children.length) return;
+    v.scene.add(group);
+    if (v.groups) v.groups.furniture = group;
+    try { v.renderer.render(v.scene, v.camera); } catch (e) {}
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  // 底部：情景条（第一位）＋「更多」里的渲染/视角/楼层/说明；文字全部收进抽屉，不压户型。
+  function buildUI() {
+    var bar = el("div"); bar.id = "gvbar";
+    var chips = el("div"); chips.id = "gvchips";
+    (E.scenes || []).forEach(function (s) {
+      var b = el("button", "", s.name);
+      b.type = "button";
+      b.setAttribute("data-gv-scene", s.id);
+      b.onclick = function () { applyScene(s.id); };
+      chips.appendChild(b);
+    });
+    var more = el("button", "", "⋯");
+    more.id = "gvmore";
+    more.type = "button";
+    more.title = "渲染与视角";
+    more.setAttribute("aria-label", "渲染与视角");
+    bar.appendChild(chips);
+    bar.appendChild(more);
+    document.body.appendChild(bar);
+
+    var mask = el("div"); mask.id = "gvmask";
+    var sheet = el("div"); sheet.id = "gvsheet";
+
+    var rowRender = el("div", "gvrow");
+    rowRender.appendChild(el("b", "", "渲染"));
+    var btnsRender = el("div", "gvbtns");
+    [["zero", "零渲染"], ["full", "带渲染"]].forEach(function (pair) {
+      var b = el("button", pair[0] === "zero" ? "on" : "", pair[1]);
+      b.type = "button";
+      b.setAttribute("data-render3d", pair[0]);
+      b.onclick = function () { renderRow(pair[0]); };
+      btnsRender.appendChild(b);
+    });
+    rowRender.appendChild(btnsRender);
+    sheet.appendChild(rowRender);
+
+    var rowView = el("div", "gvrow");
+    rowView.appendChild(el("b", "", "视角"));
+    var btnsView = el("div", "gvbtns");
+    [["top", "户型图"], ["bird", "鸟瞰 45°"], ["inside", "室内视角"]].forEach(function (pair) {
+      var b = el("button", "", pair[1]);
+      b.type = "button";
+      b.onclick = function () {
+        var t = document.querySelector('[data-view="' + pair[0] + '"]');
+        if (t) t.click();
+      };
+      btnsView.appendChild(b);
+    });
+    rowView.appendChild(btnsView);
+    sheet.appendChild(rowView);
+
+    var keys = Object.keys(E.floors || {});
+    if (keys.length > 1) {
+      var rowFloor = el("div", "gvrow");
+      rowFloor.appendChild(el("b", "", "楼层"));
+      var btnsFloor = el("div", "gvbtns");
+      keys.sort(function (a, b) { return Number(b) - Number(a); }).forEach(function (f) {
+        var b = el("button", String(f) === hashFloor ? "on" : "", (E.floorLabels && E.floorLabels[f]) || (Number(f) + "F"));
+        b.type = "button";
+        b.onclick = function () { location.hash = "floor=" + f; location.reload(); };
+        btnsFloor.appendChild(b);
+      });
+      rowFloor.appendChild(btnsFloor);
+      sheet.appendChild(rowFloor);
+    }
+
+    var note = el("p", "gvnote"); note.id = "gvnote";
+    sheet.appendChild(note);
+    var close = el("button", "gvclose", "收起");
+    close.type = "button";
+    sheet.appendChild(close);
+    document.body.appendChild(mask);
+    document.body.appendChild(sheet);
+
+    function openSheet(on) {
+      sheet.classList.toggle("on", on);
+      mask.classList.toggle("on", on);
+      more.classList.toggle("on", on);
+    }
+    more.onclick = function () { openSheet(!sheet.classList.contains("on")); };
+    close.onclick = function () { openSheet(false); };
+    mask.onclick = function () { openSheet(false); };
+  }
+
+  ready(function () {
+    trimHud();
+    buildFurniture();
+    setSpace(true);
+    buildUI();
+    applyScene(E.startScene || (E.scenes[0] && E.scenes[0].id) || "");
+  });
+})();
+</script>
+"""
+
+
+def scene_html_3d(p):
+    """业主版三维演示 HTML：与工作台三维同一个渲染内核（template.html），单文件、离线可用。
+
+    只差在「谁能动什么」：这里只有项目自己的情景 + 视角/图层/剖切，没有工作台的编辑入口。
+    同一个内核保证业主看到的亮灭、色温与工作台一致；没有三维数据时退回二维演示，不导空白页。
+    """
+    from .lighting3d import refnight_html, scene_for_template, ueyi_scene
+
+    d = p.get("design") or {}
+    floors = sorted({int(f.get("floor") or 1) for f in d.get("fixtures") or []}
+                    | {int(r.get("floor") or 1) for r in d.get("rooms") or []})
+    got = {}
+    for fl in floors:
+        try:
+            sc = ueyi_scene(p["id"], floor=fl)
+        except Exception:  # noqa: BLE001
+            continue
+        if isinstance(sc, dict) and not sc.get("error"):
+            got[str(fl)] = scene_for_template(sc)
+    if not got:
+        return scene_html(p)
+    start = next((str(fl) for fl in floors if str(fl) in got), next(iter(got)))
+    scenes = [
+        {"id": str(s.get("id") or ""), "name": str(s.get("name") or "情景"),
+         "note": str(s.get("description") or ""), "states": s.get("states") or {}}
+        for s in d.get("scenes") or []
+    ]
+    payload = {
+        "floors": got,
+        "startFloor": start,
+        "floorLabels": {k: ("%dF" % int(k) if int(k) > 0 else "B%d" % (1 - int(k))) for k in got},
+        "scenes": scenes,
+        "startScene": scenes[0]["id"] if scenes else "",
+        "project": str(p.get("name") or ""),
+        "code": str(p.get("code") or ""),
+    }
+    html = refnight_html(p["id"], floor=int(start), payload=payload)
+    if "</body>" in html:
+        html = html.replace("</body>", OWNER_3D_SCRIPT + "</body>", 1)
+    else:
+        html = html + OWNER_3D_SCRIPT
+    # 与 scene_html 一致返回 bytes：施工包 zip 要拿它算 sha256（str 会在那里炸）。
+    return html.encode("utf-8")
+
+
 def scene_html(p):
     """自包含的智能场景交互 HTML：只有底图 + 发光灯具 + 场景切换，其余内容一律不显示。"""
     _verify_3d_source(p)
@@ -1722,7 +2053,7 @@ def scene_html(p):
     deliverables = [
         {"code": f.get("code", ""), "name": f.get("name") or f.get("type") or "灯具",
          "model": f.get("model") or "", "room": f.get("space") or room_names.get(f.get("roomId"), ""),
-         "circuit": (f.get("circuit") or "未归属") if is_light(f) else "—",
+         "circuit": ("—" if circuit_rules.is_bridge_lamp(f) else (f.get("circuit") or "未归属")) if is_light(f) else "—",
          "qty": (round(float(f.get("length") or 0), 2) if str(f.get("type") or "") == "灯带" else 1),
          "unit": "m" if str(f.get("type") or "") == "灯带" else "个",
          "kind": "灯具" if is_light(f) else "外挂设备"}
@@ -2084,10 +2415,11 @@ def export_bytes(p, fmt, floor=None, audience="internal"):
     if fmt == "pdf":
         return pdf(p, include_price), "application/pdf", stem + suffix + ".pdf"
     if fmt == "html":
-        # 业主版：文件名直接写清项目与用途，方便转发与归档。
+        # 业主版：文件名直接写清项目与用途，方便转发与归档。2026-11-04 起出三维页
+        # （与工作台三维同一内核；没有三维数据时 scene_html_3d 自己退回二维演示）。
         pretty = re.sub(r"[^\w\u4e00-\u9fff\-]", "_", p.get("name", "项目"))[:24].strip("_") or "项目"
         return (
-            scene_html(p),
+            scene_html_3d(p),
             "text/html; charset=utf-8",
             f"{pretty}_灯光情景演示_V{p['version']:02}_R{p['revision']:03}{suffix}.html",
         )

@@ -9,6 +9,7 @@
  */
 import TEXT from "./data/circuit-rules-text.json" with { type: "json" };
 import REF from "./data/control-reference.json" with { type: "json" };
+import { isBridgeLamp } from "./busBridge";
 
 type Obj = Record<string, any>;
 
@@ -45,11 +46,16 @@ function roomOf(f: Obj, rooms: Map<string, string>): string {
   return f.space || rooms.get(f.roomId) || TEXT.unassignedRoom;
 }
 
-/** 按回路编号分组（只算灯，窗帘不算），保留出现顺序。 */
+/**
+ * 按回路编号分组（只算灯，窗帘不算），保留出现顺序。
+ * WiZ/Hue 网桥灯不算：单灯单控没有回路这一层，它们既不进「按回路看」，
+ * 也不该被「有灯没分回路」拦下（2026-11-04 用户口径）。
+ */
 export function groups(design: Obj): Map<string, Obj[]> {
   const out = new Map<string, Obj[]>();
   for (const f of design.fixtures || []) {
     if (f.type === "窗帘") continue;
+    if (isBridgeLamp(f)) continue;
     const k = circuitKey(f);
     if (!out.has(k)) out.set(k, []);
     out.get(k)!.push(f);

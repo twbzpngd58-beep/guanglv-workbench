@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   decorativeHaloRadiusUnits,
   defaultBeamAngle,
@@ -15,9 +15,12 @@ import { coveragePath, manualCoverage, obstaclesFor, sensorSectorPath } from "./
 import { lightPoolClipPath } from "./lightOcclusion";
 import { useSceneFade } from "./sceneFade";
 import { ghostFixturesOnFloor, isVoidRoom, voidLabel } from "./voids";
+import { RAIL_P, cabinetRoom, cabinetView } from "./cabinetRules";
 import { FURN_HANDLES, resizeFurniture, type FurnHandle } from "./furnitureResize";
 import { furniturePoints, hasFurniturePolygon, insertFurniturePoint, deleteFurniturePoint,
   moveFurniturePoint, resizeFurniturePolygon, normalizeFurniture } from "./furniturePolygon";
+import { buildTraceIndex, snapTracePoint, formatTraceLength, canvasDistance,
+  type TraceIndex, type SnapKind } from "./traceAid";
 
 /** Lamp glow colour, blended across the warm-to-cool range so it never jumps. */
 /** 光斑暖黄配色：色温只做轻微冷暖微调，本体始终是暖黄发光。 */
@@ -104,10 +107,14 @@ function fixtureReflectColour(f: Obj, cct: number): string {
   return stripReflectColour(cct);
 }
 
-export type Selection = {
-  kind: "rooms" | "fixtures" | "walls" | "openings" | "devices";
-  id: string;
-} | null;
+// 对象选中按集合取（rooms/fixtures/…），箱体是派生符号、不对应集合里的某一条：
+// 拆成判别联合，d[kind] 这类索引在类型上就不会拿 "cabinet" 去取数组。
+export type ObjectKind = "rooms" | "fixtures" | "walls" | "openings" | "devices";
+export type Selection =
+  | { kind: ObjectKind; id: string }
+  // strong 强电箱 / weak 弱电箱 / outside 箱外（吊顶·嵌入·底盒）
+  | { kind: "cabinet"; id: string }
+  | null;
 interface Props {
   design: Design;
   mini?: boolean;
@@ -157,9 +164,19 @@ interface Props {
   showGrid?: boolean;
   showSource?: boolean;
   background?: string;
-  /** 底图在设计坐标里的摆放矩形（给 DXF 底图用：不给就按老规矩铺在左上角那块）。
-   *  有它就顺带把视野收到这块上，图纸和空间边界才看得清、对得准。 */
+  /** 底图在设计坐标里的摆放矩形（DXF 按图纸外接框、图片按 canvas_fit 的 box 都给）。
+   *  有它就顺带把视野收到这块上，图纸和空间边界才看得清、对得准；不给才按老规矩铺左上角。 */
   backgroundRect?: { x: number; y: number; w: number; h: number } | null;
+  /** 描图引导层：后端从图片底图算出的墙带折线（设计坐标）。空＝没有墙可吸。 */
+  traceGuides?: { x: number; y: number }[][] | null;
+  /** 引导层开关：开＝画出墙带并且吸附；关＝回到自由描图（墙带是候选，不是真相）。 */
+  showGuides?: boolean;
+  /** 正交锁：把差一点就横平竖直的点扶正；斜墙（偏角超容差）不逼成正交。 */
+  orthoLock?: boolean;
+  /** 底图不透明度：图片底图太浓会看不清自己描的线，压淡了才分得开「图」和「我画的」。 */
+  underlayOpacity?: number;
+  /** 描图时把「量到的长度」报出去（每段与收口时整圈），给尺度标定当证据。 */
+  onTraceLength?: (text: string, units?: number) => void;
   readonly?: boolean;
   /** 底图与空间：布灯前的灰色蒙版（导入图纸后显示，确定后消失）。 */
   planMasked?: boolean;
@@ -219,6 +236,11 @@ export function Plan({
   showSource = false,
   background,
   backgroundRect,
+  traceGuides,
+  showGuides = false,
+  orthoLock = false,
+  underlayOpacity,
+  onTraceLength,
   readonly = false,
   planMasked = false,
   projectArea = 100,
@@ -298,6 +320,38 @@ export function Plan({
     return () => observer.disconnect();
   }, [zoom, backgroundRect?.x, backgroundRect?.y, backgroundRect?.w, backgroundRect?.h]);
   useEffect(() => { if (!polyDrawing) setPolyHover(null); }, [tool]);
+  // ——— 描图辅助（图片底图没有矢量墙线，靠后端算出的墙带候选来吸） ———
+  // 只有一处开关：引导层关掉＝线不画、也不吸，回到自由描图。墙带是几何候选不是真相
+  // （贴墙柜体、双线家具也可能被算成墙带），所以不能默认吸死。
+  const traceOn = !mini && !!showGuides && Array.isArray(traceGuides) && traceGuides.length > 0;
+  const emptyIndex: TraceIndex = { vertices: [], edges: [], lines: 0 };
+  // 新描的点：墙带 + 现有空间角点都算目标（改一个角，隔壁共用这堵墙的房间对得上）。
+  const traceIndex = useMemo(
+    () => (traceOn ? buildTraceIndex(traceGuides, design.rooms, floor) : emptyIndex),
+    [traceOn, traceGuides, design.rooms, floor],
+  );
+  // 拖已有顶点时只用墙带：不然那个点自己就在索引里，会吸住自己不动。
+  const guideIndex = useMemo(
+    () => (traceOn ? buildTraceIndex(traceGuides, [], floor) : emptyIndex),
+    [traceOn, traceGuides, floor],
+  );
+  // 吸合半径按屏幕像素定：放大图纸后不该更容易吸到远处那面墙。
+  const traceTol = 10 * unitsPerPixel;
+  const [snapHint, setSnapHint] = useState<{ x: number; y: number; from: number; kind: SnapKind } | null>(null);
+  useEffect(() => { if (!traceOn && !orthoLock) setSnapHint(null); }, [traceOn, orthoLock]);
+  /** 这一笔落在哪：先吸墙带/角点，再谈正交；按住 Alt＝这一笔不吸。 */
+  const traced = (p: { x: number; y: number }, prev: { x: number; y: number } | null, alt: boolean,
+    index = traceIndex) => {
+    if (!traceOn && !orthoLock) return { ...p, kind: "none" as SnapKind, moved: 0 };
+    const r = snapTracePoint(index, p, { tol: traceTol, prev: orthoLock ? prev : null, ortho: orthoLock, alt });
+    return { ...r, kind: r.kind, moved: r.moved };
+  };
+  const reportLength = (a: { x: number; y: number } | null, b: { x: number; y: number }) => {
+    if (!a) return;
+    const units = canvasDistance(a, b);
+    if (!(units > 0)) return;
+    onTraceLength?.(formatTraceLength(units), units);
+  };
   const night = !!scene;
   // 定位到某盏灯：把该点平移到**当前 viewBox** 中央；只认 token，改缩放不重定位。
   // 视野中心不能写死 410/345 —— 实际 viewBox 会随底图/本层空间外接框变化，
@@ -359,25 +413,20 @@ export function Plan({
     x: Number(f.x) || 0,
     y: Number(f.y) || 0,
   }));
-  // 自动建立系统架构出的总线设备（网关 / 电源 / 执行器 / 主机 …）没有房间也没有坐标，
-  // 以前逐台画在 (0,0)，整摞叠成一团看不清。现在统一收进一个「电箱」符号：
-  // 图纸上只画箱体和台数，逐台型号仍看「智能设备」页与导出清单（数据一条不动）。
-  // 判据＝自动生成行，或「没房间也没坐标」的老设备行（老生成器的 DG-16 这类同样会落到原点）。
-  const cabinetDevices = (design.devices || []).filter(
-    (v: Obj) => v.source === "auto-arch" || (v.x == null && v.y == null && !v.roomId),
-  );
-  const cabinetSelected = cabinetDevices.some(
-    (v: Obj) => selection?.kind === "devices" && selection.id === v.id,
-  );
+  // 系统架构自动生成的那批设备没有房间也没有坐标，以前逐台画在 (0,0) 叠成一团，后来收进一个「电箱」符号。
+  // 但物理上它们不在同一个箱里：导轨设备在强电箱，网桥与云主机在弱电箱，感应器在天花、驱动器在吊顶、
+  // 面板在 86 底盒——都不该画进配电箱。现在按 cabinetRules 的同一套判据拆成三个符号，
+  // 点箱体在右边栏看导轨占位与接线（数据一条不动，逐台型号仍在「智能设备」页与导出清单里）。
+  const cabinet = cabinetView(design);
+  const cabinetDevices = cabinet.items.map((v: { dev: Obj }) => v.dev);
+  const cabinetSelected = (id: string) => selection?.kind === "cabinet" && selection.id === id;
   // 电箱画在玄关/门厅/储藏/过道这类「配电常落位」的空间里；没有就贴在本层平面的左上角。
   const cabinetAnchor = (() => {
     if (!cabinetDevices.length || mini || floor !== 1) return null;
     const roomsOnFloor = (design.rooms || []).filter(
       (r: Obj) => (Number.isFinite(r.floor) ? Number(r.floor) : 1) === floor,
     );
-    const pref = roomsOnFloor.find((r: Obj) =>
-      /玄关|门厅|入户|储藏|设备间|配电|过道|走廊|楼梯/.test(String(r.name || "")),
-    );
+    const pref = cabinetRoom(design, floor);
     if (pref) return interiorPoint(pref);
     if (!roomsOnFloor.length) return { x: 40, y: 40 };
     const minX = Math.min(...roomsOnFloor.map((r: Obj) => Number(r.x) || 0));
@@ -488,22 +537,31 @@ export function Plan({
       capture(e.pointerId);
       return;
     }
-    // 布灯 / 添加设备·窗帘模式：点哪落哪——把落点坐标交回 Workspace，随后弹窗确认。
-    if ((tool === "place-lamp" || tool === "place-device" || tool === "place-furniture") && !readonly) {
-      onPlacePoint?.(pos(e));
+    // 布灯 / 添加设备·窗帘模式 / 尺度标定取点：点哪给哪——把落点坐标交回 Workspace，随后弹窗确认。
+    // pick-point 走吸附：量两端取实长时，点必须落在墙上，不然标出来的系数自己就是抖的。
+    if ((tool === "place-lamp" || tool === "place-device" || tool === "place-furniture" || tool === "pick-point") && !readonly) {
+      onPlacePoint?.(tool === "pick-point" ? traced(pos(e), null, e.altKey) : pos(e));
       return;
     }
     // 画多边形（实测 2026-10-14：在 DXF 底图上描边界）：点一下落一个点，
     // 点回起点（或双击）收口 → onPolygon 把这一圈点交回去。
     if (polyDrawing && !readonly) {
       if (e.button !== 0 || e.detail > 1) return;
-      const q = pos(e);
+      const raw = pos(e);
+      // 上一笔是这一笔的正交基准；第一个点还没有基准，只吸墙不扶正。
+      const q = traced(raw, poly.length ? poly[poly.length - 1] : null, e.altKey);
+      setSnapHint(q.kind === "none" ? null : { x: q.x, y: q.y, from: q.moved, kind: q.kind });
       if (poly.length >= 3 && Math.hypot(q.x - poly[0].x, q.y - poly[0].y) < 6 * unitsPerPixel) {
-        if (tool === "draw-furn-poly") onFurnPolygon?.(poly);
-        else onPolygon?.(poly);
+        // 交出去的点只留坐标：吸附用的 kind/from/moved 是这一笔的临时信息，
+        // 混进 points 会被写进项目存档，而且标定缩放后 from 还是老坐标（实测 2026-11-03）。
+        const ring = poly.map((v) => ({ x: v.x, y: v.y }));
+        if (tool === "draw-furn-poly") onFurnPolygon?.(ring);
+        else onPolygon?.(ring);
         setPoly([]);
+        onTraceLength?.("");
         return;
       }
+      reportLength(poly.length ? poly[poly.length - 1] : null, q);
       setPoly((v) => {
         const last = v[v.length - 1];
         return last && Math.hypot(q.x - last.x, q.y - last.y) < 2 * unitsPerPixel ? v : [...v, q];
@@ -513,6 +571,8 @@ export function Plan({
     }
     if ((tool === "draw-door" || tool === "draw-window") && !readonly) {
       if (e.button !== 0) return;
+      // 门窗不另吸墙带：snapBoundary 已把点压到空间边界那条线上，再往墙带挪就会脱离边界、
+      // 与 edgeIndex 对不上。墙描准了（上面那层吸墙带），门窗自然落在墙上。
       const q = snapBoundary(design.rooms, pos(e), floor, 12 * unitsPerPixel);
       if (!q) { onEditError?.("请在空间边界上点击门窗的两端"); return; }
       if (!openingStart) { setOpeningStart(q); return; }
@@ -528,7 +588,9 @@ export function Plan({
     }
     // 灯带折线（§十.10 口径②）：点一下加一个拐点，长度按折线自动量。
     if (tool === "draw-strip" && !readonly) {
-      onStripPoint?.(pos(e).x, pos(e).y);
+      const q = traced(pos(e), null, e.altKey);
+      setSnapHint(q.kind === "none" ? null : { x: q.x, y: q.y, from: q.moved, kind: q.kind });
+      onStripPoint?.(q.x, q.y);
       return;
     }
     // 选择工具下在空白处按住拖动＝平移（点一下仍是取消选中）。
@@ -564,7 +626,7 @@ export function Plan({
     };
     capture(e.pointerId);
   }
-  function move(e: { clientX: number; clientY: number }) {
+  function move(e: { clientX: number; clientY: number; altKey?: boolean }) {
     const dr = drag.current;
     if (!dr) return;
     if (dr.roam) {
@@ -615,8 +677,14 @@ export function Plan({
       }
     } else if (dr.handle === "point") {
       obj.points = roomPoints(obj);
-      obj.points[dr.index].x += dx;
-      obj.points[dr.index].y += dy;
+      const raw = { x: obj.points[dr.index].x + dx, y: obj.points[dr.index].y + dy };
+      // 拖顶点也吸墙带。只用墙带索引（不含本空间角点）：含自己的话会吸回原位、拖不动。
+      const ring = obj.points.length;
+      const prevVertex = ring > 1 ? obj.points[(dr.index - 1 + ring) % ring] : null;
+      const t = traced(raw, prevVertex ? { x: prevVertex.x, y: prevVertex.y } : null,
+        !!e.altKey, guideIndex);
+      obj.points[dr.index].x = t.x;
+      obj.points[dr.index].y = t.y;
       const xs = obj.points.map((v: Obj) => v.x),
         ys = obj.points.map((v: Obj) => v.y);
       obj.x = Math.min(...xs);
@@ -795,10 +863,15 @@ export function Plan({
       }}
       onPointerDown={(e) => down(e)}
       onPointerMove={(e) => {
-        if (polyDrawing && !readonly) setPolyHover(pos(e));
+        if (polyDrawing && !readonly) {
+          // 预览就用吸附后的点：橡皮筋落在哪、点下去就在哪，不玩「看着没到却吸过去了」。
+          const q = traced(pos(e), poly.length ? poly[poly.length - 1] : null, e.altKey);
+          setPolyHover(q);
+          setSnapHint(q.kind === "none" ? null : { x: q.x, y: q.y, from: q.moved, kind: q.kind });
+        }
         if (openingStart) setOpeningHover(pos(e));
       }}
-      onPointerLeave={() => setPolyHover(null)}
+      onPointerLeave={() => { setPolyHover(null); setSnapHint(null); }}
       aria-label={mini ? "项目户型预览" : "可编辑户型画布"}
     >
       <defs>
@@ -849,7 +922,7 @@ export function Plan({
               y={backgroundRect ? backgroundRect.y : 25}
               width={backgroundRect ? backgroundRect.w : 750}
               height={backgroundRect ? backgroundRect.h : 610}
-              opacity={night ? 0.88 : 1}
+              opacity={underlayOpacity != null ? underlayOpacity : night ? 0.88 : 1}
               // 矩形就是按这张图的外接框算的，所以直接铺满、不要等比留白
               preserveAspectRatio={backgroundRect ? "none" : "xMidYMid meet"}
             />
@@ -879,6 +952,21 @@ export function Plan({
             )}
           </>
         )}
+        {/* 描图引导层：后端从这张图片算出的墙带候选（wall_guide）。
+            只画线、不吃指针，且界面上能一键关——它是几何候选不是真相，贴墙柜体也算得出来。 */}
+        {traceOn && (
+          <g pointerEvents="none" data-wall-guide="true">
+            {(traceGuides || []).map((line, i) => (
+              <polygon key={`u${i}`} points={line.map((v) => `${v.x},${v.y}`).join(" ")} fill="none"
+                stroke="#ffffff" strokeWidth="3.4" opacity="0.4" vectorEffect="non-scaling-stroke" />
+            ))}
+            {(traceGuides || []).map((line, i) => (
+              <polygon key={i} points={line.map((v) => `${v.x},${v.y}`).join(" ")} fill="none"
+                stroke={night ? "#5ef0a8" : "#0f9d58"} strokeWidth="1.5" strokeDasharray="7 5"
+                opacity="0.95" vectorEffect="non-scaling-stroke" />
+            ))}
+          </g>
+        )}
         {poly.length > 0 && (
           <g pointerEvents="none">
             <polyline points={poly.map((v) => `${v.x},${v.y}`).join(" ")} fill="none"
@@ -893,6 +981,32 @@ export function Plan({
                 fill={i === 0 ? "#ffffff" : "#c98a2e"} stroke="#c98a2e" strokeWidth="0.6" vectorEffect="non-scaling-stroke" />
             ))}
           </g>
+        )}
+        {/* 吸附落点标记：圈住「吸到哪了」，并从你手点的位置牵一条线过去——
+            点被改了要让人看见，不然只会觉得「这线自己会跑」。 */}
+        {snapHint && (
+          <g pointerEvents="none" data-snap-mark={snapHint.kind}>
+            {snapHint.from > unitsPerPixel && (
+              <line x1={polyHover?.x ?? snapHint.x} y1={polyHover?.y ?? snapHint.y}
+                x2={snapHint.x} y2={snapHint.y} stroke="#8a8f98" strokeWidth="1"
+                strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />
+            )}
+            <circle cx={snapHint.x} cy={snapHint.y}
+              r={(snapHint.kind === "vertex" ? 3.2 : 2.6) * unitsPerPixel} fill="none"
+              stroke="#ffffff" strokeWidth="3" opacity="0.55" vectorEffect="non-scaling-stroke" />
+            <circle cx={snapHint.x} cy={snapHint.y}
+              r={(snapHint.kind === "vertex" ? 3.2 : 2.6) * unitsPerPixel} fill="none"
+              stroke={snapHint.kind === "vertex" ? "#12b05a" : snapHint.kind === "ortho" ? "#a06ce8" : "#e8a33d"}
+              strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+          </g>
+        )}
+        {/* 实时长度：26 设计单位＝1 米。图片没标定过时这个数会「不像话」，那正是标定的证据。 */}
+        {polyDrawing && polyHover && poly.length > 0 && canvasDistance(poly[poly.length - 1], polyHover) > 0 && (
+          <text x={polyHover.x + 6 * unitsPerPixel} y={polyHover.y - 6 * unitsPerPixel}
+            fontSize={12 * unitsPerPixel} fill="#8a5a12" stroke="#ffffff" strokeWidth={3 * unitsPerPixel}
+            paintOrder="stroke" pointerEvents="none" data-trace-length="true">
+            {formatTraceLength(canvasDistance(poly[poly.length - 1], polyHover))}
+          </text>
         )}
         {openingStart && (
           <g pointerEvents="none" data-opening-rubberband="true">
@@ -1700,27 +1814,6 @@ export function Plan({
                 />
               );
             })}
-        {/* 电箱：自动建立系统架构的总线设备收在一个箱体里，不再逐台落在原点叠成一摞。 */}
-        {!mini && showDeviceLayer && cabinetAnchor && (
-          <g
-            data-cabinet="1"
-            transform={`translate(${cabinetAnchor.x} ${cabinetAnchor.y})`}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              if (cabinetDevices[0]) onSelect?.({ kind: "devices", id: cabinetDevices[0].id });
-            }}
-            style={{ cursor: "pointer" }}
-          >
-            <title>{`电箱内 ${cabinetDevices.length} 台：${cabinetDevices.map((v: Obj) => v.name).join("、")}`}</title>
-            {cabinetSelected && (
-              <rect x={-27} y={-18} width={54} height={36} rx={7} fill="none" stroke="#88693a" strokeWidth={1.6} opacity={0.7} />
-            )}
-            <rect x={-23} y={-14} width={46} height={28} rx={4} fill="#ffffff" opacity={0.95} />
-            <rect x={-23} y={-14} width={46} height={28} rx={4} fill="none" stroke="#8b7f5f" strokeWidth={cabinetSelected ? 2.6 : 1.8} />
-            <text x={0} y={-1} textAnchor="middle" fontSize={9} fontWeight={600} fill="#6b6255" pointerEvents="none">电箱</text>
-            <text x={0} y={9.5} textAnchor="middle" fontSize={7} fill="#8c877f" pointerEvents="none">{cabinetDevices.length} 台</text>
-          </g>
-        )}
         {!mini &&
           showDeviceLayer &&
           design.devices
@@ -1907,6 +2000,75 @@ export function Plan({
               </g>
             );
           })}
+        {/* 三个箱体符号：判据与右边栏电箱面板共用 cabinetRules，不会出现「图上三个、面板两组」的错位。 */}
+        {!mini && showDeviceLayer && cabinetAnchor && (
+          <>
+            <g
+              data-cabinet="strong"
+              transform={`translate(${cabinetAnchor.x} ${cabinetAnchor.y})`}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onSelect?.({ kind: "cabinet", id: "strong" });
+              }}
+              style={{ cursor: "pointer" }}
+            >
+              <title>{`强电箱 · 导轨 ${cabinet.strong.railCount} 条 × ${RAIL_P}P：${cabinet.strong.rails
+                .flatMap((r) => r.slots.map((s) => `${s.item.dev.name} ${s.item.info.p}P`))
+                .join("、")}${cabinet.strong.pending.length ? `；位数待填 ${cabinet.strong.pending.length} 台` : ""}`}</title>
+              {cabinetSelected("strong") && (
+                <rect x={-27} y={-18} width={54} height={36} rx={7} fill="none" stroke="#88693a" strokeWidth={1.6} opacity={0.7} />
+              )}
+              <rect x={-23} y={-14} width={46} height={28} rx={4} fill="#ffffff" opacity={0.95} />
+              <rect x={-23} y={-14} width={46} height={28} rx={4} fill="none" stroke="#8b7f5f" strokeWidth={cabinetSelected("strong") ? 2.6 : 1.8} />
+              <text x={0} y={-2} textAnchor="middle" fontSize={8.5} fontWeight={600} fill="#6b6255" pointerEvents="none">强电箱</text>
+              <text x={0} y={8.5} textAnchor="middle" fontSize={7} fill="#8c877f" pointerEvents="none">
+                {cabinet.strong.usedP}P / {cabinet.strong.capacityP}P
+              </text>
+            </g>
+            {cabinet.weak.length > 0 && (
+              <g
+                data-cabinet="weak"
+                transform={`translate(${cabinetAnchor.x + 56} ${cabinetAnchor.y})`}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  onSelect?.({ kind: "cabinet", id: "weak" });
+                }}
+                style={{ cursor: "pointer" }}
+              >
+                <title>{`弱电箱 · ${cabinet.weak.length} 台（网络侧，不占导轨）：${cabinet.weak.map((v) => v.dev.name).join("、")}`}</title>
+                {cabinetSelected("weak") && (
+                  <rect x={-27} y={-18} width={54} height={36} rx={7} fill="none" stroke="#4f7fc1" strokeWidth={1.6} opacity={0.7} />
+                )}
+                <rect x={-23} y={-14} width={46} height={28} rx={4} fill="#ffffff" opacity={0.95} />
+                <rect x={-23} y={-14} width={46} height={28} rx={4} fill="none" stroke="#7d90a8" strokeWidth={cabinetSelected("weak") ? 2.6 : 1.8} />
+                <text x={0} y={-2} textAnchor="middle" fontSize={8.5} fontWeight={600} fill="#5b6b7d" pointerEvents="none">弱电箱</text>
+                <text x={0} y={8.5} textAnchor="middle" fontSize={7} fill="#8c877f" pointerEvents="none">{cabinet.weak.length} 台</text>
+              </g>
+            )}
+            {cabinet.outside.length > 0 && (
+              <g
+                data-cabinet="outside"
+                transform={`translate(${cabinetAnchor.x - 62} ${cabinetAnchor.y})`}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  onSelect?.({ kind: "cabinet", id: "outside" });
+                }}
+                style={{ cursor: "pointer" }}
+              >
+                <title>{`不在配电箱内 · ${cabinet.outside.length} 台（吊顶 / 嵌入式 / 86 底盒）：${cabinet.outside.map((v) => v.dev.name).join("、")}`}</title>
+                {cabinetSelected("outside") && (
+                  <rect x={-34} y={-13} width={68} height={26} rx={7} fill="none" stroke="#88693a" strokeWidth={1.6} opacity={0.7} />
+                )}
+                {/* 底色要填实：fill=none 只有描边能命中，压在房间上时点击会被房间抢走（0图层2 实测点不动）。 */}
+                <rect x={-30} y={-9} width={60} height={18} rx={4} fill="#ffffff" opacity={0.82} />
+                <rect x={-30} y={-9} width={60} height={18} rx={4} fill="none" stroke="#9a8f76" strokeWidth={cabinetSelected("outside") ? 2.2 : 1.2} strokeDasharray="3 2.4" />
+                <text x={0} y={4} textAnchor="middle" fontSize={7} fill="#8c877f" pointerEvents="none">
+                  箱外 {cabinet.outside.length} 台（吊顶·底盒）
+                </text>
+              </g>
+            )}
+          </>
+        )}
         {/* 挑空灯具在别的楼层：本层淡显（只读，跟随情景），并在角上说明 */}
         {!mini &&
           ghostFixtures.map(({ fixture: f, fromFloor, roomName }) => {

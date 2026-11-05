@@ -16,3 +16,8 @@ frontend/playwright-report/
 frontend/tsconfig.tsbuildinfo
 dist-release/
 .DS_Store
+
+# 安装包构建产物（CI 与本地临时目录，不进仓库）
+/build/
+/dist/
+frontend/node_modules

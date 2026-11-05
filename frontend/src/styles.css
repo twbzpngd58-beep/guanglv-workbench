@@ -6262,6 +6262,25 @@ hr {
 .space-preview-canvas-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .space-preview-canvas-tools .subtle { font-size: 11.5px; }
 .space-preview-zoom { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #6b665d; }
+/* 描图辅助工具条：吸附/正交/标定/底图浓淡都在画布上方一排，开关状态用按钮色区分。 */
+.space-preview-trace { display: inline-flex; align-items: center; gap: 6px; padding-left: 8px;
+  border-left: 1px solid #e2e8df; font-size: 12px; color: #6b665d; }
+.space-preview-trace b { color: #8a5a12; font-weight: 600; }
+.space-preview-opacity { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #6b665d; }
+.space-preview-opacity input[type="range"] { width: 76px; }
+/* 尺度标定面板贴在画布下沿：取完两点就地填实长，不用跳去别的页。 */
+.space-preview-calib { flex: none; margin-top: 8px; padding: 10px 12px;
+  border: 1px solid #e6d9bd; border-radius: 10px; background: #fbf6ea; font-size: 12px; }
+.space-preview-calib-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.space-preview-calib-head strong { font-size: 13px; }
+.space-preview-calib p { margin: 4px 0; }
+.space-preview-calib-known { display: inline-flex; align-items: center; gap: 6px; margin-right: 8px; }
+.space-preview-calib-known input { width: 92px; padding: 5px 6px; border: 1px solid #dbe2d8; border-radius: 6px; }
+.space-preview-calib-result { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #e0d3b6; }
+.space-preview-calib-result table { border-collapse: collapse; margin: 6px 0 8px; }
+.space-preview-calib-result th, .space-preview-calib-result td {
+  padding: 2px 10px 2px 0; text-align: left; font-weight: 400; }
+.space-preview-calib-result th { color: #8b857b; font-size: 11px; }
 .space-preview-canvas > .floor-plan {
   flex: 1; min-height: 0; width: 100%; height: 100%;
   background: #eeede9; border: 1px solid #e2e8df; border-radius: 10px;
@@ -6301,6 +6320,8 @@ hr {
 .space-height-dialog input, .space-preview-opening input { padding: 8px; border: 1px solid #c7d0c4; border-radius: 6px; width: 100%; }
 .space-height-dialog p { color: #5f6c59; font-size: 12px; }
 .space-preview-opening { border-top: 1px solid #d7dfd1; padding: 12px 0; display: flex; flex-direction: column; gap: 6px; }
+.space-preview-locate { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.space-preview-locate:hover { text-decoration: underline; }
 .space-furniture-panel { padding: 0 0 14px; margin-bottom: 14px; border-bottom: 1px solid #d7dfd1; }
 .space-furniture-panel select { max-width: 100%; padding: 6px; border: 1px solid #c7d0c4; border-radius: 5px; background: #fff; }
 .space-furniture-list { display: flex; flex-wrap: wrap; gap: 5px; padding: 8px 0; }
@@ -6783,6 +6804,11 @@ table.owner-clients td small { white-space:normal; }
   margin-top: 3px;
 }
 
+/* 灯具页签：点行就地展开（不跳画布、不滚回顶部），保存后收起 */
+.lamp-slot { margin-bottom: 8px; }
+.lamp-slot .lamp-card { margin-bottom: 0; }
+.lamp-slot-foot { display: flex; justify-content: flex-end; margin-top: 6px; }
+
 /* 灯具卡 / 行 */
 .lamp-card {
   background: #f8f6f3;
@@ -6893,9 +6919,10 @@ p.lamp-lock,
   text-align: right;
 }
 .lamp-row.is-on .pct { color: var(--green); font-weight: 600; }
-/* 已改灯具：五列排布（编号 / 名称 / 已改 / 状态点 / 亮度+色温现值） */
+/* 灯具行：六列排布（编号 / 名称 / 已改 / 已调 / 状态点 / 亮度+色温现值）。
+   没出现的标记列宽度自动为 0，所以「已改 / 已调」各占一列也不会挤。 */
 .lamp-row {
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
 }
 .lamp-row .chg {
   grid-column: 3;
@@ -6908,13 +6935,22 @@ p.lamp-lock,
   line-height: 15px;
   white-space: nowrap;
 }
-.lamp-row .dot { grid-column: 4; }
+/* 已调＝本情景里单灯手动调过（跟着情景一起保存），和「未保存的已改」用不同颜色区分 */
+.lamp-row .chg.tun {
+  grid-column: 4;
+  background: #dcece6;
+  color: #2f6d5b;
+}
+.lamp-row .dot { grid-column: 5; }
 .lamp-row .pct {
-  grid-column: 5;
+  grid-column: 6;
   min-width: 60px;
 }
 .lamp-row.is-changed { background: #fbf7ee; }
 .lamp-row.is-changed:hover { background: #f7f1e4; }
+.lamp-row.is-tuned { background: #f2f7f4; }
+.lamp-row.is-tuned:hover { background: #eaf2ee; }
+.lamp-row.is-tuned.is-changed { background: #f8f4e8; }
 /* 单灯卡：草稿 vs 已保存的差异（原值 → 现值） */
 .lamp-changed {
   display: flex;
@@ -6939,6 +6975,9 @@ p.lamp-lock,
   font-weight: 600;
   line-height: 15px;
 }
+/* 单灯卡：本情景里手动调过的基准（原值 → 现值），保存后仍然显示 */
+.lamp-changed.is-tuned { background: #eef4f1; color: #2f6d5b; }
+.lamp-changed.is-tuned .tag { background: #4b8f78; }
 /* 灯具卡上的「编号」＝定位入口：点一下在图上圈出这盏灯 */
 .lamp-card-locate {
   flex: 1;
@@ -7923,3 +7962,93 @@ p.lamp-lock,
 .fixture-fields .catalog-card { flex-direction: column; gap: 8px; }
 .fixture-fields .catalog-shot { flex: none; width: 100%; height: 108px; }
 .fixture-fields .catalog-name { font-size: 12px; }
+
+/* 电箱面板：22.5P 导轨占位 + 弱电箱 + 总线接线图（颜色只用语义色，两套主题都靠变量走） */
+.gv-cab { display: flex; flex-direction: column; gap: 2px; }
+.gv-cab-sum { margin-bottom: 6px; }
+.gv-cab-kv { display: grid; grid-template-columns: 68px 1fr; gap: 8px; padding: 5px 0; border-bottom: 1px dashed var(--line); font-size: 11px; }
+.gv-cab-kv span { color: var(--muted); }
+.gv-cab-kv b { font-weight: 500; color: var(--ink); }
+.gv-cab-hint, .gv-cab-warn { border-radius: 5px; padding: 7px 9px; font-size: 10.5px; line-height: 1.55; margin: 8px 0 2px; }
+.gv-cab-hint { border: 1px dashed var(--line); color: var(--muted); }
+.gv-cab-warn { border: 1px solid #b08a3c; background: rgba(199, 154, 79, 0.14); color: #8a6a25; }
+.gv-cab-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 10px; letter-spacing: .1em; color: var(--green); margin: 14px 0 6px; }
+.gv-cab-sec i { font-style: normal; letter-spacing: 0; font-size: 9.5px; color: var(--muted); }
+.gv-cab-focus { border-left: 2px solid var(--green); padding-left: 7px; margin-left: -9px; }
+/* 强电箱正视：按实拍（黑框箱体＋白底＋蓝色位数条＋模块正面照）画，箱内颜色不跟主题走，
+   因为箱体本身是浅色实物，深色壳里也要看得出是同一只箱。 */
+.gv-cab-box { display: block; width: 100%; }
+.gv-cab-box text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.gv-cab-bezel { fill: #17171a; }
+.gv-cab-liner { fill: #efe9dd; stroke: #3a3a40; stroke-width: 0.6; }
+.gv-cab-screw circle { fill: #d6d9dd; stroke: #8b9098; stroke-width: 0.5; }
+.gv-cab-screw line { stroke: #6b7078; stroke-width: 0.7; }
+.gv-cab-din { fill: #b9b2a2; stroke: #928b7c; stroke-width: 0.4; }
+.gv-cab-fill rect { fill: #f8f5ee; stroke: #d6d0c1; stroke-width: 0.6; }
+.gv-cab-fill line { stroke: #e3ddce; stroke-width: 0.6; }
+.gv-cab-filltx { font-size: 7.5px; fill: #a89f8b; }
+.gv-cab-cell { fill: #cfe0ea; stroke: #a6c1d1; stroke-width: 0.5; }
+.gv-cab-cellhalf { fill: #dde9f1; }
+.gv-cab-celltx { font-size: 6.4px; fill: #35586d; }
+.gv-cab-railtag { font-size: 7.4px; fill: #8b8577; }
+.gv-cab-mod rect { fill: #26262c; stroke: #4c4c55; stroke-width: 0.6; }
+.gv-cab-mod circle { fill: #74747e; }
+.gv-cab-led { fill: #b6412f; }
+.gv-cab-busr { fill: #c23b3b; }
+.gv-cab-busk { fill: #23232a; }
+.gv-cab-modhit { fill: transparent; stroke: rgba(40, 36, 30, 0.22); stroke-width: 0.6; }
+.gv-cab-modhit-on { stroke: #b08a3c; stroke-width: 1.8; }
+.gv-cab-modtx { font-size: 8px; fill: #46423b; }
+.gv-cab-modtx-on { fill: #7d5c17; font-weight: 700; }
+.gv-cab-modsub { font-size: 6.8px; fill: #9b9382; }
+.gv-cab-card { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin: 8px 0 2px; }
+.gv-cab-cardimg { flex: 0 0 116px; }
+.gv-cab-cardimg img { width: 116px; max-height: 88px; object-fit: contain; background: #fff; border-radius: 3px; }
+.gv-cab-noimg { width: 116px; height: 62px; display: flex; align-items: center; justify-content: center; border: 1px dashed var(--line); border-radius: 4px; font-size: 9px; color: var(--muted); text-align: center; padding: 4px; }
+.gv-cab-cardinfo { flex: 1 1 auto; min-width: 0; }
+.gv-cab-thumb { display: block; width: 34px; height: 26px; border-radius: 3px; background: #fff; overflow: hidden; flex: none; }
+.gv-cab-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.gv-cab-thumb i { display: block; width: 100%; height: 100%; border: 1px dashed var(--line); border-radius: 3px; }
+.gv-cab-rowmain { min-width: 0; }
+.gv-cab-row.gv-cab-rowimg { grid-template-columns: 34px 1fr 54px; }
+.gv-cab-secwire { align-items: center; }
+.gv-cab-seg { display: inline-flex; gap: 2px; }
+.gv-cab-seg button { font-size: 9.5px; letter-spacing: 0; color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 4px; padding: 1px 7px; cursor: pointer; }
+.gv-cab-seg button.on { color: var(--green); border-color: var(--green); }
+/* 接线示意 */
+.gv-cab-wsvg { display: block; width: 100%; }
+.gv-cab-wsvg text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.gv-cab-wrail { font-size: 7px; fill: var(--muted); }
+.gv-cab-wfoot { font-size: 7px; fill: var(--muted); }
+.gv-cab-wnode { fill: var(--sage); stroke: var(--line); stroke-width: 0.8; }
+.gv-cab-wnode-on { stroke: var(--green); stroke-width: 1.8; }
+.gv-cab-wlab { font-size: 8px; fill: var(--ink); }
+.gv-cab-wsub { font-size: 6.8px; fill: var(--muted); }
+.gv-cab-wdst { fill: none; stroke-width: 1; stroke-opacity: 0.75; stroke-dasharray: 3 2; }
+.gv-cab-wlink line { stroke-width: 2.2; }
+.gv-cab-wlink polyline { stroke-width: 2.4; }
+polyline.gv-cab-wlink { stroke-width: 2.4; }
+.gv-cab-wire { cursor: pointer; }
+.gv-cab-row { display: grid; grid-template-columns: 1fr 54px; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 5px; padding: 6px 8px; margin-bottom: 5px; cursor: pointer; }
+.gv-cab-row.gv-cab-on { border-color: var(--green); background: rgba(136, 105, 58, 0.1); }
+.gv-cab-row.gv-cab-todo { border-style: dashed; border-color: #b08a3c; }
+.gv-cab-nm { font-size: 11px; color: var(--ink); display: flex; align-items: center; gap: 6px; }
+.gv-cab-nm em { font-style: normal; font-size: 9px; border: 1px solid #b08a3c; color: #8a6a25; border-radius: 3px; padding: 0 4px; }
+.gv-cab-bs { font-size: 9.5px; color: var(--muted); line-height: 1.45; }
+.gv-cab-p, .gv-cab-tag { font-size: 10px; text-align: right; color: var(--green); font-family: ui-monospace, Menlo, monospace; }
+.gv-cab-tag { color: var(--muted); }
+.gv-cab-empty { font-size: 10.5px; color: var(--muted); padding: 4px 0 2px; }
+.gv-cab-wires { display: flex; flex-direction: column; gap: 4px; }
+.gv-cab-wire { border-left: 3px solid var(--line); border-radius: 0 5px 5px 0; background: var(--sage); padding: 5px 8px; }
+.gv-cab-wire.gv-cab-on { outline: 1px solid var(--green); }
+.gv-cab-wline { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--ink); flex-wrap: wrap; }
+.gv-cab-wline i { flex: 1 1 18px; min-width: 14px; border-top-width: 2px; }
+.gv-cab-wline b { font-weight: 500; white-space: nowrap; }
+.gv-cabwnote { font-size: 9.5px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+.gv-cab-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font-size: 9.5px; color: var(--muted); }
+.gv-cab-legend i { display: inline-block; width: 16px; border-top-width: 2px; margin-right: 4px; vertical-align: middle; }
+.gv-cab-jump { margin-top: 8px; align-self: flex-start; font-size: 10.5px; color: var(--green); background: none; border: 0; border-bottom: 1px solid var(--green); cursor: pointer; padding: 0 0 1px; }
+/* 属性页顶部的「返回电箱」：和来源徽标同一行，跳进跳出是一对动作，不该回画布找箱体符号 */
+.gv-cab-back { display: inline-flex; align-items: center; gap: 4px; margin-right: 8px; font-size: 9.5px; font-weight: 600; color: var(--green); background: none; border: 1px solid var(--green); border-radius: 4px; padding: 4px 8px; cursor: pointer; vertical-align: middle; }
+.gv-cab-back:hover { background: rgba(136, 105, 58, 0.12); }
+.gv-cab-src { margin-top: 12px; font-size: 9.5px; color: var(--muted); line-height: 1.6; border-top: 1px dashed var(--line); padding-top: 8px; }

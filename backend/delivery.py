@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import re
 
+from . import circuit_rules as CR
 from . import quality as Q
 from . import v3_fields as V
 
@@ -197,8 +198,9 @@ def chain_state(p: dict) -> dict:
     if no_panel:
         breaks.append(f"{len(no_panel)} 个回路没挂到存在的配电箱：" + "、".join(x for x in no_panel[:5] if x))
     orphan = [str(f.get("code") or f.get("id") or "") for f in fixtures
-              if not V.is_named(f.get("circuitId"))
-              or str(f.get("circuitId")) not in cids]
+              if not CR.is_bridge_lamp(f)
+              and (not V.is_named(f.get("circuitId"))
+                   or str(f.get("circuitId")) not in cids)]
     if orphan:
         breaks.append(f"{len(orphan)} 个灯位不在任何回路里（孤儿灯）：" + "、".join(x for x in orphan[:5] if x))
     return {"entries": len(entries), "circuits": len(circuits), "fixtures": len(fixtures),

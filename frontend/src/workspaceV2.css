@@ -269,3 +269,36 @@
 .wsv2 .collab-unknown summary{color:#c9b58c!important}
 .wsv2 .collab-table{min-width:760px}
 .wsv2 .collab-reason{background:#202024!important;border-color:#3a3a41!important;color:#e9e3d6!important}
+/* 电箱面板（深色 v2 壳）：金色描边与文字跟随 --gold，导轨块在暗底上要能看出边界 */
+/* 右栏默认 240px，箱体要按 405mm 等比画，缩到 207px 时位数条与模块标签只有 4px、读不出。
+   只在检视栏里出现电箱面板的那一屏把右栏加宽到 380px，取消选中自动收回。 */
+.editor-layout:has(.inspector .gv-cab){grid-template-columns:195px minmax(360px,1fr) 380px!important}
+.wsv2.wsv2-plan .editor-layout:has(.inspector .gv-cab){grid-template-columns:minmax(360px,1fr) 380px!important}
+.wsv2 .gv-cab-sec{color:#c79a4f}
+.wsv2 .gv-cab-warn{background:#241c10;border-color:#5a4a2e;color:#e3bf7f}
+.wsv2 .gv-cab-row.gv-cab-todo{border-color:#5a4a2e}
+.wsv2 .gv-cab-nm em,.wsv2 .gv-cab-p{color:#e3bf7f;border-color:#5a4a2e}
+.wsv2 .gv-cab-row.gv-cab-on{background:#211c12;border-color:#c79a4f}
+.wsv2 .gv-cab-wire{background:#202024}
+.wsv2 .gv-cab-wire.gv-cab-on{outline-color:#c79a4f}
+.wsv2 .gv-cab-jump{color:#e3bf7f;border-bottom-color:#5a4a2e}
+.wsv2 .gv-cab-back{color:#e3bf7f;border-color:#5a4a2e}
+.wsv2 .gv-cab-back:hover{background:#241c10}
+.wsv2 .gv-cab-focus{border-left-color:#c79a4f}
+.wsv2 .gv-cab-hint{background:#1d1a14;border-color:#4a3d27;color:#c9b58c}
+.wsv2 .gv-cab-empty{background:#1d1a14;border-color:#4a3d27;color:#c9b58c}
+.wsv2 .gv-cab-tag{background:#241c10;border-color:#5a4a2e;color:#e3bf7f}
+.wsv2 .gv-cab-src{color:#8a8272}
+.wsv2 .gv-cab-row{background:#202024;border-color:#3a3a41}
+.wsv2 .gv-cab-bs{color:#a89f8e}
+.wsv2 .gv-cabwnote{color:#a89f8e}
+/* 箱体正视在暗底里保持实物配色（浅箱体内壁＋黑框），只把接线图与卡片跟随金色主题 */
+.wsv2 .gv-cab-wnode{fill:#202024;stroke:#3a3a41}
+.wsv2 .gv-cab-wnode-on{stroke:#c79a4f}
+.wsv2 .gv-cab-wlab{fill:#e9e3d6}
+.wsv2 .gv-cab-wsub,.wsv2 .gv-cab-wrail,.wsv2 .gv-cab-wfoot{fill:#a89f8e}
+.wsv2 .gv-cab-card{background:#202024;border-color:#3a3a41}
+.wsv2 .gv-cab-noimg{border-color:#3a3a41;color:#a89f8e}
+.wsv2 .gv-cab-thumb i{border-color:#3a3a41}
+.wsv2 .gv-cab-seg button{color:#a89f8e;border-color:#3a3a41}
+.wsv2 .gv-cab-seg button.on{color:#e3bf7f;border-color:#c79a4f}

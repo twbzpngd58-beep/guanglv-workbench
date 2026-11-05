@@ -846,6 +846,25 @@ export function clampSceneStates(design: Obj): number {
   return fixed;
 }
 
+/** 清掉情景里悬空的「已调」基准：灯被删了、或这盏灯在这个情景已不再出现。
+ *  `scene.tuned[灯id] = {on,亮度,色温}` 是单灯手动调整前的基准值（随情景一起保存）。 */
+export function pruneSceneTuned(design: Obj): void {
+  const ids = new Set((design?.fixtures || []).map((f: Obj) => String(f.id)));
+  for (const s of design?.scenes || []) {
+    if (!s?.tuned || typeof s.tuned !== "object") continue;
+    for (const fid of Object.keys(s.tuned)) {
+      if (!ids.has(String(fid)) || !s.states?.[fid]) delete s.tuned[fid];
+    }
+    if (!Object.keys(s.tuned).length) delete s.tuned;
+  }
+}
+
+/** 这盏灯在本情景里被单灯手动调过吗（保存后仍然算）。 */
+export function lampTunedBase(scene: Obj | undefined, fid: string): Obj | null {
+  const b = scene?.tuned?.[fid];
+  return b && typeof b === "object" ? b : null;
+}
+
 /** 色温异常说明（无异常返回空数组）：灯具配置页逐灯显示 + 定位修改用。
  *  覆盖后端会拒绝保存的三种情况：上下限倒置 / 超出 1000–20000K / 情景里的色温越界。 */
 export function cctIssuesOf(f: Obj, scenes: Obj[] = []): string[] {

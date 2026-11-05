@@ -1,0 +1,117 @@
+name: 安装包（macOS + Windows）
+
+# 只产出 workflow 制品，不打 tag、不发 Release：2.1.0 的新功能暂不进公开更新通道。
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'release/2.1.0-installer'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-14
+    env:
+      PBS_TAG: "20261026"
+      PBS_ASSET: "cpython-3.12.16+20261026-aarch64-apple-darwin-install_only_stripped.tar.gz"
+      PBS_SHA256: "353d5f1b4fd2715e7053f12f068435d5bbad16b91e057006b5d01e0925709a7e"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 取内置 Python 运行时
+        run: |
+          set -euo pipefail
+          curl -fsSL -o "$RUNNER_TEMP/pbs.tar.gz" \
+            "https://github.com/astral-sh/python-build-standalone/releases/download/$PBS_TAG/$PBS_ASSET"
+          echo "$PBS_SHA256  $RUNNER_TEMP/pbs.tar.gz" | shasum -a 256 -c -
+          mkdir -p build/runtime
+          tar -xzf "$RUNNER_TEMP/pbs.tar.gz" -C build/runtime --strip-components=1
+          build/runtime/bin/python3 -V
+
+      - name: 把依赖装进运行时
+        run: |
+          set -euo pipefail
+          build/runtime/bin/python3 -m pip install --no-cache-dir -r requirements.lock.txt
+          build/runtime/bin/python3 -c "import fastapi,uvicorn,cv2,shapely,fitz,PIL,reportlab,edge_tts; print('依赖齐了')"
+
+      - name: 组装 .app 并压成 dmg
+        env:
+          RUNTIME: build/runtime
+        run: bash installer/macos/build.sh
+
+      - name: 冒烟：用包里的解释器把服务跑起来
+        env:
+          DATA_DIR: ${{ runner.temp }}/gv-smoke
+        run: |
+          set -euo pipefail
+          VERSION="$(cat VERSION)"
+          APP="build/macos/光律制图器.app"
+          "$APP/Contents/MacOS/guanglv" --smoke --port 8711
+          echo "### macOS 安装包" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`guanglv-workbench-$VERSION-macos-$(uname -m).dmg\` 冒烟通过（/api/build 与首页资源一致）" >> "$GITHUB_STEP_SUMMARY"
+          shasum -a 256 "dist/guanglv-workbench-$VERSION-macos-$(uname -m).dmg" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: guanglv-workbench-macos-dmg
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-2022
+    env:
+      PBS_TAG: "20261026"
+      PBS_ASSET: "cpython-3.12.16+20261026-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
+      PBS_SHA256: "1f2ab53880fc67ea323398c6388e05af28addc99a8e389209f08a51fdff4b149"
+      RT_PY: ${{ runner.temp }}\pbs\python\python.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 取内置 Python 运行时并装依赖
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tmp = "$env:RUNNER_TEMP\pbs.tar.gz"
+          Invoke-WebRequest -Uri "https://github.com/astral-sh/python-build-standalone/releases/download/$env:PBS_TAG/$env:PBS_ASSET" -OutFile $tmp -UseBasicParsing
+          $hash = (Get-FileHash -Algorithm SHA256 $tmp).Hash.ToLower()
+          if ($hash -ne $env:PBS_SHA256) { throw "Python 运行时校验和不匹配：$hash" }
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\pbs" | Out-Null
+          tar -xzf $tmp -C "$env:RUNNER_TEMP\pbs"
+          if ($LASTEXITCODE -ne 0) { throw "解压失败" }
+          & $env:RT_PY -V
+          & $env:RT_PY -m pip install --no-cache-dir -r requirements.lock.txt
+          if ($LASTEXITCODE -ne 0) { throw "依赖安装失败" }
+          & $env:RT_PY -c "import fastapi,uvicorn,cv2,shapely,fitz,PIL,reportlab,edge_tts; print('依赖齐了')"
+
+      - name: 编译 Inno Setup 安装包
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          choco install innosetup --no-progress -y
+          & installer/windows/build.ps1 -Runtime "$env:RUNNER_TEMP\pbs\python"
+
+      - name: 冒烟：用包里的解释器把服务跑起来
+        shell: pwsh
+        env:
+          DATA_DIR: ${{ runner.temp }}\gv-smoke
+        run: |
+          $ErrorActionPreference = "Stop"
+          & $env:RT_PY -I -B "$env:GITHUB_WORKSPACE\build\windows\app\installer\serve.py" --smoke --port 8711
+          if ($LASTEXITCODE -ne 0) { throw "安装包冒烟失败" }
+          $version = (Get-Content -Raw VERSION).Trim()
+          $exe = "dist\guanglv-workbench-$version-windows-x64.exe"
+          "### Windows 安装包" | Add-Content $env:GITHUB_STEP_SUMMARY
+          "- ``$(Split-Path -Leaf $exe)`` 冒烟通过（/api/build 与首页资源一致）" | Add-Content $env:GITHUB_STEP_SUMMARY
+          ((Get-FileHash -Algorithm SHA256 $exe).Hash.ToLower() + "  " + (Split-Path -Leaf $exe)) | Add-Content $env:GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: guanglv-workbench-windows-exe
+          path: dist/*.exe
+          if-no-files-found: error

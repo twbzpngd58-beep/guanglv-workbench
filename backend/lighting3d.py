@@ -39,6 +39,7 @@ from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
+from . import circuit_rules as CR
 from . import dxf_lighting as DL
 from . import products as PR
 from .space_geometry import contains_point, design_geometry, interior_point, polygon_area, room_points
@@ -70,23 +71,60 @@ def pick_room(pool, x, y):
     return min(pool, key=lambda r: math.hypot(interior_point(r)[0] - x, interior_point(r)[1] - y))
 
 
-@router.get("/refnight")
-def refnight(project: str, floor: int = 1):
-    """参考内核（优邑珺和原件）夜景渲染器：把工作台项目场景注入原件的 __SCENE__。"""
-    import re
-    from fastapi.responses import HTMLResponse
-    from . import ueyi_scene as US
+def scene_template() -> str:
+    """参考内核（优邑珺和原件）的页面源码：three.js 与渲染代码都在里面，单文件、无外链。"""
     tpl_path = Path(__file__).resolve().parent / "scene3d" / "ref" / "template.html"
-    html = tpl_path.read_text(encoding="utf-8", errors="ignore")
-    try:
-        scene = ueyi_scene(project, floor=floor)
-    except Exception as e:
-        return HTMLResponse("<h3>场景加载失败</h3><pre>" + str(e) + "</pre>", status_code=500)
+    return tpl_path.read_text(encoding="utf-8", errors="ignore")
+
+
+def _splice_scene(html: str, boot: str) -> str:
+    """把 `window.__SCENE__ = {...}` 整句换成 boot（花括号配平，不碰模板里的其它代码）。"""
+    import re
+    m = re.search(r"window\.__SCENE__\s*=\s*\{", html)
+    if not m:
+        raise ValueError("模板缺少 __SCENE__")
+    start = m.start()
+    depth = 0
+    for i in range(m.end() - 1, len(html)):
+        ch = html[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return html[:start] + boot + html[i + 1:]
+    raise ValueError("模板场景解析失败")
+
+
+def refnight_html(project: str, floor: int = 1, payload: dict | None = None) -> str:
+    """参考内核（优邑珺和原件）夜景渲染器：把工作台项目场景注入原件的 __SCENE__。
+
+    payload 非空＝导出给业主的三维页：整页自带多楼层场景与情景，按地址栏 #floor=N 选楼层。
+    """
+    html = scene_template()
+    if payload is not None:
+        data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        boot = (
+            "window.__GV_EXPORT__=%s;"
+            "window.__SCENE__=(function(){"
+            "var m=/floor=(\\d+)/.exec(location.hash||'');"
+            "var k=m?m[1]:String(window.__GV_EXPORT__.startFloor);"
+            "var f=window.__GV_EXPORT__.floors[k]||window.__GV_EXPORT__.floors[String(window.__GV_EXPORT__.startFloor)];"
+            "return f;})();" % data
+        )
+        return _splice_scene(html, boot)
+    scene = ueyi_scene(project, floor=floor)
     if not isinstance(scene, dict) or scene.get("error"):
-        return HTMLResponse("<h3>场景不可用</h3><pre>" + str(scene) + "</pre>", status_code=500)
+        raise ValueError("场景不可用：" + str(scene)[:200])
+    data = json.dumps(scene_for_template(scene), ensure_ascii=False, separators=(",", ":"))
+    return _splice_scene(html, "window.__SCENE__ = " + data)
+
+
+def scene_for_template(scene: dict) -> dict:
+    """送进模板前的整理（预览与业主导出共用）：
+    家具行整条传（kind/w/d/h/rot）——以前只留 [x, z, 0.16]，类型与占地在这一步就丢了；
+    内部用的 fixture_circuits / geometry_source 不进页面。"""
     scene = json.loads(json.dumps(scene, ensure_ascii=False))
-    # 家具行整条传过去（kind/w/d/h/rot/pts）：以前只留 [x, z, 0.16]，
-    # 类型与占地在这一步就丢了，夜景只能按坐标瞎补随机小方块（用户报「家具只是矩形块」）。
     scene["furniture"] = [
         {
             "id": str(f.get("id") or ""),
@@ -107,25 +145,16 @@ def refnight(project: str, floor: int = 1):
     ]
     scene.pop("fixture_circuits", None)
     scene.pop("geometry_source", None)
-    data = json.dumps(scene, ensure_ascii=False, separators=(",", ":"))
-    m = re.search(r"window\.__SCENE__\s*=\s*\{", html)
-    if not m:
-        return HTMLResponse("<h3>模板缺少 __SCENE__</h3>", status_code=500)
-    start = m.end() - 1
-    depth = 0
-    end = None
-    for i in range(start, len(html)):
-        ch = html[i]
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                end = i + 1
-                break
-    if end is None:
-        return HTMLResponse("<h3>模板场景解析失败</h3>", status_code=500)
-    return HTMLResponse(html[:start] + data + html[end:])
+    return scene
+
+
+@router.get("/refnight")
+def refnight(project: str, floor: int = 1):
+    from fastapi.responses import HTMLResponse
+    try:
+        return HTMLResponse(refnight_html(project, floor=floor))
+    except Exception as e:  # noqa: BLE001
+        return HTMLResponse("<h3>场景不可用</h3><pre>" + str(e)[:400] + "</pre>", status_code=500)
 
 
 
@@ -714,16 +743,27 @@ _LIGHT_GROUPS = {
 def _fixture_info(f: dict, product: dict | None = None) -> dict:
     """一盏灯在三维面板上该看到的四组字段＋缺口清单（与缺件单同一批字段口）。"""
     from . import v3_fields as VF
+    from . import circuit_rules as CR
     required = {s["key"] for s in VF.FIXTURE_FIELDS if s["tier"] == VF.REQUIRED}
+    # WiZ/Hue 网桥灯是单灯单控，没有回路这一层（2026-11-04 口径）：
+    # 如实写明载体，不能报「缺所属回路」——它本来就不该有回路。
+    bridge = CR.is_bridge_lamp(f)
     groups, missing = {}, []
     for name, items in _LIGHT_GROUPS.items():
         rows = []
         for key, label in items:
             value = f.get(key)
+            if bridge and name == "circuit" and key in ("circuit", "circuitId"):
+                rows.append({"key": key, "label": label,
+                             "value": "—（%s 网桥单灯单控，不分回路）" % CR.BRIDGE_CONTROL})
+                continue
             rows.append({"key": key, "label": label, "value": "" if value is None else value})
             # §7.5 的正本格叫 D10-2，画布上的型号存在 model（d10_2 同值）：两个口都算填了
             if key == "circuitId" and value in (None, "", UNASSIGNED_CIRCUIT_ID):
                 missing.append("所属回路（未归属＝孤儿灯，现场不知道接哪路线管）")
+            elif bridge and key == "d4_3":
+                # D4-3 要写「对应回路号」：网桥灯没有回路可写，这一格对它不适用（与缺件单同口径）。
+                pass
             elif value in (None, "", []) and key in required and not (
                     key == "model" and f.get("d10_2")):
                 missing.append(label)
@@ -857,14 +897,25 @@ def _engine_view(pid: str, st: dict, parsed: dict, opts: dict) -> dict:
             # members/count/watt/tableKey。分组口与功率口都不重开：分组键＝exports 的
             # `f.get("circuit") or "未分配"`，功率＝exports.fixture_watts（灯带按 W/m×长度折算）。
             from .exports import fixture_watts
+            from . import circuit_rules as CR
+
+            def _group_id(fx: dict) -> str:
+                """这盏灯在三维里归到哪个可控组：网桥灯自成一组（单灯单控），其余按回路。"""
+                if CR.is_bridge_lamp(fx):
+                    return "bridge-" + str(fx["id"])
+                return str(fx.get("circuitId") or fx.get("circuit") or UNASSIGNED_CIRCUIT_ID)
 
             seen: dict = {}
             for f in design_lights:
-                cid = str(f.get("circuitId") or f.get("circuit") or UNASSIGNED_CIRCUIT_ID)
+                # WiZ/Hue 网桥灯＝单灯单控：自己成一组（不并进任何回路，也不落「未分配」桶，
+                # 否则会凭空多出一条回路，三维里也没法逐灯调光）。
+                bridge = CR.is_bridge_lamp(f)
+                cid = _group_id(f)
                 row = seen.setdefault(cid, {"id": cid, "room": str(f.get("circuit") or ""),
                                             "type": "灯具", "code": "", "price": None,
                                             "members": [], "count": 0, "watt": 0.0,
-                                            "tableKey": str(f.get("circuit") or "").strip() or "未分配"})
+                                            "tableKey": "—（网桥单灯单控）" if bridge else (
+                                                str(f.get("circuit") or "").strip() or "未分配")})
                 row["members"].append(f["id"])
                 row["count"] += 1
                 row["watt"] += fixture_watts(f)
@@ -875,7 +926,7 @@ def _engine_view(pid: str, st: dict, parsed: dict, opts: dict) -> dict:
             def _engine_light(f):
                 spot = _IES.spot_of(f)
                 return {"id": f["id"],
-                        "c": str(f.get("circuitId") or f.get("circuit") or UNASSIGNED_CIRCUIT_ID),
+                        "c": _group_id(f),
                         "x": round(float(f.get("x") or 0) / DESIGN_UNITS_PER_M, 3),
                         "z": round(float(f.get("y") or 0) / DESIGN_UNITS_PER_M, 3),
                         "cct": f.get("cct") or 3000,
@@ -890,7 +941,7 @@ def _engine_view(pid: str, st: dict, parsed: dict, opts: dict) -> dict:
             engine["lights"] = [_engine_light(f)
                                 for f in design_lights if f.get("type") != "灯带"]
             engine["strips"] = [{"id": f["id"],
-                                  "c": str(f.get("circuitId") or f.get("circuit") or UNASSIGNED_CIRCUIT_ID),
+                                  "c": _group_id(f),
                                   "path": [[round(float(p["x"]) / DESIGN_UNITS_PER_M, 3),
                                             round(float(p["y"]) / DESIGN_UNITS_PER_M, 3)]
                                            for p in f.get("stripPath") or []],
@@ -1277,8 +1328,15 @@ def sync_design(pid: str) -> dict:
             circuit = (room.get("name") or "未归属") if unlabeled else name
             prev = old.get(l["id"])
             if prev:
-                prev.update({"x": x, "y": y, "roomId": room["id"], "floor": 1, "circuit": circuit,
-                             "circuitId": c["id"] if c else UNASSIGNED_CIRCUIT_ID})
+                # WiZ/Hue 网桥灯＝单灯单控、不分回路（2026-11-04 口径）：同步图纸时不能把
+                # 三维侧的回路桶写回它身上，否则它又回到回路表、导出重新被「未分配」拦下。
+                if CR.is_bridge_lamp(prev):
+                    prev.pop("circuit", None)
+                    prev.pop("circuitId", None)
+                    prev.update({"x": x, "y": y, "roomId": room["id"], "floor": 1})
+                else:
+                    prev.update({"x": x, "y": y, "roomId": room["id"], "floor": 1,
+                                 "circuit": circuit, "circuitId": c["id"] if c else UNASSIGNED_CIRCUIT_ID})
                 if prev.get("code") in codes:
                     prev["code"] = next_code(room.get("spaceCode") or "空间")
                 else:
@@ -1446,6 +1504,39 @@ def plan_background(pid: str) -> dict | None:
         "w": float(box["width"]) * pixel_unit,
         "h": float(box["height"]) * pixel_unit,
     }
+
+
+def vector_wall_guide(pid: str) -> dict:
+    """DXF 底图的矢量墙带（设计单位闭合多边形）：描空间边界、核对门窗时吸附用，只读不落库。
+
+    图片底图要靠图像处理猜墙，DXF 的墙线本身就是坐标——parsed.walls 是双线反推出来的
+    **中心线**（米）＋实测间距当厚度，套 ×26 就落在画布上，与 plan_background 铺的那张
+    PNG 同一套映射（实测 2026-11-04：parsed.rooms poly×26 与 design.points 差 0.00/0.00）。
+    中心线两侧各推 t/2 得到墙的两个**面**：描房间边界要贴的是面，不是墙中。
+    """
+    parsed = (load_store(pid).get("parsed") or {})
+    out: list[list[dict]] = []
+    for w in parsed.get("walls") or []:
+        try:
+            x0, z0, x1, z1 = float(w["x0"]), float(w["z0"]), float(w["x1"]), float(w["z1"])
+            t = float(w.get("t") or 0)
+        except (KeyError, TypeError, ValueError):
+            continue
+        dx, dy = x1 - x0, z1 - z0
+        length = math.hypot(dx, dy)
+        if not (length > 0.05):
+            continue
+        # 厚度异常（0 或大于 600mm）时不猜：按常见内墙画一条窄带，至少拐点是成对对齐的。
+        half = (t if 0.02 <= t <= 0.6 else 0.1) / 2.0
+        nx, ny = -dy / length, dx / length
+        ring = [(x0 + nx * half, z0 + ny * half), (x1 + nx * half, z1 + ny * half),
+                (x1 - nx * half, z1 - ny * half), (x0 - nx * half, z0 - ny * half)]
+        out.append([{"x": round(px * DESIGN_UNITS_PER_M, 2), "y": round(py * DESIGN_UNITS_PER_M, 2)}
+                    for px, py in ring])
+    out.sort(key=lambda pts: -math.hypot(pts[1]["x"] - pts[0]["x"], pts[1]["y"] - pts[0]["y"]))
+    return {"provider": "dxf-vector-guide", "vector": True, "box": None,
+            "contours": out, "source": str(parsed.get("wall_source") or ""),
+            "note": f"图纸矢量墙线 {len(out)} 段（{parsed.get('wall_source') or '来源未知'}）"}
 
 
 @router.get("/{pid}")

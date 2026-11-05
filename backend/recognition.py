@@ -1154,6 +1154,89 @@ def pdf_page(metadata: dict, count: int | None = None) -> int:
     return min(max(page, 1), max(count, 1))
 
 
+def canvas_fit(w: int, h: int, factor: float = 1.0) -> dict:
+    """图片底图 → 设计坐标的映射：像素等比铺进 CANVAS，再按标定系数整体缩放。
+
+    识别出的房间、墙带轮廓、界面上的底图矩形必须走同一个映射，否则「吸附到的墙线」和
+    「看见的墙线」会差一个缩放（尺度标定后整张图不再是 CANVAS 贴合，而是贴合 × k）。
+    贴合只与长宽比有关，所以缩略到多大不影响结果；factor 由 file.underlayMap 带来。
+    """
+    s = min(CANVAS[2] / w, CANVAS[3] / h)
+    ox = CANVAS[0] + (CANVAS[2] - w * s) / 2
+    oy = CANVAS[1] + (CANVAS[3] - h * s) / 2
+    k = float(factor or 1) or 1.0
+    return {
+        "scale": s * k, "ox": ox * k, "oy": oy * k, "factor": k,
+        "box": {"x": round(ox * k, 3), "y": round(oy * k, 3),
+                "w": round(w * s * k, 3), "h": round(h * s * k, 3)},
+    }
+
+
+def underlay_factor(metadata: dict) -> float:
+    """这张图纸标定过的整体缩放系数（没标定＝1）。"""
+    try:
+        value = float(((metadata or {}).get("underlayMap") or {}).get("factor"))
+    except (TypeError, ValueError):
+        return 1.0
+    return value if 0.0001 <= value else 1.0
+
+
+def underlay_box(path: Path, metadata: dict) -> dict:
+    """这张图纸底图在设计坐标里占的那块（标定后随系数缩放）：只解码图片，不跑 cv2。"""
+    image = raster_image(path, metadata)
+    image.thumbnail((1400, 1400), Image.Resampling.LANCZOS)
+    return canvas_fit(image.size[0], image.size[1], underlay_factor(metadata))["box"]
+
+
+def wall_guide(path: Path, metadata: dict) -> dict:
+    """墙带候选（画布单位折线）：给画布当描图的引导线，只读，不落库。
+
+    与识别走同一套 wall_evidence()，所以引导线和「候选空间」不会长两个样子。
+    细线家具本来就被 wall_evidence 滤掉，贴墙柜体仍可能混进来，因此界面只当「参考线」。
+    """
+    import cv2 as cv
+    from PIL import Image
+
+    cv.setNumThreads(1)
+    image = raster_image(path, metadata)
+    original_size = image.size
+    image.thumbnail((1400, 1400), Image.Resampling.LANCZOS)
+    gray = cv.cvtColor(np.asarray(image), cv.COLOR_RGB2GRAY)
+    h, w = gray.shape
+    fit = canvas_fit(w, h, underlay_factor(metadata))
+
+    def xy(x, y):
+        return {"x": round(fit["ox"] + float(x) * fit["scale"], 2),
+                "y": round(fit["oy"] + float(y) * fit["scale"], 2)}
+
+    structural, metrics = wall_evidence(gray)
+    for box in ((metadata or {}).get("recognitionOptions") or {}).get("exclusions") or []:
+        try:
+            x1 = max(0, min(w, round((box["x"] - fit["ox"]) / fit["scale"])))
+            y1 = max(0, min(h, round((box["y"] - fit["oy"]) / fit["scale"])))
+            x2 = max(0, min(w, round((box["x"] + box["width"] - fit["ox"]) / fit["scale"])))
+            y2 = max(0, min(h, round((box["y"] + box["height"] - fit["oy"]) / fit["scale"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+        structural[y1:y2, x1:x2] = 0
+    contours, _ = cv.findContours(structural, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
+    # 只留建筑尺度的带子：噪点当引导线会让吸附跳错地方；面积按画布最短边过滤。
+    min_side = max(12, round(min(h, w) * 0.03))
+    out: list[list[dict]] = []
+    for contour in contours:
+        x, y, cw, ch = cv.boundingRect(contour)
+        if max(cw, ch) < min_side:
+            continue
+        poly = cv.approxPolyDP(contour, max(1.5, cv.arcLength(contour, True) * 0.003), True)
+        if len(poly) >= 2:
+            out.append([xy(v[0][0], v[0][1]) for v in poly])
+    out.sort(key=lambda pts: -(max(v["x"] for v in pts) - min(v["x"] for v in pts)) )
+    return {"provider": "wall-evidence-guide", "box": fit["box"], "factor": fit["factor"],
+            "contours": out[:600], "dropped": max(0, len(out) - 600),
+            "sourceDimensions": list(original_size), "analyzedDimensions": [w, h],
+            "metrics": metrics}
+
+
 def raster_image(path: Path, metadata: dict) -> Image.Image:
     """Use the same orientation/white compositing as the visible original preview."""
     if path.suffix.lower() in (".pdf", ".svg"):
@@ -1434,9 +1517,9 @@ class ImageAnalysisProvider:
         image.thumbnail((1400, 1400), Image.Resampling.LANCZOS)
         gray = cv.cvtColor(np.asarray(image), cv.COLOR_RGB2GRAY)
         h, w = gray.shape
-        scale = min(CANVAS[2] / w, CANVAS[3] / h)
-        ox = CANVAS[0] + (CANVAS[2] - w * scale) / 2
-        oy = CANVAS[1] + (CANVAS[3] - h * scale) / 2
+        # 与描图引导层、底图矩形同一套映射（canvas_fit），标定过的图纸按系数整体缩放。
+        fit = canvas_fit(w, h, underlay_factor(metadata))
+        scale, ox, oy = fit["scale"], fit["ox"], fit["oy"]
 
         def xy(x, y):
             return dict(

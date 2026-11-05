@@ -9,6 +9,15 @@
  * 规则来源：knx-quotation-audit / smart-lighting-architecture-audit（KNX 必检项）。
  */
 
+import {
+  BRIDGE_CAP,
+  BRIDGE_CONTROL,
+  BRIDGE_MODEL,
+  bridgeCountByFloor,
+  isBridgeLamp,
+  isPhilipsWireless,
+} from "./busBridge";
+
 type Obj = Record<string, any>;
 
 export type ArchDevice = {
@@ -123,8 +132,20 @@ export function planArchitecture(design: Obj, project: Obj): ArchPlan {
   }
 
   // ---------- KNX 总线 ----------
-  const lamps = fixtures.filter((f) => !isStrip(f));
-  const strips = fixtures.filter(isStrip);
+  // 三种载体分开算（2026-11-04 加）：开闭＝执行器按回路，DALI＝DALI 网关按地址，
+  // WiZ/Hue＝飞利浦 Hue 网桥按盏数（单灯单控，既不占 DALI 地址也不占执行器通道，更没有回路）。
+  const roomFloor = new Map<string, number>(
+    (design?.rooms || []).map((r: Obj) => [r.id, Number(r.floor) || 1]),
+  );
+  const floorOf = (f: Obj) =>
+    Number.isFinite(f.floor) ? Number(f.floor) : roomFloor.get(f.roomId) || 1;
+  const bridgeLamps = fixtures.filter(isBridgeLamp);
+  const bridgeStrips = bridgeLamps.filter(isStrip).length;
+  const busFixtures = fixtures.filter((f) => !isBridgeLamp(f));
+  const lamps = busFixtures.filter((f) => !isStrip(f));
+  const strips = busFixtures.filter(isStrip);
+  const bridgeByFloor = bridgeCountByFloor(bridgeLamps, floorOf);
+  const bridgeUnits = bridgeByFloor.reduce((a, x) => a + x.bridges, 0);
   const daliLamps = lamps.filter(isDali).length;
   const switchLamps = lamps.length - daliLamps;
   const daliStrips = strips.filter(isDali).length;
@@ -193,6 +214,18 @@ export function planArchitecture(design: Obj, project: Obj): ArchPlan {
       notes: `${busBridgeDevices.length} 台蓝牙设备，蓝牙不穿楼板按 ${floors} 层各 1 台${withSk ? "；时光之轮配套" : ""}`,
     });
   }
+  // 飞利浦 Hue 网桥：WiZ/Hue 灯并入 KNX 的唯一新增硬件。每层 1 台、每台最多 40 个设备。
+  if (bridgeUnits) {
+    const perFloor = bridgeByFloor
+      .map((x) => `${x.floor} 层 ${x.lamps} 盏→${x.bridges} 台`)
+      .join("；");
+    devices.push({
+      name: "飞利浦 Hue 网桥", type: "网桥", model: BRIDGE_MODEL, roomId: "",
+      protocol: "Wi-Fi", qty: bridgeUnits,
+      notes: `${bridgeLamps.length} 盏 WiZ/Hue 灯单灯单控并入 KNX（灯按 Wi-Fi 控制，网桥只做桥接）；`
+        + `每层 1 台、每台最多 ${BRIDGE_CAP} 个设备：${perFloor}。这些灯不分回路，也不占 DALI 地址与执行器通道`,
+    });
+  }
   // 传感器 / 面板：就是设计里已有的那几台（逐空间、逐台），只进核对表，不另起重复行——
   // 否则设备清单与导出里每台面板、传感器都会出现两次。
   // 灯带控制器：每条灯带一台（不再按房间去重）
@@ -211,28 +244,48 @@ export function planArchitecture(design: Obj, project: Obj): ArchPlan {
   });
 
   // ---- 核对表：需求 vs 生成 ----
-  checks.push({ item: "KNX-DALI 网关", need: `DALI 地址 ${daliAddresses}`, made: `${daliGateways} 台 × ${DALI_PER_GATEWAY} 地址`, ok: daliGateways * DALI_PER_GATEWAY >= daliAddresses, note: daliAddresses ? "调光灯具必须过 DALI 网关，没有它调不了" : "没有 DALI 设备，不需要网关（全屋开闭）" });
+  checks.push({ item: "KNX-DALI 网关", need: `DALI 地址 ${daliAddresses}`, made: `${daliGateways} 台 × ${DALI_PER_GATEWAY} 地址`, ok: daliGateways * DALI_PER_GATEWAY >= daliAddresses, note: daliAddresses ? "调光灯具必须过 DALI 网关，没有它调不了" : bridgeLamps.length ? "没有 DALI 设备：调光都在 WiZ/Hue 网桥上，不需要 DALI 网关" : "没有 DALI 设备，不需要网关（全屋开闭）" });
   checks.push({ item: "KNX 电源", need: `总线电流 ${busMa}mA`, made: `${powerSupplies} 台 × ${KNX_PS_MA}mA`, ok: powerSupplies * KNX_PS_MA >= busMa, note: powerSupplies > 1 ? "一台不够，已按多台算；多台并联请确认总线分段" : "" });
   checks.push({ item: "KNX IP 接口", need: "1 台（ETS 现场调试）", made: "1 台", ok: true });
   checks.push({ item: "开关执行器", need: `开闭灯具 ${actuatorChannels} 路`, made: `${actuators} 台 × ${ACTUATOR_CHANNELS} 路`, ok: true, note: switchLamps ? "" : "没有开闭灯具（全屋 DALI 调光）" });
   checks.push({ item: "面板", need: `${panelsIn.length} 台（每空间一台）`, made: `${panelsIn.length} 台`, ok: panelsIn.length > 0, note: "型号 / 刻字在面板选型里逐台定" });
   checks.push({ item: "传感器", need: `${sensorsIn.length} 台`, made: `${sensorsIn.length} 台（设计里逐台）`, ok: true, note: sensorsIn.length ? `型号建议 ${MODEL.sensor}（按现场选 PIR / 24G 雷达）` : "" });
-  checks.push({ item: "灯带控制器", need: `${strips.length} 条灯带`, made: `${strips.length} 台`, ok: true, note: "每条灯带一台" });
+  checks.push({ item: "灯带控制器", need: `${strips.length} 条灯带`, made: `${strips.length} 台`, ok: true, note: bridgeStrips ? `另有 ${bridgeStrips} 条 WiZ/Hue 灯带走 Hue 网桥，不出控制器` : "每条灯带一台" });
   checks.push({ item: "线路耦合器", need: floors > 1 ? `${floors} 层（按层分段）` : "平层不需要", made: `${couplers} 台`, ok: true });
   checks.push({ item: "蓝牙网桥", need: busBridgeDevices.length ? `有 ${busBridgeDevices.length} 台蓝牙设备，按 ${floors} 层各 1 台` : "无蓝牙设备", made: `${busBridges} 台`, ok: true });
+  checks.push({
+    item: "飞利浦 Hue 网桥",
+    need: bridgeLamps.length
+      ? `${bridgeLamps.length} 盏 WiZ/Hue 灯（每层 1 台、每台最多 ${BRIDGE_CAP} 个设备）`
+      : "无 WiZ/Hue 灯",
+    made: `${bridgeUnits} 台`,
+    ok: bridgeUnits * BRIDGE_CAP >= bridgeLamps.length,
+    note: bridgeLamps.length
+      ? `分层：${bridgeByFloor.map((x) => `${x.floor} 层 ${x.lamps} 盏/${x.bridges} 台`).join("；") || "—"}。WiZ/Hue 灯不分回路，回路表与按回路检查不含它们`
+      : "灯具控制方式选「WiZ/Hue」时才需要网桥",
+  });
   checks.push({ item: "主机", need: "1 台（App / 云端入口）", made: `1 台 ${isVilla(project?.type) ? MODEL.cloudHost : MODEL.daliHost}`, ok: true, note: "档位按户型推定，请确认" });
   const badControls = fixtures
     .map((f) => String(f.control || "").trim())
-    .filter((c) => c && ![LIGHT_CONTROLS_DALI, LIGHT_CONTROLS_SWITCH].includes(c));
+    .filter((c) => c && ![LIGHT_CONTROLS_DALI, LIGHT_CONTROLS_SWITCH, BRIDGE_CONTROL].includes(c));
+  const bridgeOffBrand = bridgeLamps.filter((f) => !isPhilipsWireless(f));
   checks.push({
-    item: "灯具控制", need: "只允许「开闭 / DALI」", made: badControls.length ? `${badControls.length} 盏不合规` : "全部合规",
+    item: "灯具控制",
+    need: "只允许「开闭 / DALI / WiZ·Hue 网桥」",
+    made: badControls.length ? `${badControls.length} 盏不合规` : "全部合规",
     ok: badControls.length === 0,
-    note: badControls.length ? `不合规值：${[...new Set(badControls)].join("、")}` : "KNX 方案不出现无线协议；双色温与彩色灯具经 DALI 网关承载，照常可布",
+    note: badControls.length
+      ? `不合规值：${[...new Set(badControls)].join("、")}`
+      : bridgeOffBrand.length
+        ? `KNX 方案不出现其它无线协议；${bridgeOffBrand.length} 盏走网桥的灯不是飞利浦 WiZ/Hue 型号（网桥只有飞利浦的产品），请核实品牌/型号`
+        : "KNX 方案不出现无线协议；双色温与彩色灯具经 DALI 网关或 WiZ/Hue 网桥承载，照常可布",
   });
   if (fixtures.length === 0) warnings.push("这个项目还没有灯具：架构是按灯具/空间算出来的，先布灯再生成。");
 
   return {
-    topology: "KNX 总线：主机 → KNX 电源 + IP 接口 → KNX-DALI 网关（→ DALI 调光灯具）/ 开关执行器（→ 开闭灯具）；面板与传感器挂总线，灯带经控制器",
+    topology: "KNX 总线：主机 → KNX 电源 + IP 接口 → KNX-DALI 网关（→ DALI 调光灯具）/ 开关执行器（→ 开闭灯具）"
+      + (bridgeLamps.length ? " / 飞利浦 Hue 网桥（→ WiZ/Hue 灯，单灯单控、不分回路）" : "")
+      + "；面板与传感器挂总线，灯带经控制器",
     devices, checks, warnings,
   };
 }

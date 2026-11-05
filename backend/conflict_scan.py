@@ -249,6 +249,9 @@ def scan_circuits(p: dict) -> tuple[list[dict], list[str]]:
     for f in design.get("fixtures") or []:
         if not isinstance(f, dict):
             continue
+        # WiZ/Hue 网桥单灯单控本来就不分回路（2026-11-04 口径），不是孤儿灯，L1 不判它。
+        if CR.is_bridge_lamp(f):
+            continue
         cid = str(f.get("circuitId") or "").strip()
         if cid and cid in by_id:
             continue
@@ -292,6 +295,7 @@ def scan_circuits(p: dict) -> tuple[list[dict], list[str]]:
     # 提示级：L2 容量、L4 灯数——系数全是参考值，报出来但不拦
     for c in circuits:
         members = [f for f in design.get("fixtures") or [] if isinstance(f, dict)
+                   and not CR.is_bridge_lamp(f)
                    and (str(f.get("circuitId") or "") == str(c.get("id"))
                         or str(f.get("circuit") or "") == str(c.get("circuit_no")))]
         load = CR.watts(members)

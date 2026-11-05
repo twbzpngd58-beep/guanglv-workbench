@@ -1,8 +1,8 @@
 {
-  "version": "2.0.1",
-  "buildId": "3035f6b96805",
-  "asset": "index-DXyjPNpB.js",
-  "asset_sha256": "06ab6d603ad450465d2348db7c2773d6cef7d62935822f6d6b50bdd0406a5ecc",
-  "built_at": "2026-11-05T04:17:41Z",
-  "source_commit": "5796df7"
+  "version": "2.1.0",
+  "buildId": "ddb04f0fc908",
+  "asset": "index-CMD5SDca.js",
+  "asset_sha256": "716d9007b55886901150bde19a74819c72e1bcdb47206c57e578a1d67960fdbf",
+  "built_at": "2026-11-05T04:35:47Z",
+  "source_commit": "1138809"
 }

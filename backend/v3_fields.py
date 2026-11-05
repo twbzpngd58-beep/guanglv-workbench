@@ -128,7 +128,7 @@ FIXTURE_FIELDS = [
        "高度错→光斑直径与照度全偏", ask="设计师", group="pos"),
     _f("type", "灯具类型 fixture_type", REQUIRED, "筒射灯/线性/洗墙…，与需求表不矛盾",
        "类型与需求表矛盾，采购错货", ask="设计师", group="pos"),
-    _f("circuitId", "所属回路 circuit_id", REQUIRED, "回路 id；未挂＝孤儿灯，阻断",
+    _f("circuitId", "所属回路 circuit_id", REQUIRED, "回路 id；未挂＝孤儿灯，阻断（网桥单灯单控的灯不分回路，豁免）",
        "孤儿灯：现场不知道接哪路线管", ask="电工", group="pos"),
     _f("d9_1", "暗盒规格 D9-1", REQUIRED, "86 单联×50 深／86 单联×60 深（加深）／86 双联／100×100／无盒直埋／项目自定义；含明装/暗装",
        "加深型漏标→线塞不进、面板翘；直埋标成有盒→多埋盒、灯位让位", ask="电工"),

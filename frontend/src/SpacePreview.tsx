@@ -6,12 +6,13 @@ import { Button } from "./ui";
 import { Plan, type Selection } from "./Plan";
 import { SceneModel3D } from "./SceneModel3D";
 import { wipeNotice, wipeRecognizedRooms } from "./spaceWipe";
-import { boundary, withSpaceShell, snapBoundary, openingPlacement } from "./spaceGeometry";
+import { boundary, spaceShell, withSpaceShell, snapBoundary, openingPlacement } from "./spaceGeometry";
 import { withRoomPolygon } from "./roomPolygon";
 import { FurniturePanel, createFurniture, furnitureFromModel, pointInSpace } from "./FurniturePanel";
 import { withFurniturePolygon, deleteFurniturePolygon } from "./furniturePolygon";
 import { revealFlash } from "./reveal";
 import { DrawingProgress, type EditingPhase } from "./DrawingProgress";
+import { canvasDistance } from "./traceAid";
 import type { ReactNode } from "react";
 
 export function SpacePreviewLayer({
@@ -31,6 +32,7 @@ export function SpacePreviewLayer({
   notify,
   onClose,
   reparse,
+  onCalibrated,
   job,
   floor = 1,
   background = "",
@@ -52,6 +54,8 @@ export function SpacePreviewLayer({
   onClose: () => void;
   /** 按当前解析器重跑这张图纸（不用再传 DXF）；解析过期时用。 */
   reparse?: () => Promise<unknown>;
+  /** 尺度标定写回后让工作区重新拉一份项目（整张图都换了比例，本地那份旧坐标必须丢掉）。 */
+  onCalibrated?: () => Promise<unknown> | void;
   /** 生成进度（state=idle/running/done/error）；done 之后才给「确认 / 修改」。 */
   job: Obj;
   /** 当前楼层（多层的项目只显示本层的空间）。 */
@@ -108,6 +112,48 @@ export function SpacePreviewLayer({
   // 绘制画布的滚轮缩放：显示当前倍数，「适应画布」把它还原。
   const [viewZoom, setViewZoom] = useState(1);
   const [viewReset, setViewReset] = useState(0);
+  // ——— 描图辅助（图片底图没有矢量墙线，手抖就描不准）———
+  // 底图到底是哪张文件，从真正铺在画布上的那个 URL 里取——取错了就会吸到别的图纸的墙上。
+  // DXF 的 URL 来自 plan_background（图纸自动铺底，design.background 是空的），不取它会当成没底图。
+  const underlayUrl = (planBg?.url as string) || background || "";
+  const underlayFileId = (() => {
+    const m = /\/api\/projects\/[^/]+\/files\/([^/?#]+)/.exec(String(underlayUrl || ""));
+    return m ? m[1] : "";
+  })();
+  // 墙带候选：DXF 由图纸矢量墙线反推、图片由图像处理反推，只读不落库。
+  const [guide, setGuide] = useState<Obj>({ loaded: false, contours: [] });
+  const [guideTick, setGuideTick] = useState(0);
+  const [showGuides, setShowGuides] = useState(true);
+  const [orthoLock, setOrthoLock] = useState(true);
+  const [underlayOpacity, setUnderlayOpacity] = useState(1);
+  const [traceLength, setTraceLength] = useState("");
+  const [calib, setCalib] = useState<Obj>({ open: false, points: [] });
+  const guidesOn = !!showGuides && Array.isArray(guide.contours) && guide.contours.length > 0;
+  const guideLabel = guide.vector ? "图纸的矢量墙线" : "算出的墙带";
+  useEffect(() => {
+    if (!underlayFileId || (tab !== "edit" && tab !== "furniture")) return;
+    let dead = false;
+    setGuide({ loaded: false, contours: [] });
+    api<Obj>(`/projects/${id}/files/${underlayFileId}/wall-guide`)
+      .then((g) => { if (!dead) setGuide({ ...g, loaded: true, contours: g?.contours || [] }); })
+      // 拿不到引导层不影响描图：回到自由描图，不报一大片红。
+      .catch(() => { if (!dead) setGuide({ loaded: true, contours: [], error: "墙线引导层暂不可用" }); });
+    return () => { dead = true; };
+  }, [id, underlayFileId, tab, guideTick]);
+  /** 标定过的图片底图要按系数摆：后端算的 box 与墙带、识别草稿同一套映射，不会各缩各的。 */
+  const rasterBgRect = !planBg && guide.box && Number(guide.box.w) > 0 && Number(guide.box.h) > 0
+    ? { x: Number(guide.box.x), y: Number(guide.box.y), w: Number(guide.box.w), h: Number(guide.box.h) }
+    : null;
+  // 底图是哪一类：DXF 用矢量墙线、图片用图像处理反推；认不出来的文件按 DXF 处理（宁可不吸附）。
+  const underlayIsDxf = (() => {
+    if (!underlayFileId) return true;
+    const f = (project?.files || []).find((x: Obj) => String(x.id) === underlayFileId);
+    if (!f) return true;
+    return String(f.type || "").toUpperCase() === "DXF" || /\.dxf$/i.test(String(f.name || ""));
+  })();
+  // 只有尺度标定还分底图类型：DXF 自带真实单位（解析时按 mm/米换过），没什么可标；
+  // 吸附、正交锁、底图透明度、长度读数对 DXF 同样有用（墙线就是它的坐标）。
+  const calibSupported = !underlayIsDxf;
   // 家具（现场 2026-10-16）：家具调整也在这个界面里做，和空间确认同一处；画布上只动家具，
   // 空间操作一律不在这层（空间走「修改空间」，editableRooms 关掉）。
   const [furnSel, setFurnSel] = useState("");
@@ -128,6 +174,59 @@ export function SpacePreviewLayer({
     }
     setMovingFurn(false); setPlacingFurn(""); setTool("select");
   };
+
+  // ——— 尺度标定（D02 的「这一句不是真的」在这里有解）———
+  // 图片底图没有真实比例，画布却是 26 单位＝1 米。点两端 + 给实长，后端把整张图
+  // （空间、门窗、灯具、家具、识别草稿）一次性缩进这个口径，而不是再养第二套比例。
+  const calibPoints = (calib.points || []) as { x: number; y: number }[];
+  /** 取点：第一下起段，第二下成段；再点就当重新量。 */
+  const pickCalibPoint = (p: { x: number; y: number }) => {
+    const pts = calibPoints.length >= 2 ? [] : calibPoints;
+    const next = [...pts, p];
+    setCalib({ ...calib, open: true, points: next,
+      canvasUnits: next.length === 2 ? canvasDistance(next[0], next[1]) : 0,
+      preview: null, error: "" });
+    if (next.length === 2) notify("两端已取好：填这一段的真实长度");
+  };
+  const startCalib = () => {
+    if (!background) { notify("没有底图可标定：先在「图纸与底图」里把这张图铺为底图"); return; }
+    setTool("pick-point");
+    setCalib({ open: true, points: [], canvasUnits: 0, knownMm: Number(calib.knownMm) || 900 });
+    notify("尺度标定：单击这一段的两个端点（会吸到墙线上），例如一扇门的两侧");
+  };
+  const calibPayload = () => ({
+    knownM: (Number(calib.knownMm) || 0) / 1000,
+    canvasUnits: Number(calib.canvasUnits) || 0,
+    fileId: underlayFileId,
+    note: "画布两点标定",
+  });
+  async function runCalib(apply: boolean) {
+    setCalib({ ...calib, busy: true, error: "" });
+    try {
+      // 应用前把没落盘的改动写完：否则服务端缩放的是「上一版设计」，随后自动保存会把它盖回去。
+      if (apply) await beforeReview?.();
+      const res: Obj = await api(`/projects/${id}/scale-apply`, {
+        method: "POST",
+        body: JSON.stringify({ ...calibPayload(), apply: !!apply, by: project?.designer || "设计师" }),
+      });
+      if (apply) {
+        await onCalibrated?.();
+        // 系数变了，底图矩形与墙带都要按新框重取。
+        setGuideTick((t) => t + 1);
+        setCalib({ open: false, points: [], canvasUnits: 0, knownMm: calib.knownMm });
+        setTool("select");
+        const rep = (res?.report || {}) as Obj;
+        notify(`已按标定缩放全图：整体 ×${Number(res?.factor ?? 1).toFixed(4)}`
+          + `，移动 ${rep.scalar || 0} 个坐标、${Math.round((rep.points || 0) / 2)} 个边界点`
+          + `，${res?.draftsRescaled || 0} 份识别草稿一起换算`);
+        if (rep.notice) notify(String(rep.notice));
+      } else {
+        setCalib({ ...calib, busy: false, preview: res });
+      }
+    } catch (e: any) {
+      setCalib({ ...calib, busy: false, error: e?.message || String(e) });
+    }
+  }
   /** 画完一圈家具轮廓：选中了就重画它的边界，没选就按这圈点新增一件（类型＝面板里选的放置类型）。 */
   const applyFurnPolygon = (pts: { x: number; y: number }[]) => {
     if (pts.length < 3) return;
@@ -471,6 +570,27 @@ export function SpacePreviewLayer({
                 <Button disabled={!rooms.length} variant={tool === "draw-door" ? "primary" : ""} onClick={() => { setTool("draw-door"); notify("在同一条空间边界上依次单击门洞两端"); }}>绘制门</Button>
                 <Button disabled={!rooms.length} variant={tool === "draw-window" ? "primary" : ""} onClick={() => { setTool("draw-window"); notify("在同一条空间边界上依次单击窗洞两端"); }}>绘制窗</Button>
                 </>}
+                {!!underlayFileId && (
+                  <span className="space-preview-trace" data-testid="trace-toolbar">
+                    <Button variant={guidesOn ? "primary" : ""}
+                      onClick={() => { setShowGuides((v) => !v); notify(!showGuides ? `已开墙线吸附：拐点会落到${guideLabel}上` : "已关墙线吸附：回到自由描图"); }}>
+                      墙线吸附 {guidesOn ? "开" : "关"}
+                      {guide.loaded && guide.contours?.length ? `（${guide.contours.length} 条）` : ""}
+                    </Button>
+                    <Button variant={orthoLock ? "primary" : ""}
+                      onClick={() => setOrthoLock((v) => !v)}>
+                      正交锁 {orthoLock ? "开" : "关"}
+                    </Button>
+                    {calibSupported && <Button variant={tool === "pick-point" ? "primary" : ""} onClick={startCalib}>尺度标定</Button>}
+                    <label className="space-preview-opacity" title="底图太浓会看不清自己描的线">
+                      底图
+                      <input type="range" min={20} max={100} step={5} value={Math.round(underlayOpacity * 100)}
+                        onChange={(e) => setUnderlayOpacity(Number(e.target.value) / 100)} />
+                      {Math.round(underlayOpacity * 100)}%
+                    </label>
+                    {traceLength ? <b data-testid="trace-length" title="按 26 设计单位＝1 米换算">这一段 {traceLength}</b> : null}
+                  </span>
+                )}
                 <span className="space-preview-zoom" data-testid="draw-zoom">
                   {Math.round(viewZoom * 100)}%
                   <Button onClick={() => setViewReset(v => v + 1)} disabled={viewZoom === 1}>适应画布</Button>
@@ -491,6 +611,11 @@ export function SpacePreviewLayer({
                     : phase === "openings" ? "空间范围已保存；补画或核对门窗后确认进入画布。需要改边界可返回修改空间。"
                     : "按底图新建空间会清除旧识别空间及墙线、门窗、标注，保留手绘内容；拖动顶点可改形状"}
                   {" · 滚轮缩放底图，空白处按住拖动平移"}
+                  {(tab === "edit" || tab === "furniture") && underlayFileId
+                    ? (guidesOn
+                      ? ` · 描图时拐点自动吸到${guideLabel}（按 Alt 那一笔不吸）；正交锁只扶正「差一点就横平竖直」的点，斜墙不逼平`
+                      : " · 墙线吸附已关：拐点就落在你点的位置")
+                    : ""}
                   {phase === "openings" && tab !== "furniture" ? " · 空间边界已固化" : tab === "furniture" ? " · 空间与门窗已固化" : ""}
                 </span>
               </div>
@@ -511,7 +636,7 @@ export function SpacePreviewLayer({
                 onOpening={drawOpening}
                 onEditError={notify}
                 tool={tab === "furniture" ? furnTool : tool}
-                onPlacePoint={tab === "furniture" ? placeFurniture : undefined}
+                onPlacePoint={tool === "pick-point" ? pickCalibPoint : tab === "furniture" ? placeFurniture : undefined}
                 selectedFurnitureId={furnSel}
                 onFurnitureSelect={setFurnSel}
                 editableFurniture={tab === "furniture"}
@@ -531,16 +656,83 @@ export function SpacePreviewLayer({
                 showCanonicalFurniture={tab === "furniture"}
                 editableRooms={tab === "edit" && phase === "spaces"}
                 showLabels
-                background={(planBg?.url as string) || background}
+                background={underlayUrl}
+                traceGuides={guidesOn ? (guide.contours as { x: number; y: number }[][]) : null}
+                showGuides={guidesOn}
+                orthoLock={orthoLock}
+                underlayOpacity={underlayOpacity === 1 ? undefined : underlayOpacity}
+                onTraceLength={(text: string) => setTraceLength(text)}
                 backgroundRect={
                   planBg
                     ? { x: Number(planBg.x), y: Number(planBg.y), w: Number(planBg.w), h: Number(planBg.h) }
-                    : backgroundRect || null
+                    : rasterBgRect || backgroundRect || null
                 }
                 readonly={false}
                 projectArea={Number(project?.area) || 100}
                 planMasked={false}
               />
+              {calib.open && calibSupported && (
+                <div className="space-preview-calib" data-testid="scale-calib-panel">
+                  <div className="space-preview-calib-head">
+                    <strong>尺度标定</strong>
+                    <Button onClick={() => { setCalib({ open: false, points: [] }); setTool("select"); }}>关闭</Button>
+                  </div>
+                  <p className="subtle">
+                    在图上单击这一段的两个端点（会吸到墙线上），再填它真实的长度。
+                    标定＝把整张图缩进「26 单位＝1 米」——空间、门窗、灯具、家具、没确认的识别草稿一起换算。
+                  </p>
+                  <p data-testid="calib-measure">
+                    {calibPoints.length === 0
+                      ? "还没取点：先单击这一段的第一个端点"
+                      : calibPoints.length === 1
+                        ? "已取第 1 点，再单击另一端"
+                        : `画布上量到 ${Number(calib.canvasUnits).toFixed(1)} 单位`}
+                  </p>
+                  <label className="space-preview-calib-known">
+                    真实长度
+                    <input type="number" min={1} step={1} value={calib.knownMm ?? 900}
+                      aria-label="真实长度毫米"
+                      onChange={(e) => setCalib({ ...calib, knownMm: Number(e.target.value), preview: null })} />
+                    mm
+                  </label>
+                  <Button disabled={calibPoints.length < 2 || !(Number(calib.knownMm) > 0) || !!calib.busy}
+                    onClick={() => runCalib(false)}>预览缩放</Button>
+                  {calib.preview && (() => {
+                    const pv = calib.preview as Obj;
+                    const k = Number(pv.factor) || 1;
+                    const rows = (pv.areasBefore || []) as Obj[];
+                    return (
+                      <div className="space-preview-calib-result" data-testid="calib-result">
+                        <p>
+                          量到每米 <b>{Number(pv.unitsPerMetreMeasured).toFixed(2)}</b> 单位，
+                          系统口径每米 <b>{Number(pv.unitsPerMetreTarget).toFixed(0)}</b> 单位
+                          → 整张图 <b>×{k.toFixed(4)}</b>
+                        </p>
+                        {rows.length ? (
+                          <table>
+                            <thead><tr><th>空间</th><th>现在</th><th>标定后</th></tr></thead>
+                            <tbody>
+                              {rows.map((r) => (
+                                <tr key={String(r.id)}>
+                                  <td>{String(r.name || "未命名空间")}</td>
+                                  <td>{Number(r.areaM2).toFixed(2)} ㎡</td>
+                                  <td>{(Number(r.areaM2) * k * k).toFixed(2)} ㎡</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : <p className="subtle">这张图还没有空间，缩放只影响之后描出来的边界。</p>}
+                        <Button variant="primary" disabled={!!calib.busy}
+                          onClick={() => runCalib(true)}>
+                          {calib.busy ? <Loader2 size={13} className="spin" /> : <CheckCircle2 size={13} />} 应用缩放
+                        </Button>
+                        <p className="subtle">应用后不可用「撤销」退回（整张图已经重写），要退回请回到版本快照。</p>
+                      </div>
+                    );
+                  })()}
+                  {calib.error && <p className="task-error"><AlertCircle size={13} /> {calib.error}</p>}
+                </div>
+              )}
             </div>
             <aside className="space-preview-rooms">
               {tab === "furniture" ? <FurniturePanel design={editorDesign as Obj} floor={floor} selected={furnSel}
@@ -584,7 +776,10 @@ export function SpacePreviewLayer({
                 .map((o: Obj) => ({ ...o, ...openingPlacement(design, o) }))
                 .filter((o: Obj) => o.width != null)
                 .map((o: Obj) => <div className="space-preview-opening" key={o.id}>
-                <b>{rooms.find(r => r.id === o.roomId)?.name} · {o.type}</b>
+                {/* 同墙并排的门窗在画布上命中区互相压着，从清单点一下先在画布选中，再回画布第二段拖动。 */}
+                <b><button type="button" className="space-preview-locate" aria-label={`在画布选中 ${o.type}`}
+                  onClick={() => { setTool("select"); setSelection({ kind: "openings", id: o.id } as Selection); }}>
+                  {rooms.find(r => r.id === o.roomId)?.name} · {o.type}</button></b>
                 <small>宽 {(o.width / 26).toFixed(2)} m</small>
                 <label>洞口高度 m<input aria-label={`${o.type}洞口高度 m`} type="number" min=".1" step=".1" value={o.heightM}
                   onChange={e => commitDesign({ ...design, openings: design.openings.map((x: Obj) => x.id === o.id ? { ...x, heightM: +e.target.value } : x) })} /></label>
