@@ -69,7 +69,7 @@ jobs:
       PBS_TAG: "20261026"
       PBS_ASSET: "cpython-3.12.16+20261026-x86_64-pc-windows-msvc-install_only_stripped.tar.gz"
       PBS_SHA256: "1f2ab53880fc67ea323398c6388e05af28addc99a8e389209f08a51fdff4b149"
-      RT_PY: ${{ runner.temp }}\pbs\python\python.exe
+      RT_PY: build\pbs\python\python.exe
     steps:
       - uses: actions/checkout@v4
 
@@ -81,8 +81,8 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/astral-sh/python-build-standalone/releases/download/$env:PBS_TAG/$env:PBS_ASSET" -OutFile $tmp -UseBasicParsing
           $hash = (Get-FileHash -Algorithm SHA256 $tmp).Hash.ToLower()
           if ($hash -ne $env:PBS_SHA256) { throw "Python 运行时校验和不匹配：$hash" }
-          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\pbs" | Out-Null
-          tar -xzf $tmp -C "$env:RUNNER_TEMP\pbs"
+          New-Item -ItemType Directory -Force -Path "build\pbs" | Out-Null
+          tar -xzf $tmp -C "build\pbs"
           if ($LASTEXITCODE -ne 0) { throw "解压失败" }
           & $env:RT_PY -V
           & $env:RT_PY -m pip install --no-cache-dir -r requirements.lock.txt
@@ -94,7 +94,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           choco install innosetup --no-progress -y
-          & installer/windows/build.ps1 -Runtime "$env:RUNNER_TEMP\pbs\python"
+          & installer/windows/build.ps1 -Runtime "build\pbs\python"
 
       - name: 冒烟：用包里的解释器把服务跑起来
         shell: pwsh
@@ -102,7 +102,7 @@ jobs:
           DATA_DIR: ${{ runner.temp }}\gv-smoke
         run: |
           $ErrorActionPreference = "Stop"
-          & $env:RT_PY -I -B "$env:GITHUB_WORKSPACE\build\windows\app\installer\serve.py" --smoke --port 8711
+          & $env:RT_PY -I -B "build\windows\app\installer\serve.py" --smoke --port 8711
           if ($LASTEXITCODE -ne 0) { throw "安装包冒烟失败" }
           $version = (Get-Content -Raw VERSION).Trim()
           $exe = "dist\guanglv-workbench-$version-windows-x64.exe"
