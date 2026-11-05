@@ -15,7 +15,7 @@ import { coveragePath, manualCoverage, obstaclesFor, sensorSectorPath } from "./
 import { lightPoolClipPath } from "./lightOcclusion";
 import { useSceneFade } from "./sceneFade";
 import { ghostFixturesOnFloor, isVoidRoom, voidLabel } from "./voids";
-import { RAIL_P, cabinetRoom, cabinetView } from "./cabinetRules";
+import { RAIL_P, cabinetAnchorLabel, cabinetSpots, cabinetView } from "./cabinetRules";
 import { FURN_HANDLES, resizeFurniture, type FurnHandle } from "./furnitureResize";
 import { furniturePoints, hasFurniturePolygon, insertFurniturePoint, deleteFurniturePoint,
   moveFurniturePoint, resizeFurniturePolygon, normalizeFurniture } from "./furniturePolygon";
@@ -420,19 +420,14 @@ export function Plan({
   const cabinet = cabinetView(design);
   const cabinetDevices = cabinet.items.map((v: { dev: Obj }) => v.dev);
   const cabinetSelected = (id: string) => selection?.kind === "cabinet" && selection.id === id;
-  // 电箱画在玄关/门厅/储藏/过道这类「配电常落位」的空间里；没有就贴在本层平面的左上角。
-  const cabinetAnchor = (() => {
+  // 电箱画在玄关/门厅/储藏/过道这类「配电常落位」的空间里；一间都没命中时落在离本层左上角最近的空间内部点，
+  // 并在符号与右边栏写明「所在空间待确认」——以前贴在本层左上角，coco 实测飘在茶室外 40.8 单位，
+  // 箱体自己不在任何空间里，清单与交底就都读不出配电箱位置。三个符号各自的落位由 cabinetSpots 在同一个空间内试位。
+  const cabSpots = (() => {
     if (!cabinetDevices.length || mini || floor !== 1) return null;
-    const roomsOnFloor = (design.rooms || []).filter(
-      (r: Obj) => (Number.isFinite(r.floor) ? Number(r.floor) : 1) === floor,
-    );
-    const pref = cabinetRoom(design, floor);
-    if (pref) return interiorPoint(pref);
-    if (!roomsOnFloor.length) return { x: 40, y: 40 };
-    const minX = Math.min(...roomsOnFloor.map((r: Obj) => Number(r.x) || 0));
-    const minY = Math.min(...roomsOnFloor.map((r: Obj) => Number(r.y) || 0));
-    return { x: minX + 46, y: minY + 34 };
+    return cabinetSpots(design, floor);
   })();
+  const cabPlace = cabSpots ? cabinetAnchorLabel(design, floor) : "";
   // 只用到 clientX/clientY：拖动的 move 现在是 window 上的原生事件
   const pos = (e: { clientX: number; clientY: number }) => {
     const s = svg.current!;
@@ -2001,11 +1996,11 @@ export function Plan({
             );
           })}
         {/* 三个箱体符号：判据与右边栏电箱面板共用 cabinetRules，不会出现「图上三个、面板两组」的错位。 */}
-        {!mini && showDeviceLayer && cabinetAnchor && (
+        {!mini && showDeviceLayer && cabSpots && (
           <>
             <g
               data-cabinet="strong"
-              transform={`translate(${cabinetAnchor.x} ${cabinetAnchor.y})`}
+              transform={`translate(${cabSpots.strong.x} ${cabSpots.strong.y})`}
               onPointerDown={(e) => {
                 e.stopPropagation();
                 onSelect?.({ kind: "cabinet", id: "strong" });
@@ -2014,7 +2009,7 @@ export function Plan({
             >
               <title>{`强电箱 · 导轨 ${cabinet.strong.railCount} 条 × ${RAIL_P}P：${cabinet.strong.rails
                 .flatMap((r) => r.slots.map((s) => `${s.item.dev.name} ${s.item.info.p}P`))
-                .join("、")}${cabinet.strong.pending.length ? `；位数待填 ${cabinet.strong.pending.length} 台` : ""}`}</title>
+                .join("、")}${cabinet.strong.pending.length ? `；位数待填 ${cabinet.strong.pending.length} 台` : ""}${cabPlace ? `｜${cabPlace}` : ""}`}</title>
               {cabinetSelected("strong") && (
                 <rect x={-27} y={-18} width={54} height={36} rx={7} fill="none" stroke="#88693a" strokeWidth={1.6} opacity={0.7} />
               )}
@@ -2028,14 +2023,14 @@ export function Plan({
             {cabinet.weak.length > 0 && (
               <g
                 data-cabinet="weak"
-                transform={`translate(${cabinetAnchor.x + 56} ${cabinetAnchor.y})`}
+                transform={`translate(${cabSpots.weak.x} ${cabSpots.weak.y})`}
                 onPointerDown={(e) => {
                   e.stopPropagation();
                   onSelect?.({ kind: "cabinet", id: "weak" });
                 }}
                 style={{ cursor: "pointer" }}
               >
-                <title>{`弱电箱 · ${cabinet.weak.length} 台（网络侧，不占导轨）：${cabinet.weak.map((v) => v.dev.name).join("、")}`}</title>
+                <title>{`弱电箱 · ${cabinet.weak.length} 台（网络侧，不占导轨）：${cabinet.weak.map((v) => v.dev.name).join("、")}${cabPlace ? `｜${cabPlace}` : ""}`}</title>
                 {cabinetSelected("weak") && (
                   <rect x={-27} y={-18} width={54} height={36} rx={7} fill="none" stroke="#4f7fc1" strokeWidth={1.6} opacity={0.7} />
                 )}
@@ -2048,7 +2043,7 @@ export function Plan({
             {cabinet.outside.length > 0 && (
               <g
                 data-cabinet="outside"
-                transform={`translate(${cabinetAnchor.x - 62} ${cabinetAnchor.y})`}
+                transform={`translate(${cabSpots.outside.x} ${cabSpots.outside.y})`}
                 onPointerDown={(e) => {
                   e.stopPropagation();
                   onSelect?.({ kind: "cabinet", id: "outside" });

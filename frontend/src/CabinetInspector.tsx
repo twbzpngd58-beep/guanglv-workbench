@@ -149,7 +149,7 @@ export function CabinetInspector({
         </div>
         <div className="gv-cab-kv">
           <span>所在空间</span>
-          <b>{anchorRoom ? `${anchorRoom} · ${floor}F` : `不在具体空间（贴 ${floor}F 平面左上角）`}</b>
+          <b>{anchorRoom ? `${anchorRoom} · ${floor}F` : `本层还没有画边界的空间，箱体落位待确认（${floor}F）`}</b>
         </div>
       </div>
 

@@ -131,7 +131,7 @@ import {
 } from "./floors";
 import { Plan, stripPoints, type Selection } from "./Plan";
 import { CabinetInspector } from "./CabinetInspector";
-import { cabinetRoom } from "./cabinetRules";
+import { boxLabel, cabinetAnchor as cabinetAnchorAt, cabinetAnchorLabel, cabinetSpots, isCabinetDevice, lookupModel } from "./cabinetRules";
 import { GROUPED_SPACES, spaceMapByAlias, spaceMapByCode, spaceCodesOfRoomName, type HouseType } from "./spaces";
 import {
   DEFAULT_ROLE_BY_POSITION,
@@ -2391,6 +2391,18 @@ export function Workspace({
     setFocus({ x: Number(f.x) || 0, y: Number(f.y) || 0, token: Date.now() });
     setTab("plan");
     setModal("fixture");
+  }
+  // 箱内设备（KNX 电源/执行器/网桥这类自动架构行）物理上就在箱体里，画布上由箱体符号代表：
+  // 定位＝选中它所属的那个箱并居中，不能像房间设备那样找一个不存在的坐标。
+  function locateCabinetDevice(dev: Obj) {
+    if (!d) return;
+    const mount = lookupModel(dev.model, dev.type).mount;
+    const box = mount === "weak" ? "weak" : mount === "out" || mount === "wall" ? "outside" : "strong";
+    const spot = cabinetSpots(d, 1)?.[box as "strong" | "weak" | "outside"] || cabinetAnchorAt(d, 1);
+    setSelection({ kind: "cabinet", id: box });
+    setFloor(1);
+    if (spot) setFocus({ x: spot.x, y: spot.y, token: Date.now() });
+    setTab("plan");
   }
   // 情景页点灯具编号：不弹配置窗、不切页签，只在图上把这盏灯圈出来并居中
   // （二维走 Plan 的定位环，三维走 Ueyi3D 的定点打光）。token 让重复点同一盏也能重新触发。
@@ -5395,7 +5407,7 @@ export function Workspace({
                   onMove={() => { setMovingFurniture(v => !v); setPlacingFurniture(""); setTool(movingFurniture ? "select" : "place-furniture"); }}
                   onPlace={kind => { setPlacingFurniture(kind); setMovingFurniture(false); setTool(kind ? "place-furniture" : "select"); }} /> : selection?.kind === "cabinet" ? (
                   <CabinetInspector design={d} project={p} floor={floor} focus={selection.id}
-                    anchorRoom={cabinetRoom(d, floor)?.name} focusDevice={cabReturn?.dev}
+                    anchorRoom={cabinetAnchorLabel(d, floor)} focusDevice={cabReturn?.dev}
                     onSelectDevice={(id, box) => { setCabReturn({ box, dev: id }); setSelection({ kind: "devices", id }); setV2Insp("属性"); }} />
                 ) : selected ? (
                   <>
@@ -6913,23 +6925,38 @@ export function Workspace({
                     })
                   }
                 />
-                <select
-                  disabled={locked}
-                  value={dev.roomId}
-                  onChange={(e) =>
-                    update((n) => {
-                      n.devices.find((v) => v.id === dev.id)!.roomId =
-                        e.target.value;
-                    })
-                  }
-                >
-                  <option value="">未分配空间</option>
-                  {d.rooms.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
+                {isCabinetDevice(dev) ? (
+                  // 箱内设备不占房间：所属写箱名＋箱所在空间，再给一个定位入口。
+                  // 这里留「未分配空间」下拉等于让设计师去猜一个房间，猜了就和配电箱台账（D8-2）对不上。
+                  <span className="device-box-place">
+                    <b>{boxLabel(d, dev)}</b>
+                    <button
+                      className="mini-btn"
+                      title="在图上定位这个箱体"
+                      onClick={() => locateCabinetDevice(dev)}
+                    >
+                      定位
+                    </button>
+                  </span>
+                ) : (
+                  <select
+                    disabled={locked}
+                    value={dev.roomId}
+                    onChange={(e) =>
+                      update((n) => {
+                        n.devices.find((v) => v.id === dev.id)!.roomId =
+                          e.target.value;
+                      })
+                    }
+                  >
+                    <option value="">未分配空间</option>
+                    {d.rooms.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <input
                   disabled={locked}
                   aria-label="设备协议"

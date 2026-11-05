@@ -32,6 +32,51 @@ def _legacy_scene_states(scenes):
     return bad
 
 
+# 配电箱归属判据：与 frontend/src/cabinetRules.ts 的 isCabinetDevice + TYPE_MOUNT + cabinetRoom 同一套。
+# 这批设备由系统架构自动生成，物理上装在箱体里，本来就没有房间也没有坐标。清单里写「未分配」
+# 等于告诉现场「不知道装哪」，而配电箱台账（D8-2）要的是「房间＋坐标」，所以写箱名＋箱所在空间。
+_CAB_TABLE = json.loads((Path(__file__).resolve().parents[1] / "frontend" / "src" / "data"
+                         / "cabinet-modules.json").read_text("utf-8"))
+_CAB_MODELS = {**(_CAB_TABLE.get("models") or {}), **(_CAB_TABLE.get("manual") or {})}
+_CAB_TYPE_MOUNT = {
+    "电源": "rail", "执行器": "rail", "调光执行器": "rail", "耦合器": "rail",
+    "网关": "weak", "主机": "weak", "网桥": "weak",
+    "控制器": "out", "传感器": "out", "面板": "wall", "温控器": "wall", "遥控器": "wall",
+}
+_CAB_ROOM_RE = re.compile(r"玄关|门厅|入户|储藏|设备间|配电|过道|走廊|楼梯")
+_BOX_NAME = {"rail": "强电箱", "weak": "弱电箱", "out": "吊顶内（不在配电箱）", "wall": "86 底盒（墙面）"}
+
+
+def _mount_of(dev):
+    hit = _CAB_MODELS.get(str(dev.get("model") or "").strip())
+    if isinstance(hit, dict) and hit.get("mount"):
+        return str(hit["mount"])
+    return _CAB_TYPE_MOUNT.get(str(dev.get("type") or "").strip(), "unknown")
+
+
+def _is_cabinet_device(dev):
+    return dev.get("source") == "auto-arch" or (
+        dev.get("x") is None and dev.get("y") is None and not dev.get("roomId"))
+
+
+def device_place(dev, room_names, design, fallback="未分配"):
+    """清单里这台设备「所属」怎么写：有房间写房间；箱内设备写箱名＋箱所在空间；其余才允许「未分配」。"""
+    room = room_names.get(dev.get("roomId"))
+    if room:
+        return room
+    if not _is_cabinet_device(dev):
+        return fallback
+    mount = _mount_of(dev)
+    if mount in ("out", "wall"):
+        return _BOX_NAME[mount]
+    box = _BOX_NAME.get(mount) or "强电箱（位数待填）"
+    fl = dev.get("floor") if isinstance(dev.get("floor"), int) else 1
+    hit = next((r for r in design.get("rooms") or []
+                if (r.get("floor") if isinstance(r.get("floor"), int) else 1) == fl
+                and _CAB_ROOM_RE.search(str(r.get("name") or ""))), None)
+    return "%s（%s）" % (box, hit["name"]) if hit else "%s（所在空间待确认）" % box
+
+
 def _verify_3d_source(p):
     """Refuse exports from a converted design after a source drawing changes."""
     design = p.get("design") or {}
@@ -1123,7 +1168,7 @@ def spreadsheet(p, include_price=True):
                 dev.get("name", ""),
                 dev.get("type", ""),
                 dev.get("model", ""),
-                room_names.get(dev.get("roomId"), "未分配"),
+                device_place(dev, room_names, p["design"]),
                 dev.get("position", ""),
                 dev.get("protocol", ""),
                 dev.get("address", ""),
@@ -2062,7 +2107,7 @@ def scene_html(p):
     deliverables.extend({
         "code": dev.get("code", ""), "name": dev.get("name") or dev.get("type") or "设备",
         "model": " · ".join(str(dev.get(k) or "") for k in ("brand", "series", "model")).strip(" · "),
-        "room": room_names.get(dev.get("roomId"), ""),
+        "room": device_place(dev, room_names, design, fallback=""),
         "circuit": dev.get("address") or "—",
         "qty": 1, "unit": "个",
         "kind": "外挂设备"}

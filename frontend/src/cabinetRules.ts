@@ -15,6 +15,7 @@
  */
 import TABLE from "./data/cabinet-modules.json";
 import { BRIDGE_CAP, isBridgeLamp } from "./busBridge";
+import { containsPoint, interiorPoint } from "./spaceGeometry";
 
 type Obj = Record<string, any>;
 
@@ -92,10 +93,12 @@ export function lookupModel(model?: string, devType?: string): ModInfo {
 export type BoxItem = { dev: Obj; info: ModInfo };
 
 /** 电箱里到底放谁：自动生成系统架构那批行（没房间也没坐标）就是箱内候选。 */
+export function isCabinetDevice(dev: Obj): boolean {
+  return !!dev && (dev.source === "auto-arch" || (dev.x == null && dev.y == null && !dev.roomId));
+}
+
 export function cabinetDevices(design: Obj): Obj[] {
-  return (design?.devices || []).filter(
-    (v: Obj) => v.source === "auto-arch" || (v.x == null && v.y == null && !v.roomId),
-  );
+  return (design?.devices || []).filter(isCabinetDevice);
 }
 
 export type Rail = { index: number; slots: { item: BoxItem; atP: number }[]; usedP: number; over: boolean };
@@ -183,6 +186,88 @@ export function cabinetRoom(design: Obj, floor: number): Obj | null {
       /玄关|门厅|入户|储藏|设备间|配电|过道|走廊|楼梯/.test(String(r.name || "")),
     ) || null
   );
+}
+
+/** 电箱落位。配电箱台账（D8-2）要的是「房间＋坐标」：符号飘在所有空间之外等于没位置，
+ *  清单与交底都读不出来，所以一间都没命中时不许落在空间外——取离本层左上角最近的
+ *  真实空间内部点并标 tentative，与「位数待填」「（判）」同一口径：宁可推断并写明待确认。 */
+export function cabinetAnchor(design: Obj, floor: number): { x: number; y: number; room: Obj; tentative: boolean } | null {
+  const rooms = ((design?.rooms || []) as Obj[]).filter(
+    (r: Obj) => (Number.isFinite(r.floor) ? Number(r.floor) : 1) === floor && (r.points || []).length >= 3,
+  );
+  if (!rooms.length) return null;
+  const pref = cabinetRoom(design, floor);
+  const hit = pref && (pref.points || []).length >= 3 ? pref : null;
+  if (hit) return { ...interiorPoint(hit), room: hit, tentative: false };
+  const corner = {
+    x: Math.min(...rooms.map((r: Obj) => Number(r.x) || 0)) + 46,
+    y: Math.min(...rooms.map((r: Obj) => Number(r.y) || 0)) + 34,
+  };
+  let best = rooms[0];
+  let bestD = Infinity;
+  for (const r of rooms) {
+    const p = interiorPoint(r);
+    const dd = (p.x - corner.x) ** 2 + (p.y - corner.y) ** 2;
+    if (dd < bestD) {
+      bestD = dd;
+      best = r;
+    }
+  }
+  return { ...interiorPoint(best), room: best, tentative: true };
+}
+
+/** 箱体落位的一句话说明：画布符号的 tooltip 与右边栏「所在空间」共用，两边不许各写一份。 */
+export function cabinetAnchorLabel(design: Obj, floor: number): string {
+  const a = cabinetAnchor(design, floor);
+  if (!a) return "";
+  return `${a.room.name || "未命名空间"}${a.tentative ? "·所在空间待确认" : ""}`;
+}
+
+export type CabSpot = "strong" | "weak" | "outside";
+
+// 符号半宽（画布单位）：弱电箱以前固定往右挪 56，0图层2 实测整号飘到储藏间外面——
+// 箱体是设备的「位置」本身，落隔壁房间等于又造出一批界外对象，所以按真实边界逐个试位。
+const CAB_HW: Record<CabSpot, number> = { strong: 23, weak: 23, outside: 30 };
+const CAB_TRIES: [number, number][] = [
+  [0, 0], [56, 0], [-62, 0], [0, 30], [0, -30], [112, 0], [-124, 0], [56, 30], [-62, -30],
+];
+
+/** 三个箱体符号在锚点空间内的落位：先要整号放得下，再要不叠在一起；都放不下才退回锚点。 */
+export function cabinetSpots(
+  design: Obj,
+  floor: number,
+): Record<CabSpot, { x: number; y: number }> | null {
+  const a = cabinetAnchor(design, floor);
+  if (!a) return null;
+  const room = a.room;
+  const spots = {} as Record<CabSpot, { x: number; y: number }>;
+  const used: { x: number; y: number }[] = [];
+  for (const spot of ["strong", "weak", "outside"] as CabSpot[]) {
+    const hw = CAB_HW[spot];
+    const at = (dx: number, dy: number) => ({ x: a.x + dx, y: a.y + dy });
+    const free = (p: { x: number; y: number }) =>
+      used.every((u) => Math.abs(u.x - p.x) > hw * 2 || Math.abs(u.y - p.y) > 24);
+    const whole = (p: { x: number; y: number }) =>
+      containsPoint(room, p.x, p.y) && containsPoint(room, p.x - hw, p.y) && containsPoint(room, p.x + hw, p.y);
+    const pick =
+      CAB_TRIES.map(([dx, dy]) => at(dx, dy)).find((p) => whole(p) && free(p)) ||
+      CAB_TRIES.map(([dx, dy]) => at(dx, dy)).find((p) => containsPoint(room, p.x, p.y) && free(p)) ||
+      { x: a.x, y: a.y };
+    spots[spot] = pick;
+    used.push(pick);
+  }
+  return spots;
+}
+
+/** 箱内设备在清单/界面上的「所属」：箱名＋箱所在空间。导轨件在强电箱，网桥与云主机在弱电箱；
+ *  驱动器在吊顶、面板在 86 底盒，这两类本来就不靠箱，也不该写箱名。 */
+export function boxLabel(design: Obj, dev: Obj): string {
+  const mount = lookupModel(dev?.model, dev?.type).mount;
+  if (mount === "out") return "吊顶内（不在配电箱）";
+  if (mount === "wall") return "86 底盒（墙面）";
+  const box = mount === "weak" ? "弱电箱" : "强电箱";
+  const room = cabinetRoom(design, Number.isFinite(dev?.floor) ? dev.floor : 1);
+  return room ? `${box}（${room.name || "未命名空间"}）` : `${box}（所在空间待确认）`;
 }
 
 // ---- 总线接线模型：全部由设计里现有数据算，不另存一份接线表 ----

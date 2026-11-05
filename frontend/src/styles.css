@@ -2825,6 +2825,22 @@ hr {
   font-size: 11px;
 }
 
+/* 箱内设备的「所属」不是房间，是箱体：给足宽度显示箱名＋所在空间，定位按钮紧跟其后。 */
+.device-box-place {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.device-box-place b {
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .device-extra {
   display: flex;
   flex-wrap: wrap;
